@@ -1,0 +1,79 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: rama-webhook
+  namespace: kube-system
+  annotations:
+    kubernetes.io/description: "rama webhook"
+spec:
+  selector:
+    matchLabels:
+      app: rama-webhook
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: rama-webhook
+        webhook.rama.io/ignore: true
+    spec:
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      nodeSelector:
+        node-role.kubernetes.io/master: ""
+      priorityClassName: system-cluster-critical
+      serviceAccountName: rama
+      hostNetwork: true
+      containers:
+        - name: rama-webhook
+          image: "REGISTRY/rama-webhook:dev"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /rama/rama-webhook
+          args:
+            - --port=9898
+          ports:
+            - containerPort: 9898
+              name: webhook-port
+          volumeMounts:
+            - mountPath: "/tmp/k8s-webhook-server/serving-certs"
+              name: cert
+              readOnly: true
+      volumes:
+        - name: cert
+          secret:
+            secretName: rama-certs
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rama-certs
+  namespace: kube-system
+type: Opaque
+data:
+  ca.crt: "custom root CA certificate"
+  tls.key: "webhook server TLS private key"
+  tls.crt: "webhook server TLS certificate"
+
+---
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: rama-webhook
+  namespace: kube-system
+spec:
+  ports:
+    - name: webhook-port
+      protocol: TCP
+      port: 443
+      targetPort: webhook-port
+  type: ClusterIP
+  selector:
+    app: rama-webhook
+  sessionAffinity: None

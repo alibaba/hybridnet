@@ -1,0 +1,248 @@
+---
+
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: rama-daemon
+  namespace: kube-system
+  annotations:
+    kubernetes.io/description: |
+      This daemon set launches the rama cni daemon.
+spec:
+  selector:
+    matchLabels:
+      app: rama-daemon
+  template:
+    metadata:
+      labels:
+        app: rama-daemon
+    spec:
+      tolerations:
+        - operator: Exists
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+      priorityClassName: system-cluster-critical
+      serviceAccountName: rama
+      hostNetwork: true
+      hostPID: true
+      initContainers:
+        - name: install-cni
+          image: "REGISTRY/rama-daemon:dev"
+          imagePullPolicy: IfNotPresent
+          command: ["/rama/install-cni.sh"]
+          securityContext:
+            runAsUser: 0
+            privileged: true
+          volumeMounts:
+            - mountPath: /etc/cni/net.d
+              name: cni-conf
+            - mountPath: /opt/cni/bin
+              name: cni-bin
+      containers:
+        - name: cni-daemon
+          image: "REGISTRY/rama-daemon:dev"
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - /rama/start-daemon.sh
+          args:
+            - --prefer-interfaces=$NET_INTERFACE1,$NET_INTERFACE2
+          securityContext:
+            runAsUser: 0
+            privileged: true
+          env:
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 11021
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+            failureThreshold: 1
+          volumeMounts:
+            - mountPath: /run/cni
+              name: host-run-cni
+            - mountPath: /lib/modules
+              name: host-modules
+            - mountPath: /run/xtables.lock
+              name: xtables-lock
+            - mountPath: /var/run/netns
+              mountPropagation: HostToContainer
+              name: host-var-run-netns
+            - mountPath: /var/run/docker/netns
+              mountPropagation: HostToContainer
+              name: host-var-docker-netns
+            - mountPath: /run/netns
+              mountPropagation: HostToContainer
+              name: host-run-netns
+            - mountPath: /run/docker/netns
+              mountPropagation: HostToContainer
+              name: host-docker-netns
+          # TODO: add liveness probe
+      nodeSelector:
+        kubernetes.io/os: "linux"
+      volumes:
+        - name: host-modules
+          hostPath:
+            path: /lib/modules
+        - name: host-run-cni
+          hostPath:
+            path: /run/cni
+        - name: cni-conf
+          hostPath:
+            path: /etc/cni/net.d
+        - name: cni-bin
+          hostPath:
+            path: /opt/cni/bin
+        - name: xtables-lock
+          hostPath:
+            path: /run/xtables.lock
+            type: FileOrCreate
+        - name: host-run-netns
+          hostPath:
+            path: /run/netns
+        - name: host-docker-netns
+          hostPath:
+            path: /run/docker/netns
+        - name: host-var-run-netns
+          hostPath:
+            path: /var/run/netns
+        - name: host-var-docker-netns
+          hostPath:
+            path: /var/run/docker/netns
+
+---
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: rama-manager
+  namespace: kube-system
+  annotations:
+    kubernetes.io/description: "rama manager"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: rama-manager
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: rama-manager
+    spec:
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: rama-manager
+              topologyKey: kubernetes.io/hostname
+      priorityClassName: system-cluster-critical
+      serviceAccountName: rama
+      hostNetwork: true
+      containers:
+        - name: rama-manager
+          image: "REGISTRY/rama-manager:dev"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /rama/rama-manager
+      nodeSelector:
+        node-role.kubernetes.io/master: ""
+
+---
+
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: rama-webhook
+  namespace: kube-system
+  annotations:
+    kubernetes.io/description: "rama webhook"
+spec:
+  selector:
+    matchLabels:
+      app: rama-webhook
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: rama-webhook
+        webhook.rama.io/ignore: true
+    spec:
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      nodeSelector:
+        node-role.kubernetes.io/master: ""
+      priorityClassName: system-cluster-critical
+      serviceAccountName: rama
+      hostNetwork: true
+      containers:
+        - name: rama-webhook
+          image: "REGISTRY/rama-webhook:dev"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /rama/rama-webhook
+          args:
+            - --port=9898
+          ports:
+            - containerPort: 9898
+              name: webhook-port
+          volumeMounts:
+            - mountPath: "/tmp/k8s-webhook-server/serving-certs"
+              name: cert
+              readOnly: true
+      volumes:
+        - name: cert
+          secret:
+            secretName: rama-certs
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rama-certs
+  namespace: kube-system
+type: Opaque
+data:
+  ca.crt: "custom root CA certificate"
+  tls.key: "webhook server TLS private key"
+  tls.crt: "webhook server TLS certificate"
+
+---
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: rama-webhook
+  namespace: kube-system
+spec:
+  ports:
+    - name: webhook-port
+      protocol: TCP
+      port: 443
+      targetPort: webhook-port
+  type: ClusterIP
+  selector:
+    app: rama-webhook
+  sessionAffinity: None
+

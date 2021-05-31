@@ -1,0 +1,14 @@
+{
+    "name":"rama",
+    "cniVersion":"0.3.1",
+    "plugins":[
+        {
+            "type":"rama",
+            "server_socket":"/run/cni/rama.sock"
+        },
+        {
+            "type": "bandwidth",
+            "capabilities": {"bandwidth": true}
+        }
+    ]
+}

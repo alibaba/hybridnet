@@ -1,0 +1,217 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rama
+  namespace: kube-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    rbac.authorization.k8s.io/system-only: "true"
+  name: system:rama
+rules:
+  - apiGroups:
+      - "networking.alibaba.com"
+    resources:
+      - networks
+      - networks/status
+      - subnets
+      - subnets/status
+      - ipinstances
+      - ipinstances/status
+    verbs:
+      - "*"
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - namespaces
+      - nodes
+      - nodes/status
+      - configmaps
+      - services
+      - endpoints
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+      - patch
+      - update
+  - apiGroups:
+      - ""
+      - networking.k8s.io
+      - apps
+    resources:
+      - networkpolicies
+      - services
+      - endpoints
+      - statefulsets
+      - daemonsets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
+  - apiGroups:
+      - extensions
+    resources:
+      - networkpolicies
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "admissionregistration.k8s.io"
+    resources:
+      - "*"
+    verbs:
+      - "*"
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: rama
+roleRef:
+  name: system:rama
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: rama
+    namespace: kube-system
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: ipinstances.networking.alibaba.com
+spec:
+  group: networking.alibaba.com
+  version: v1
+  scope: Namespaced
+  names:
+    plural: ipinstances
+    singular: ipinstance
+    kind: IPInstance
+    shortNames:
+      - ipinstance
+  subresources:
+    status: {}
+  additionalPrinterColumns:
+    - name: IP
+      type: string
+      JSONPath: .spec.address.ip
+    - name: Gateway
+      type: string
+      JSONPath: .spec.address.gateway
+    - name: PodName
+      type: string
+      JSONPath: .status.podName
+    - name: Phase
+      type: string
+      JSONPath: .status.phase
+    - name: Node
+      type: string
+      JSONPath: .status.nodeName
+    - name: Subnet
+      type: string
+      JSONPath: .spec.subnet
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: subnets.networking.alibaba.com
+spec:
+  group: networking.alibaba.com
+  version: v1
+  scope: Cluster
+  names:
+    plural: subnets
+    singular: subnet
+    kind: Subnet
+    shortNames:
+      - subnet
+  subresources:
+    status: {}
+  additionalPrinterColumns:
+    - name: Version
+      type: string
+      JSONPath: .spec.range.version
+    - name: CIDR
+      type: string
+      JSONPath: .spec.range.cidr
+    - name: Start
+      type: string
+      JSONPath: .spec.range.start
+    - name: End
+      type: string
+      JSONPath: .spec.range.end
+    - name: Gateway
+      type: string
+      JSONPath: .spec.range.gateway
+    - name: Total
+      type: integer
+      JSONPath: .status.total
+    - name: Used
+      type: integer
+      JSONPath: .status.used
+    - name: Available
+      type: integer
+      JSONPath: .status.available
+    - name: NetID
+      type: integer
+      JSONPath: .spec.netID
+    - name: Network
+      type: string
+      JSONPath: .spec.network
+  validation:
+    openAPIV3Schema:
+      properties:
+        spec:
+          properties:
+            range:
+              type: object
+              required: ["cidr", "gateway"]
+              properties:
+                cidr:
+                  type: string
+                gateway:
+                  type: string
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: networks.networking.alibaba.com
+spec:
+  group: networking.alibaba.com
+  version: v1
+  scope: Cluster
+  names:
+    plural: networks
+    singular: network
+    kind: Network
+    shortNames:
+      - network
+  subresources:
+    status: {}
+  additionalPrinterColumns:
+    - name: NetID
+      type: integer
+      JSONPath: .spec.netID
+    - name: SwitchID
+      type: string
+      JSONPath: .spec.switchID
