@@ -1,0 +1,52 @@
+---
+apiVersion: networking.alibaba.com/v1
+kind: Network
+metadata:
+  name: network1
+spec:
+  netID: 0
+  switchID: "switch1"
+  nodeSelector:
+    network: "s1"
+
+---
+apiVersion: networking.alibaba.com/v1
+kind: Subnet
+metadata:
+  name: subnet1
+spec:
+  network: network1
+  netID: 0
+  range:
+    version: "4"
+    cidr: "192.168.56.0/24"
+    gateway: "192.168.56.1"
+  config:
+    macNatEnable: true
+
+---
+apiVersion: networking.alibaba.com/v1
+kind: Network
+metadata:
+  name: network2
+spec:
+  netID: 0
+  switchID: "switch2"
+  nodeSelector:
+    network: "s2"
+
+---
+apiVersion: networking.alibaba.com/v1
+kind: Subnet
+metadata:
+  name: subnet2
+spec:
+  network: network2
+  netID: 0
+  range:
+    version: "4"
+    cidr: "192.168.48.0/24"
+    gateway: "192.168.48.1"
+  config:
+    macNatEnable: true
+

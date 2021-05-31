@@ -1,0 +1,6 @@
+FROM alpine:3.8
+
+COPY rama-manager /rama/
+
+WORKDIR /rama
+CMD ["rama-manager"]

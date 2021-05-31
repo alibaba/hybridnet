@@ -1,0 +1,40 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: rama-manager
+  namespace: kube-system
+  annotations:
+    kubernetes.io/description: "rama manager"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: rama-manager
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: rama-manager
+    spec:
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: rama-manager
+              topologyKey: kubernetes.io/hostname
+      priorityClassName: system-cluster-critical
+      serviceAccountName: rama
+      hostNetwork: true
+      containers:
+        - name: rama-manager
+          image: "REGISTRY/rama-manager:dev"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /rama/rama-manager
+      nodeSelector:
+        node-role.kubernetes.io/master: ""
