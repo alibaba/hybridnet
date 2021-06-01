@@ -19,7 +19,7 @@ Please try to use English to describe your issue, or at least provide a snippet 
 #### Anything else we need to know?:
 
 #### Environment:
-- rama version (use `rama version`):
+- rama version:
 - OS (e.g: `cat /etc/os-release`):
 - Kernel (e.g. `uname -a`):
 - Kubernetes version:
