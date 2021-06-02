@@ -1,27 +1,28 @@
 # Rama
 
-Rama is an open source container networking solution for Kubernetes, using standard Linux networking tools to provide a simple but powerful network fabric.
+## What is Rama?
 
-Rama uses a [model]() of **Network/Subnet/IPInstance** to describe a Kubernetes container network, which includes two kinds of Network type now:
-- Underlay, based on a classical data link layer switching network and is adapter to multiple vlan/subnet/asw environment
-- Overlay, a vxlan network without fixed ip blocks for each node, provides flexible IPAM strategy just the same as an Underlay network  
+Rama is an open source container networking solution, integrated with Kubernetes and used officially by following well-known PaaS platforms,
 
-Rama also supports creating Overlay and Underlay network in one cluster at the same time. Using such a *Hybrid* network fabric, you can build a much more powerful container network.
+- OECP of Alibaba Cloud
+- SOFAStack of Ant Financial Co.
+
+Rama focus on large-scale, user-friendly and heterogeneous infrastructure, now hundreds of clusters are running on rama all over world.
 
 ## Features
-Besides the Hybrid network fabric, Rama also supports: 
 
-- IPv4/IPv6 dual stack
-- Flexible IPAM strategy: keeping Statefulset Pod's ip fixed, assigning Pod to Network/Subnet, etc.
-- Manage network resource by kubectl commands with Network/Subnet CR
+- Flexible network models: three-level, **Network, Subnet and IPInstance**, all implemented in CRD
+- DualStack: three modes optional, IPv4Only, IPv6Only and DualStack
+- Hybrid network fabric: support overlay and underlay pods at same time
+- Advanced IPAM: Network/Subnet/IPInstance assignment; stateful workloads IP retain
+- Kube-proxy friendly: working well with iptables-mode kube-proxy
+- ARM support: run on x86_64 and arm64 architectures
 
 ## Contributing
 
-Rama is an open source project, and welcomes your contribution, be it through code, a bug report, a feature request, or user
-feedback.
-
-See [CONTRIBUTING](CONTRIBUTING.md) document will get you started on submitting changes to the project.
+Rama welcome contributions, including bug reports, feature requests and documentation improvements.
+If you want to contribute, please start with [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License
 
-Rama is open source, with most code and documentation available under the Apache 2.0 license (see the [LICENSE](LICENSE))
+[Apache 2.0 License](LICENSE)
