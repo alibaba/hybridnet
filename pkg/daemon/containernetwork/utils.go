@@ -146,6 +146,7 @@ func GetDefaultRoute(family int) (*netlink.Route, error) {
 	return nil, daemonutils.NotExist
 }
 
+// Get first valid interface by prefer string.
 func GetInterfaceByPreferString(preferString string) (*net.Interface, error) {
 	ifList := strings.Split(preferString, ",")
 	for _, iF := range ifList {

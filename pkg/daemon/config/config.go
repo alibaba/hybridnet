@@ -104,7 +104,7 @@ func ParseFlags() (*Configuration, error) {
 	// mute info log for ipset lib
 	logrus.SetLevel(logrus.WarnLevel)
 
-	flag.Set("alsologtostderr", "true")
+	_ = flag.Set("alsologtostderr", "true")
 	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
 	klog.InitFlags(klogFlags)
 
@@ -113,7 +113,7 @@ func ParseFlags() (*Configuration, error) {
 		f2 := klogFlags.Lookup(f1.Name)
 		if f2 != nil {
 			value := f1.Value.String()
-			f2.Value.Set(value)
+			_ = f2.Value.Set(value)
 		}
 	})
 
@@ -183,11 +183,15 @@ func (config *Configuration) initNicConfig() error {
 	if err != nil {
 		return fmt.Errorf("get vlan node interface failed: %v", err)
 	}
+	// To update prefer result interface.
+	config.NodeVlanIfName = vlanNodeInterface.Name
 
 	vxlanNodeInterface, err := containernetwork.GetInterfaceByPreferString(config.NodeVxlanIfName)
 	if err != nil {
 		return fmt.Errorf("get vxlan node interface failed: %v", err)
 	}
+	// To update prefer result interface.
+	config.NodeVxlanIfName = vxlanNodeInterface.Name
 
 	klog.Infof("use %v as node vlan interface, and use %v as node vxlan interface",
 		config.NodeVlanIfName, config.NodeVxlanIfName)
