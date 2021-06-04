@@ -23,6 +23,14 @@ Rama focus on large-scale, user-friendly and heterogeneous infrastructure, now h
 Rama welcome contributions, including bug reports, feature requests and documentation improvements.
 If you want to contribute, please start with [CONTRIBUTING.md](CONTRIBUTING.md)
 
+## Contact
+
+For any questions about rama, please reach us via:
+
+- Slack: #general on the [rama slack](rama-qh63190.slack.com)
+- DingTalk: Group No.35109308
+- E-mail: private or security issues should be reported via e-mail addresses listed in the [MAINTAINERS](MAINTAINERS) file
+
 ## License
 
 [Apache 2.0 License](LICENSE)
