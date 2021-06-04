@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package contorller
+package controller
 
 import (
 	"fmt"
@@ -43,7 +43,7 @@ func (c *Controller) enqueueUpdateSubnet(oldObj, newObj interface{}) {
 	if (oldSubnetNetID == nil && newSubnetNetID != nil) ||
 		(oldSubnetNetID != nil && newSubnetNetID == nil) ||
 		(oldSubnetNetID != nil && newSubnetNetID != nil && *oldSubnetNetID != *newSubnetNetID) ||
-		oldSubnet.Spec.Network != oldSubnet.Spec.Network ||
+		oldSubnet.Spec.Network != newSubnet.Spec.Network ||
 		ramav1.IsSubnetAutoNatOutgoing(&oldSubnet.Spec) != ramav1.IsSubnetAutoNatOutgoing(&newSubnet.Spec) {
 		c.subnetQueue.Add(ActionReconcileSubnet)
 	}

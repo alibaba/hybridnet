@@ -238,7 +238,7 @@ func (mgr *Manager) SyncRules() error {
 	if err := mgr.executor.RestoreAll(iptablesData.Bytes(), utiliptables.NoFlushTables,
 		utiliptables.RestoreCounters); err != nil {
 		return fmt.Errorf("Failed to execute iptables-restore: " + err.Error() +
-			"\n iptables rules are:\n " + string(iptablesData.Bytes()))
+			"\n iptables rules are:\n " + iptablesData.String())
 	}
 
 	return nil
@@ -291,9 +291,8 @@ func (mgr *Manager) ensureBasicRuleAndChains() error {
 func generateIPSetNameByProtocol(setBaseName string, protocol Protocol) string {
 	if protocol == ProtocolIpv4 {
 		return setBaseName + "-V4"
-	} else {
-		return setBaseName + "-V6"
 	}
+	return setBaseName + "-V6"
 }
 
 func generateRamaPostRoutingBaseRuleSpec() []string {
@@ -343,7 +342,6 @@ func generateVxlanPodToNodeReplyRemoveMarkRuleSpec(protocol Protocol) []string {
 func rejectWithOption(protocol Protocol) string {
 	if protocol == ProtocolIpv4 {
 		return "icmp-host-unreachable"
-	} else {
-		return "icmp6-addr-unreachable"
 	}
+	return "icmp6-addr-unreachable"
 }

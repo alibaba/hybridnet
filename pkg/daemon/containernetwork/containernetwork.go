@@ -153,7 +153,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 
 // ipAddr is a CIDR notation IP address and prefix length
 func ConfigureContainerNic(nicName, nodeIfName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
-	macAddr net.HardwareAddr, vlanId *uint32, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration,
+	macAddr net.HardwareAddr, vlanID *uint32, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration,
 	networkType ramav1.NetworkType) error {
 
 	var defaultRouteNets []*types.Route
@@ -164,7 +164,7 @@ func ConfigureContainerNic(nicName, nodeIfName string, allocatedIPs map[ramav1.I
 
 	var vlanIf *net.Interface
 	if networkType == ramav1.NetworkTypeUnderlay {
-		vlanIfName, err := EnsureVlanIf(nodeIfName, vlanId)
+		vlanIfName, err := EnsureVlanIf(nodeIfName, vlanID)
 		if err != nil {
 			return fmt.Errorf("ensure vlan interface %v error: %v", vlanIfName, err)
 		}

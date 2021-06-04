@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package contorller
+package controller
 
 import ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 

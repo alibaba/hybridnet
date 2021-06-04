@@ -34,11 +34,7 @@ import (
 
 func (c *Controller) filterIP(obj interface{}) bool {
 	_, ok := obj.(*v1.IPInstance)
-	if !ok {
-		return false
-	}
-
-	return true
+	return ok
 }
 
 func (c *Controller) addIP(obj interface{}) {

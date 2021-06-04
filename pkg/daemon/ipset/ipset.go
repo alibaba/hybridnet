@@ -229,8 +229,8 @@ func (r *runner) ListIPSets() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	setList := []string{}
-	for set, _ := range r.Sets {
+	var setList []string
+	for set := range r.Sets {
 		setList = append(setList, set)
 	}
 	return setList

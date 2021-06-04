@@ -155,11 +155,10 @@ func EnsureValidatingWebhookConfiguration(cfg *rest.Config) {
 			}
 			return
 		}
-		klog.Fatalf("fail to get validating webhook configuratoin: %v", err)
+		klog.Fatalf("fail to get validating webhook configuration: %v", err)
 	}
 
 	_, _ = c.ValidatingWebhookConfigurations().Update(context.TODO(), validatingWebhookConfiguration, metav1.UpdateOptions{})
-	return
 }
 
 func EnsureMutatingWebhookConfiguration(cfg *rest.Config) {
@@ -173,11 +172,10 @@ func EnsureMutatingWebhookConfiguration(cfg *rest.Config) {
 			}
 			return
 		}
-		klog.Fatalf("fail to get mutating webhook configuratoin: %v", err)
+		klog.Fatalf("fail to get mutating webhook configuration: %v", err)
 	}
 
 	_, _ = c.MutatingWebhookConfigurations().Update(context.TODO(), mutatingWebhookConfiguration, metav1.UpdateOptions{})
-	return
 }
 
 func generateObjectSelector() *metav1.LabelSelector {

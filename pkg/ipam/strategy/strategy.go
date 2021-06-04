@@ -128,11 +128,12 @@ func GetIPsbyPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) ([]string, error
 func GetIndexFromName(name string) int {
 	nameSlice := strings.Split(name, "-")
 	indexStr := nameSlice[len(nameSlice)-1]
-	if index, err := strconv.Atoi(indexStr); err != nil {
+
+	index, err := strconv.Atoi(indexStr)
+	if err != nil {
 		return math.MaxInt32
-	} else {
-		return index
 	}
+	return index
 }
 
 func toIPFormat(name string) (string, bool) {

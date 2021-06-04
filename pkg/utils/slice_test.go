@@ -30,12 +30,12 @@ func TestStringSliceToMap(t *testing.T) {
 		{
 			"nil slice",
 			nil,
-			make(map[string]struct{}, 0),
+			make(map[string]struct{}),
 		},
 		{
 			"empty slice",
 			make([]string, 0),
-			make(map[string]struct{}, 0),
+			make(map[string]struct{}),
 		},
 		{
 			"normal slice",

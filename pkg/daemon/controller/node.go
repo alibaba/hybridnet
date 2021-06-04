@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package contorller
+package controller
 
 import (
 	"context"
@@ -189,7 +189,7 @@ func (c *Controller) reconcileNodeInfo() error {
 		return fmt.Errorf("there is no available ip for vxlan parent link %v", link.Attrs().Name)
 	}
 
-	var vtepIP net.IP = nil
+	var vtepIP net.IP
 	for _, addr := range existParentAddrList {
 		if addr.IP.IsGlobalUnicast() {
 			vtepIP = addr.IP
@@ -245,7 +245,7 @@ func (c *Controller) reconcileNodeInfo() error {
 	}
 
 	vxlanDev, err := vxlan.NewVxlanDevice(vxlanLinkName, int(*overlayNetwork.Spec.NetID),
-		c.config.NodeVxlanIfName, vtepIP, c.config.VxlanUdpPort, c.config.VxlanBaseReachableTime, true)
+		c.config.NodeVxlanIfName, vtepIP, c.config.VxlanUDPPort, c.config.VxlanBaseReachableTime, true)
 	if err != nil {
 		return fmt.Errorf("create vxlan device %v failed: %v", vxlanLinkName, err)
 	}

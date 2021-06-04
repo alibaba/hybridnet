@@ -92,7 +92,7 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 	var specifiedSubnet string
 	if specifiedSubnet = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedSubnet], pod.Labels[constants.LabelSpecifiedSubnet]); len(specifiedSubnet) > 0 {
 		if len(specifiedNetwork) == 0 {
-			return admission.Denied(fmt.Sprintf("subnet and network must be specified at the same time"))
+			return admission.Denied("subnet and network must be specified at the same time")
 		}
 		subnet := &ramav1.Subnet{}
 		if err = handler.Cache.Get(ctx, types.NamespacedName{Name: specifiedSubnet}, subnet); err != nil {
@@ -135,19 +135,18 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 				switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
 				case ipamtypes.IPv4Only:
 					if network.Status.Statistics.Available <= 0 {
-						return admission.Denied(fmt.Sprintf("lacking ipv4 addresses for overlay mode"))
+						return admission.Denied("lacking ipv4 addresses for overlay mode")
 					}
 				case ipamtypes.IPv6Only:
 					if network.Status.IPv6Statistics.Available <= 0 {
-						return admission.Denied(fmt.Sprintf("lacking ipv6 addresses for overlay mode"))
+						return admission.Denied("lacking ipv6 addresses for overlay mode")
 					}
 				case ipamtypes.DualStack:
 					if network.Status.DualStackStatistics.Available <= 0 {
-						return admission.Denied(fmt.Sprintf("lacking dual stack addresses for overlay mode"))
+						return admission.Denied("lacking dual stack addresses for overlay mode")
 					}
 				}
 			}
-			break
 		}
 	}
 
@@ -155,5 +154,5 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 }
 
 func stringEqualCaseInsensitive(a, b string) bool {
-	return strings.ToLower(a) == strings.ToLower(b)
+	return strings.EqualFold(a, b)
 }

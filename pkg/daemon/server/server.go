@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/oecp/rama/pkg/daemon/config"
-	"github.com/oecp/rama/pkg/daemon/contorller"
+	"github.com/oecp/rama/pkg/daemon/controller"
 	"github.com/oecp/rama/pkg/request"
 
 	"github.com/emicklei/go-restful"
@@ -36,7 +36,7 @@ var requestLogString = "[%s] Incoming %s %s %s request"
 var responseLogString = "[%s] Outcoming response %s %s with %d status code in %vms"
 
 // RunServer runs the cniDaemon http restful server
-func RunServer(stopCh <-chan struct{}, config *config.Configuration, ctrlRef *contorller.Controller) {
+func RunServer(stopCh <-chan struct{}, config *config.Configuration, ctrlRef *controller.Controller) {
 	cdh, err := createCniDaemonHandler(stopCh, config, ctrlRef)
 	if err != nil {
 		klog.Errorf("create cni daemon handler with socket %v failed: %v", config.BindSocket, err)

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package contorller
+package controller
 
 import (
 	"context"
@@ -137,9 +137,11 @@ func NewController(config *daemonconfig.Configuration,
 		return nil, fmt.Errorf("create ipv6 iptables manager error: %v", err)
 	}
 
-	ipInstanceInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{
+	if err := ipInstanceInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{
 		ByInstanceIPIndexer: indexByInstanceIP,
-	})
+	}); err != nil {
+		return nil, fmt.Errorf("add indexer to ip instance informer failed: %v", err)
+	}
 
 	controller := &Controller{
 		subnetLister: subnetInformer.Lister(),
@@ -264,17 +266,15 @@ func (c *Controller) handleLocalNetworkDeviceEvent() error {
 
 	go func() {
 		for {
-			select {
-			case update := <-linkCh:
-				if (update.IfInfomsg.Flags&unix.IFF_UP != 0) == true &&
-					!strings.HasSuffix(update.Link.Attrs().Name, containernetwork.ContainerHostLinkSuffix) &&
-					!strings.HasSuffix(update.Link.Attrs().Name, containernetwork.ContainerInitLinkSuffix) &&
-					!strings.HasPrefix(update.Link.Attrs().Name, "veth") {
+			update := <-linkCh
+			if (update.IfInfomsg.Flags&unix.IFF_UP != 0) &&
+				!strings.HasSuffix(update.Link.Attrs().Name, containernetwork.ContainerHostLinkSuffix) &&
+				!strings.HasSuffix(update.Link.Attrs().Name, containernetwork.ContainerInitLinkSuffix) &&
+				!strings.HasPrefix(update.Link.Attrs().Name, "veth") {
 
-					// Create event to flush routes and neigh caches.
-					c.subnetQueue.Add(ActionReconcileSubnet)
-					c.ipInstanceQueue.Add(ActionReconcileIPInstance)
-				}
+				// Create event to flush routes and neigh caches.
+				c.subnetQueue.Add(ActionReconcileSubnet)
+				c.ipInstanceQueue.Add(ActionReconcileIPInstance)
 			}
 		}
 	}()
@@ -286,12 +286,10 @@ func (c *Controller) handleLocalNetworkDeviceEvent() error {
 
 	go func() {
 		for {
-			select {
-			case update := <-addrCh:
-				if containernetwork.CheckIPIsGlobalUnicast(update.LinkAddress.IP) {
-					// Create event to update node configuration.
-					c.nodeQueue.Add(ActionReconcileNode)
-				}
+			update := <-addrCh
+			if containernetwork.CheckIPIsGlobalUnicast(update.LinkAddress.IP) {
+				// Create event to update node configuration.
+				c.nodeQueue.Add(ActionReconcileNode)
 			}
 		}
 	}()
@@ -377,22 +375,20 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 
 	go func() {
 		for {
-			select {
-			case update := <-ch:
-				if isNeighResolving(update.State) {
-					if update.Type == syscall.RTM_DELNEIGH {
-						continue
-					}
+			update := <-ch
+			if isNeighResolving(update.State) {
+				if update.Type == syscall.RTM_DELNEIGH {
+					continue
+				}
 
-					link, err := netlink.LinkByIndex(update.LinkIndex)
-					if err != nil {
-						klog.Errorf("get link by index %v failed: %v", update.LinkIndex, err)
-						continue
-					}
+				link, err := netlink.LinkByIndex(update.LinkIndex)
+				if err != nil {
+					klog.Errorf("get link by index %v failed: %v", update.LinkIndex, err)
+					continue
+				}
 
-					if strings.Contains(link.Attrs().Name, containernetwork.VxlanLinkInfix) {
-						go ipSearchExecWrapper(update.IP, link)
-					}
+				if strings.Contains(link.Attrs().Name, containernetwork.VxlanLinkInfix) {
+					go ipSearchExecWrapper(update.IP, link)
 				}
 			}
 		}

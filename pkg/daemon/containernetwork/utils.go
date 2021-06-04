@@ -34,42 +34,42 @@ type IPInfo struct {
 	Cidr *net.IPNet
 }
 
-func GenerateVlanNetIfName(parentName string, vlanId *uint32) (string, error) {
-	if vlanId == nil {
+func GenerateVlanNetIfName(parentName string, vlanID *uint32) (string, error) {
+	if vlanID == nil {
 		return "", fmt.Errorf("vlan id should not be nil")
 	}
 
-	if *vlanId > 4096 {
+	if *vlanID > 4096 {
 		return "", fmt.Errorf("vlan id's value range is from 0 to 4094")
 	}
 
-	if *vlanId == 0 {
+	if *vlanID == 0 {
 		return parentName, nil
 	}
 
-	return fmt.Sprintf("%s.%v", parentName, *vlanId), nil
+	return fmt.Sprintf("%s.%v", parentName, *vlanID), nil
 }
 
-func GenerateVxlanNetIfName(parentName string, vxlanId *uint32) (string, error) {
-	if vxlanId == nil || *vxlanId == 0 {
+func GenerateVxlanNetIfName(parentName string, vlanID *uint32) (string, error) {
+	if vlanID == nil || *vlanID == 0 {
 		return "", fmt.Errorf("vxlan id should not be nil or zero")
 	}
 
-	maxVxlanId := uint32(1<<24 - 1)
-	if *vxlanId > maxVxlanId {
-		return "", fmt.Errorf("vxlan id's value range is from 1 to %d", maxVxlanId)
+	maxVxlanID := uint32(1<<24 - 1)
+	if *vlanID > maxVxlanID {
+		return "", fmt.Errorf("vxlan id's value range is from 1 to %d", maxVxlanID)
 	}
 
-	return fmt.Sprintf("%s%s%v", parentName, VxlanLinkInfix, *vxlanId), nil
+	return fmt.Sprintf("%s%s%v", parentName, VxlanLinkInfix, *vlanID), nil
 }
 
-func EnsureVlanIf(nodeIfName string, vlanId *uint32) (string, error) {
+func EnsureVlanIf(nodeIfName string, vlanID *uint32) (string, error) {
 	nodeIf, err := netlink.LinkByName(nodeIfName)
 	if err != nil {
 		return "", err
 	}
 
-	vlanIfName, err := GenerateVlanNetIfName(nodeIfName, vlanId)
+	vlanIfName, err := GenerateVlanNetIfName(nodeIfName, vlanID)
 	if err != nil {
 		return "", fmt.Errorf("failed to ensure bridge: %v", err)
 	}
@@ -83,7 +83,7 @@ func EnsureVlanIf(nodeIfName string, vlanId *uint32) (string, error) {
 		}
 
 		vif := &netlink.Vlan{
-			VlanId:    int(*vlanId),
+			VlanId:    int(*vlanID),
 			LinkAttrs: netlink.NewLinkAttrs(),
 		}
 		vif.ParentIndex = nodeIf.Attrs().Index

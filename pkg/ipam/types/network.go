@@ -26,7 +26,7 @@ var (
 )
 
 func NewNetworkSet() NetworkSet {
-	return make(map[string]*Network, 0)
+	return make(map[string]*Network)
 }
 
 func (n NetworkSet) RefreshNetwork(name string, network *Network) {

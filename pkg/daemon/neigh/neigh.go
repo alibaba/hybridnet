@@ -31,7 +31,7 @@ type Manager struct {
 	family int
 
 	// forward interfaces to pod ip list
-	interfaceToIpSliceMap map[string]IPMap
+	interfaceToIPSliceMap map[string]IPMap
 }
 
 // Proxy neigh cache will be cleaned if interface is set down-up again.
@@ -39,24 +39,24 @@ type Manager struct {
 func CreateNeighManager(family int) *Manager {
 	return &Manager{
 		family:                family,
-		interfaceToIpSliceMap: nil,
+		interfaceToIPSliceMap: nil,
 	}
 }
 
 func (m *Manager) ResetInfos() {
-	m.interfaceToIpSliceMap = map[string]IPMap{}
+	m.interfaceToIPSliceMap = map[string]IPMap{}
 }
 
 func (m *Manager) AddPodInfo(podIP net.IP, forwardNodeIfName string) {
-	if ipMap := m.interfaceToIpSliceMap[forwardNodeIfName]; ipMap == nil {
-		m.interfaceToIpSliceMap[forwardNodeIfName] = IPMap{}
+	if ipMap := m.interfaceToIPSliceMap[forwardNodeIfName]; ipMap == nil {
+		m.interfaceToIPSliceMap[forwardNodeIfName] = IPMap{}
 	}
 
-	m.interfaceToIpSliceMap[forwardNodeIfName][podIP.String()] = podIP
+	m.interfaceToIPSliceMap[forwardNodeIfName][podIP.String()] = podIP
 }
 
 func (m *Manager) SyncNeighs() error {
-	for forwardNodeIfName, ipMap := range m.interfaceToIpSliceMap {
+	for forwardNodeIfName, ipMap := range m.interfaceToIPSliceMap {
 		forwardNodeIf, err := netlink.LinkByName(forwardNodeIfName)
 		if err != nil {
 			return fmt.Errorf("get forward node if %v failed: %v", forwardNodeIfName, err)
