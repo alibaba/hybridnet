@@ -1,6 +1,0 @@
-FROM arm64v8/alpine:3.8
-
-COPY rama-webhook /rama/
-
-WORKDIR /rama
-CMD ["rama-webhook"]

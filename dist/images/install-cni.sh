@@ -41,10 +41,10 @@ CNI_BIN_DST=/opt/cni/bin/rama
 CNI_CONF_SRC=/rama/00-rama.conflist
 CNI_CONF_DST=/etc/cni/net.d/00-rama.conflist
 
-LOOPBACK_BIN_SRC=/loopback
+LOOPBACK_BIN_SRC=/cni-plugins/loopback
 LOOPBACK_BIN_DST=/opt/cni/bin/loopback
 
-BANDWIDTH_BIN_SRC=/bandwidth
+BANDWIDTH_BIN_SRC=/cni-plugins/bandwidth
 BANDWIDTH_BIN_DST=/opt/cni/bin/bandwidth
 
 yes | cp -f $LOOPBACK_BIN_SRC $LOOPBACK_BIN_DST || exit_with_error "Failed to copy $LOOPBACK_BIN_SRC to $LOOPBACK_BIN_DST"
