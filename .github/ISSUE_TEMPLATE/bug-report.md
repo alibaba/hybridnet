@@ -9,19 +9,22 @@ labels: kind/bug
 Please try to use English to describe your issue, or at least provide a snippet of English translation.
 -->
 
+# Bug Report
 
-#### What happened:
+Type: *bug report*
 
-#### What you expected to happen:
+## What happened
 
-#### How to reproduce it (as minimally and precisely as possible):
+## What you expected to happen
 
-#### Anything else we need to know?:
+## How to reproduce it (as minimally and precisely as possible)
 
-#### Environment:
+## Anything else we need to know?
+
+## Environment
 - rama version:
-- OS (e.g: `cat /etc/os-release`):
+- OS (e.g. `cat /etc/os-release`):
 - Kernel (e.g. `uname -a`):
 - Kubernetes version:
-- Install tools: 
+- Install tools:
 - Others:
