@@ -31,11 +31,7 @@ import (
 
 func (c *Controller) filterNetwork(obj interface{}) bool {
 	_, ok := obj.(*v1.Network)
-	if !ok {
-		return false
-	}
-
-	return true
+	return ok
 }
 
 func (c *Controller) addNetwork(obj interface{}) {
@@ -110,9 +106,8 @@ func (c *Controller) reconcileNetwork(networkName string) error {
 func (c *Controller) refreshNetwork(networkName string) error {
 	if feature.DualStackEnabled() {
 		return c.dualStackIPAMManager.Refresh([]string{networkName})
-	} else {
-		return c.ipamManager.Refresh([]string{networkName})
 	}
+	return c.ipamManager.Refresh([]string{networkName})
 }
 
 func (c *Controller) reconcileNetworkStatus(networkName string) error {
@@ -141,9 +136,8 @@ func (c *Controller) reconcileNetworkStatus(networkName string) error {
 
 	if feature.DualStackEnabled() {
 		return c.dualStackIPAMStroe.SyncNetworkStatus(networkName, string(nodes), string(subnets))
-	} else {
-		return c.ipamStore.SyncNetworkStatus(networkName, string(nodes), string(subnets))
 	}
+	return c.ipamStore.SyncNetworkStatus(networkName, string(nodes), string(subnets))
 }
 
 func (c *Controller) getRelatedNodesOfNetwork(networkName string) ([]byte, error) {

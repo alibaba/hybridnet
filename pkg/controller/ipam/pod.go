@@ -194,34 +194,34 @@ func (c *Controller) statefulAllocate(key, networkName string, pod *v1.Pod) (err
 		// forced assign for using reserved ips
 		return c.multiAssign(networkName, pod, ipFamilyMode, ipCandidates, true)
 
-	} else {
-		var ipCandidate string
-
-		if preAssign {
-			ipPool := strings.Split(pod.Annotations[constants.AnnotationIPPool], ",")
-			if idx := strategy.GetIndexFromName(pod.Name); idx < len(ipPool) {
-				ipCandidate = utils.NormalizedIP(ipPool[idx])
-			}
-			if len(ipCandidate) == 0 {
-				err = fmt.Errorf("no available ip in ip-pool %s for pod %s", pod.Annotations[constants.AnnotationIPPool], key)
-				return err
-			}
-		} else {
-			ipCandidate, err = strategy.GetIPbyPod(c.ipLister, pod)
-			if err != nil {
-				return err
-			}
-			// when no valid ip found, it means that this is the first time of pod creation
-			if len(ipCandidate) == 0 {
-				// allocate has its own observation process, so just skip
-				shouldObserve = false
-				return c.allocate(key, networkName, pod)
-			}
-		}
-
-		// forced assign for using reserved ip
-		return c.assign(networkName, pod, ipCandidate, true)
 	}
+
+	var ipCandidate string
+
+	if preAssign {
+		ipPool := strings.Split(pod.Annotations[constants.AnnotationIPPool], ",")
+		if idx := strategy.GetIndexFromName(pod.Name); idx < len(ipPool) {
+			ipCandidate = utils.NormalizedIP(ipPool[idx])
+		}
+		if len(ipCandidate) == 0 {
+			err = fmt.Errorf("no available ip in ip-pool %s for pod %s", pod.Annotations[constants.AnnotationIPPool], key)
+			return err
+		}
+	} else {
+		ipCandidate, err = strategy.GetIPbyPod(c.ipLister, pod)
+		if err != nil {
+			return err
+		}
+		// when no valid ip found, it means that this is the first time of pod creation
+		if len(ipCandidate) == 0 {
+			// allocate has its own observation process, so just skip
+			shouldObserve = false
+			return c.allocate(key, networkName, pod)
+		}
+	}
+
+	// forced assign for using reserved ip
+	return c.assign(networkName, pod, ipCandidate, true)
 }
 
 func (c *Controller) assign(networkName string, pod *v1.Pod, ipCandidate string, forced bool) (err error) {
@@ -362,9 +362,8 @@ func (c *Controller) matchNetworkType(networkName string, networkType types.Netw
 func (c *Controller) getNetworksByType(networkType types.NetworkType) []string {
 	if feature.DualStackEnabled() {
 		return c.dualStackIPAMManager.GetNetworksByType(networkType)
-	} else {
-		return c.ipamManager.GetNetworksByType(networkType)
 	}
+	return c.ipamManager.GetNetworksByType(networkType)
 }
 
 func squashIPSliceToIPs(ips []*types.IP) (ret []string) {

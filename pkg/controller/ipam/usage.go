@@ -162,7 +162,7 @@ func (s *UsageSyncer) updateSubnetsForDualStack(subnets map[string]*types.Usage)
 	}
 }
 
-func (c *UsageSyncer) updateNetworkMetrics(networkName string, networkUsage *types.Usage) {
+func (s *UsageSyncer) updateNetworkMetrics(networkName string, networkUsage *types.Usage) {
 	metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPTotalUsageType).Set(float64(networkUsage.Total))
 	metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPUsedUsageType).Set(float64(networkUsage.Used))
 	metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPAvailableUsageType).Set(float64(networkUsage.Available))

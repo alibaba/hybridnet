@@ -29,7 +29,7 @@ import (
 	"github.com/oecp/rama/pkg/constants"
 	daemonconfig "github.com/oecp/rama/pkg/daemon/config"
 	"github.com/oecp/rama/pkg/daemon/containernetwork"
-	"github.com/oecp/rama/pkg/daemon/contorller"
+	"github.com/oecp/rama/pkg/daemon/controller"
 	"github.com/oecp/rama/pkg/request"
 
 	"github.com/emicklei/go-restful"
@@ -51,7 +51,7 @@ type cniDaemonHandler struct {
 	networkLister ramalister.NetworkLister
 }
 
-func createCniDaemonHandler(stopCh <-chan struct{}, config *daemonconfig.Configuration, ctrlRef *contorller.Controller) (*cniDaemonHandler, error) {
+func createCniDaemonHandler(stopCh <-chan struct{}, config *daemonconfig.Configuration, ctrlRef *controller.Controller) (*cniDaemonHandler, error) {
 	cdh := &cniDaemonHandler{
 		KubeClient:       config.KubeClient,
 		RamaClient:       config.RamaClient,
@@ -80,7 +80,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 	klog.Infof("Add port request %v", podRequest)
 
 	var macAddr string
-	var netId *uint32
+	var netID *uint32
 	var affectedIPInstances []*ramav1.IPInstance
 
 	allocatedIPs := map[ramav1.IPVersion]*containernetwork.IPInfo{
@@ -88,7 +88,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		ramav1.IPv6: nil,
 	}
 
-	var returnIpAddress []request.IPAddress
+	var returnIPAddress []request.IPAddress
 
 	backoffBase := 5 * time.Microsecond
 	retries := 11
@@ -136,11 +136,11 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		// IPv4 and IPv6 ip will exist at the same time
 		if ipInstance.Status.PodName == podRequest.PodName && ipInstance.Status.PodNamespace == podRequest.PodNamespace {
 
-			if netId == nil && macAddr == "" {
-				netId = ipInstance.Spec.Address.NetID
+			if netID == nil && macAddr == "" {
+				netID = ipInstance.Spec.Address.NetID
 				macAddr = ipInstance.Spec.Address.MAC
-			} else if (netId != ipInstance.Spec.Address.NetID &&
-				(netId != nil && *netId != *ipInstance.Spec.Address.NetID)) ||
+			} else if (netID != ipInstance.Spec.Address.NetID &&
+				(netID != nil && *netID != *ipInstance.Spec.Address.NetID)) ||
 				macAddr != ipInstance.Spec.Address.MAC {
 
 				errMsg := fmt.Errorf("mac and netId for all ip instances of pod %v/%v should be the same", podRequest.PodNamespace, podRequest.PodName)
@@ -214,7 +214,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 				}
 			}
 
-			returnIpAddress = append(returnIpAddress, request.IPAddress{
+			returnIPAddress = append(returnIPAddress, request.IPAddress{
 				IP:       ipInstance.Spec.Address.IP,
 				Mac:      ipInstance.Spec.Address.MAC,
 				Gateway:  ipInstance.Spec.Address.Gateway,
@@ -226,7 +226,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 	}
 
 	// check valid ip information second time
-	if macAddr == "" || netId == nil {
+	if macAddr == "" || netID == nil {
 		errMsg := fmt.Errorf("no available ip for pod %s/%s", podRequest.PodNamespace, podRequest.PodName)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
@@ -241,9 +241,9 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		return
 	}
 
-	klog.Infof("Create container, mac %s, net id %d", macAddr, *netId)
+	klog.Infof("Create container, mac %s, net id %d", macAddr, *netID)
 	hostInterface, err := cdh.configureNic(podRequest.PodName, podRequest.PodNamespace, podRequest.NetNs, podRequest.ContainerID,
-		macAddr, netId, allocatedIPs, ramav1.GetNetworkType(network))
+		macAddr, netID, allocatedIPs, ramav1.GetNetworkType(network))
 	if err != nil {
 		errMsg := fmt.Errorf("configure nic failed: %v", err)
 		klog.Error(errMsg)
@@ -272,7 +272,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 	}
 
 	_ = resp.WriteHeaderAndEntity(http.StatusOK, request.PodResponse{
-		IPAddress:     returnIpAddress,
+		IPAddress:     returnIPAddress,
 		HostInterface: hostInterface,
 	})
 }

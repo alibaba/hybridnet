@@ -28,11 +28,7 @@ import (
 
 func (c *Controller) filterSubnet(obj interface{}) bool {
 	_, ok := obj.(*v1.Subnet)
-	if !ok {
-		return false
-	}
-
-	return true
+	return ok
 }
 
 func (c *Controller) addSubnet(obj interface{}) {

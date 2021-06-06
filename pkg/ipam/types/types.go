@@ -94,10 +94,3 @@ type Usage struct {
 	Available      uint32
 	LastAllocation string
 }
-
-type subnetClassification struct {
-	onlyIPv4   []string
-	onlyIPv6   []string
-	pairedIPv4 []string
-	pairedIPv6 []string
-}

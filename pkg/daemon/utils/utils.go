@@ -77,11 +77,12 @@ func SetSysctl(sysctlPath string, newVal int) error {
 }
 
 func SetSysctlIgnoreNotExist(sysctlPath string, newVal int) error {
-	if err := ioutil.WriteFile(sysctlPath, []byte(strconv.Itoa(newVal)), 0640); os.IsNotExist(err) {
+	err := ioutil.WriteFile(sysctlPath, []byte(strconv.Itoa(newVal)), 0640)
+
+	if os.IsNotExist(err) {
 		return nil
-	} else {
-		return err
 	}
+	return err
 }
 
 // GetSysctl modifies the specified sysctl flag to the new value

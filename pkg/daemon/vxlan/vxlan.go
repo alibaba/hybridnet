@@ -40,7 +40,7 @@ type Device struct {
 	remoteIPToMacMap map[string]net.HardwareAddr
 }
 
-func NewVxlanDevice(name string, vxlanId int, parent string, localAddr net.IP, port int, baseReachableTime time.Duration,
+func NewVxlanDevice(name string, vxlanID int, parent string, localAddr net.IP, port int, baseReachableTime time.Duration,
 	learning bool) (*Device, error) {
 	parentLink, err := netlink.LinkByName(parent)
 	if err != nil {
@@ -54,7 +54,7 @@ func NewVxlanDevice(name string, vxlanId int, parent string, localAddr net.IP, p
 			// Use parent's mac as hardware address.
 			HardwareAddr: parentLink.Attrs().HardwareAddr,
 		},
-		VxlanId:      vxlanId,
+		VxlanId:      vxlanID,
 		VtepDevIndex: parentLink.Attrs().Index,
 		SrcAddr:      localAddr,
 		Port:         port,
@@ -142,7 +142,7 @@ func (dev *Device) SyncVtepInfo() error {
 
 	fdbEntryList, err := netlink.NeighList(dev.link.Attrs().Index, syscall.AF_BRIDGE)
 	if err != nil {
-		return fmt.Errorf("list neigh failed: %v\n", err)
+		return fmt.Errorf("list neigh failed: %v", err)
 	}
 
 	for _, entry := range fdbEntryList {

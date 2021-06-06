@@ -30,8 +30,3 @@ func writeLine(buf *bytes.Buffer, words ...string) {
 		}
 	}
 }
-
-func writeBytesLine(buf *bytes.Buffer, bytes []byte) {
-	buf.Write(bytes)
-	buf.WriteByte('\n')
-}

@@ -54,16 +54,16 @@ func ValidateAddressRange(ar *AddressRange) (err error) {
 	}
 	if _, cidr, err = net.ParseCIDR(ar.CIDR); err != nil {
 		return fmt.Errorf("invalid range CIDR %s", ar.CIDR)
-	} else {
-		if len(ar.Start) > 0 && !cidr.Contains(start) {
-			return fmt.Errorf("start %s is not in CIDR %s", ar.Start, ar.CIDR)
-		}
-		if len(ar.End) > 0 && !cidr.Contains(end) {
-			return fmt.Errorf("end %s is not in CIDR %s", ar.End, ar.CIDR)
-		}
-		if !cidr.Contains(gateway) {
-			return fmt.Errorf("gateway %s is not in CIDR %s", ar.Gateway, ar.CIDR)
-		}
+	}
+
+	if len(ar.Start) > 0 && !cidr.Contains(start) {
+		return fmt.Errorf("start %s is not in CIDR %s", ar.Start, ar.CIDR)
+	}
+	if len(ar.End) > 0 && !cidr.Contains(end) {
+		return fmt.Errorf("end %s is not in CIDR %s", ar.End, ar.CIDR)
+	}
+	if !cidr.Contains(gateway) {
+		return fmt.Errorf("gateway %s is not in CIDR %s", ar.Gateway, ar.CIDR)
 	}
 
 	for _, rip := range ar.ReservedIPs {

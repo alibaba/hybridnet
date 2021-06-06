@@ -1,0 +1,49 @@
+FROM golang:1.13.8 as builder
+
+COPY . /go/src/github.com/oecp/rama
+
+ENV ARCH=arm64
+
+WORKDIR /go/src/github.com/oecp/rama
+
+RUN export GOCACHE=/tmp && \
+    export GO111MODULE=on && \
+    export GOARCH=${ARCH} && \
+    export CGO_ENABLED=0 && \
+    export GOOS=linux && \
+	go build -o dist/images/rama -ldflags "-w -s" -v ./cmd/cni && \
+	go build -o dist/images/rama-daemon -ldflags "-w -s" -v ./cmd/daemon && \
+    go build -o dist/images/rama-manager -v ./cmd/manager && \
+    go build -o dist/images/rama-webhook -v ./cmd/webhook
+
+FROM arm64v8/alpine:3.8
+
+# replace apk source url
+RUN sed -i s@/dl-cdn.alpinelinux.org/@/mirrors.aliyun.com/@g /etc/apk/repositories && \
+	chmod +x /bin/*
+
+RUN apk add --no-cache --allow-untrusted \
+    bash \
+	iptables \
+	ip6tables \
+	iproute2 \
+	ipset \
+	conntrack-tools \
+	curl \
+	perl \
+	tar && \
+    cp /usr/etc/ethertypes /etc/ethertypes
+
+ENV CNI_VERSION=v0.9.1
+RUN mkdir -p cni-plugins/ && \
+    curl -SL https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-linux-arm64-${CNI_VERSION}.tgz \
+    | tar -xz -C cni-plugins/
+
+COPY dist/images/start-daemon.sh /rama/start-daemon.sh
+COPY dist/images/install-cni.sh /rama/install-cni.sh
+COPY dist/images/00-rama.conflist /rama/00-rama.conflist
+
+COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama /rama/rama
+COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama-daemon /rama/rama-daemon
+COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama-manager /rama/rama-manager
+COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama-webhook /rama/rama-webhook

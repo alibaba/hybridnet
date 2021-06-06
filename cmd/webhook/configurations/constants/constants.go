@@ -22,4 +22,3 @@ const (
 )
 
 const LabelWebhookIgnore = "webhook.rama.io/ignore"
-

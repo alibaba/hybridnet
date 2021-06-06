@@ -67,11 +67,11 @@ func newArpDatagram(
 
 func (datagram arpDatagram) Marshal() []byte {
 	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.BigEndian, datagram.htype)
-	binary.Write(buf, binary.BigEndian, datagram.ptype)
-	binary.Write(buf, binary.BigEndian, datagram.hlen)
-	binary.Write(buf, binary.BigEndian, datagram.plen)
-	binary.Write(buf, binary.BigEndian, datagram.oper)
+	_ = binary.Write(buf, binary.BigEndian, datagram.htype)
+	_ = binary.Write(buf, binary.BigEndian, datagram.ptype)
+	_ = binary.Write(buf, binary.BigEndian, datagram.hlen)
+	_ = binary.Write(buf, binary.BigEndian, datagram.plen)
+	_ = binary.Write(buf, binary.BigEndian, datagram.oper)
 	buf.Write(datagram.sha)
 	buf.Write(datagram.spa)
 	buf.Write(datagram.tha)
@@ -106,11 +106,11 @@ func parseArpDatagram(buffer []byte) arpDatagram {
 	var datagram arpDatagram
 
 	b := bytes.NewBuffer(buffer)
-	binary.Read(b, binary.BigEndian, &datagram.htype)
-	binary.Read(b, binary.BigEndian, &datagram.ptype)
-	binary.Read(b, binary.BigEndian, &datagram.hlen)
-	binary.Read(b, binary.BigEndian, &datagram.plen)
-	binary.Read(b, binary.BigEndian, &datagram.oper)
+	_ = binary.Read(b, binary.BigEndian, &datagram.htype)
+	_ = binary.Read(b, binary.BigEndian, &datagram.ptype)
+	_ = binary.Read(b, binary.BigEndian, &datagram.hlen)
+	_ = binary.Read(b, binary.BigEndian, &datagram.plen)
+	_ = binary.Read(b, binary.BigEndian, &datagram.oper)
 
 	haLen := int(datagram.hlen)
 	paLen := int(datagram.plen)

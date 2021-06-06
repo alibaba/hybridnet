@@ -40,7 +40,7 @@ import (
 const (
 	UserAgent           = "rama-daemon"
 	DefaultBindPort     = 11021
-	DefaultVxlanUdpPort = 8472
+	DefaultVxlanUDPPort = 8472
 
 	DefaultVlanCheckTimeout       = 3 * time.Second
 	DefaultIptablesCheckDuration  = 5 * time.Second
@@ -64,7 +64,7 @@ type Configuration struct {
 	NodeVxlanIfName string
 
 	BindPort     int
-	VxlanUdpPort int
+	VxlanUDPPort int
 
 	VlanCheckTimeout       time.Duration
 	IptablesCheckDuration  time.Duration
@@ -86,9 +86,9 @@ type Configuration struct {
 // ParseFlags will parse cmd args then init kubeClient and configuration
 func ParseFlags() (*Configuration, error) {
 	var (
-		argPreferInterfaces        = pflag.String("prefer-interfaces", "", "[deprecated]The prefered vlan interfaces used to inter-host pod communication, default: the default route interface")
-		argPreferVlanInterfaces    = pflag.String("prefer-vlan-interfaces", "", "The prefered vlan interfaces used to inter-host pod communication, default: the default route interface")
-		argPreferVxlanInterfaces   = pflag.String("prefer-vxlan-interfaces", "", "The prefered vxlan interfaces used to inter-host pod communication, default: the default route interface")
+		argPreferInterfaces        = pflag.String("prefer-interfaces", "", "[deprecated]The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
+		argPreferVlanInterfaces    = pflag.String("prefer-vlan-interfaces", "", "The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
+		argPreferVxlanInterfaces   = pflag.String("prefer-vxlan-interfaces", "", "The preferred vxlan interfaces used to inter-host pod communication, default: the default route interface")
 		argBindSocket              = pflag.String("bind-socket", "/var/run/rama.sock", "The socket daemon bind to.")
 		argKubeConfigFile          = pflag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information. If not set use the inCluster token.")
 		argBindPort                = pflag.Int("healthy-server-port", DefaultBindPort, "The port which daemon server bind")
@@ -97,7 +97,7 @@ func ParseFlags() (*Configuration, error) {
 		argToOverlaySubnetTableNum = pflag.Int("to-overlay-table", DefaultToOverlaySubnetTableNum, "The number of to overlay subnet routing table")
 		argOverlayMarkTableNum     = pflag.Int("overlay-mark-table", DefaultOverlayMarkTableNum, "The number of overlay mark routing table")
 		argVlanCheckTimeout        = pflag.Duration("vlan-check-timeout", DefaultVlanCheckTimeout, "The timeout of vlan network environment check while pod creating")
-		argVxlanUdpPort            = pflag.Int("vxlan-udp-port", DefaultVxlanUdpPort, "The local udp port which vxlan tunnel use")
+		argVxlanUDPPort            = pflag.Int("vxlan-udp-port", DefaultVxlanUDPPort, "The local udp port which vxlan tunnel use")
 		argVxlanBaseReachableTime  = pflag.Duration("vxlan-base-reachable-time", DefaultVxlanBaseReachableTime, "The time for neigh caches of vxlan device to get STALE from REACHABLE")
 	)
 
@@ -138,7 +138,7 @@ func ParseFlags() (*Configuration, error) {
 		ToOverlaySubnetTableNum: *argToOverlaySubnetTableNum,
 		OverlayMarkTableNum:     *argOverlayMarkTableNum,
 		VlanCheckTimeout:        *argVlanCheckTimeout,
-		VxlanUdpPort:            *argVxlanUdpPort,
+		VxlanUDPPort:            *argVxlanUDPPort,
 		IptablesCheckDuration:   *argIptableCheckDuration,
 		VxlanBaseReachableTime:  *argVxlanBaseReachableTime,
 	}

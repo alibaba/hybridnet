@@ -70,55 +70,55 @@ To put forward a PR, we assume you have registered a GitHub ID. Then you could f
 
 1. **FORK** Rama to your repository. To make this work, you just need to click the button Fork in right-left of [oecp/rama](https://github.com/oecp/rama) main page. Then you will end up with your repository in `https://github.com/<your-username>/rama`, in which `your-username` is your GitHub username.
 
-1. **CLONE** your own repository to develop locally. Use `git clone https://github.com/<your-username>/rama.git` to clone repository to your local machine. Then you can create new branches to finish the change you wish to make.
+2. **CLONE** your own repository to develop locally. Use `git clone https://github.com/<your-username>/rama.git` to clone repository to your local machine. Then you can create new branches to finish the change you wish to make.
 
-1. **Set Remote** upstream to be `https://github.com/oecp/rama.git` using the following two commands:
+3. **Set Remote** upstream to be `https://github.com/oecp/rama.git` using the following two commands:
 
-	```
-	git remote add upstream https://github.com/oecp/rama.git
-	git remote set-url --push upstream no-pushing
-	```
+    ```shell script
+    git remote add upstream https://github.com/oecp/rama.git
+    git remote set-url --push upstream no-pushing
+    ```
 
-	With this remote setting, you can check your git remote configuration like this:
+   With this remote setting, you can check your git remote configuration like this:
 
-	```
-	$ git remote -v
-	origin     https://github.com/<your-username>/rama.git (fetch)
-	origin     https://github.com/<your-username>/rama.git (push)
-	upstream   https://github.com/oecp/rama.git (fetch)
-	upstream   no-pushing (push)
-	```
+    ```shell script
+    $ git remote -v
+    origin     https://github.com/<your-username>/rama.git (fetch)
+    origin     https://github.com/<your-username>/rama.git (push)
+    upstream   https://github.com/oecp/rama.git (fetch)
+    upstream   no-pushing (push)
+    ```
 
-	Adding this, we can easily synchronize local branches with upstream branches.
+   Adding this, we can easily synchronize local branches with upstream branches.
 
 1. **Create a branch** to add a new feature or fix issues
 
-    Update local working directory and remote forked repository:
+   Update local working directory and remote forked repository:
 
-   ```
-   cd rama
-   git fetch upstream
-   git checkout main
-   git rebase upstream/main
-   git push	// default origin, update your forked repository
-   ```
+    ```shell script
+    cd rama
+    git fetch upstream
+    git checkout main
+    git rebase upstream/main
+    git push                     // default origin, update your forked repository
+    ```
 
    Create a new branch:
 
-   ```
-   git checkout -b <new-branch>
-   ```
+    ```shell script
+    git checkout -b <new-branch>
+    ```
 
    Make any change on the `new-branch` then build and test your codes.
 
-1. **Push your branch** to your forked repository, try not to generate multiple commit message within a pr. 
+1. **Push your branch** to your forked repository, try not to generate multiple commit message within a pr.
 
-   ```
-   golangci-lint run -c .golangci.yml	// lint
-   git commit -a -m "message for your changes"	// -a is git add .
-   git rebase -i	<commit-id>// do this if your pr has multiple commits
-   git push	// push to your forked repository after rebase done
-   ```
+    ```shell script
+    golangci-lint run -c .golangci.yml             // lint
+    git commit -a -m "message for your changes"    // -a is git add .
+    git rebase -i <commit-id>                      // do this if your pr has multiple commits
+    git push                                       // push to your forked repository after rebase done
+    ```
 
 1. **File a pull request** to oecp/rama:main
 

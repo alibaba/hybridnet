@@ -46,8 +46,8 @@ type networkInfo struct {
 func NewCache() *Cache {
 	return &Cache{
 		RWMutex:  new(sync.RWMutex),
-		networks: make(map[string]*networkInfo, 0),
-		subnets:  make(map[string]*types.Usage, 0),
+		networks: make(map[string]*networkInfo),
+		subnets:  make(map[string]*types.Usage),
 	}
 }
 

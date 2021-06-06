@@ -9,4 +9,4 @@ then
 	rm ${CNI_SOCK}
 fi
 
-./rama-daemon --bind-socket=${CNI_SOCK} $@
+/rama/rama-daemon --bind-socket=${CNI_SOCK} "$@"

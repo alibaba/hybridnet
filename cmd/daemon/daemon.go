@@ -21,7 +21,7 @@ import (
 
 	ramainformer "github.com/oecp/rama/pkg/client/informers/externalversions"
 	daemonconfig "github.com/oecp/rama/pkg/daemon/config"
-	"github.com/oecp/rama/pkg/daemon/contorller"
+	"github.com/oecp/rama/pkg/daemon/controller"
 	"github.com/oecp/rama/pkg/daemon/server"
 
 	"k8s.io/client-go/informers"
@@ -43,7 +43,7 @@ func main() {
 	ramaInformerFactory := ramainformer.NewSharedInformerFactory(config.RamaClient, 0)
 	kubeInformerFactory := informers.NewSharedInformerFactory(config.KubeClient, 0)
 
-	ctl, err := contorller.NewController(config, ramaInformerFactory, kubeInformerFactory)
+	ctl, err := controller.NewController(config, ramaInformerFactory, kubeInformerFactory)
 	if err != nil {
 		klog.Fatalf("create controller failed %v", err)
 	}

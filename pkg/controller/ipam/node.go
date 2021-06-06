@@ -35,10 +35,7 @@ import (
 
 func (c *Controller) filterNode(obj interface{}) bool {
 	_, ok := obj.(*v1.Node)
-	if !ok {
-		return false
-	}
-	return true
+	return ok
 }
 
 func (c *Controller) addNode(obj interface{}) {
