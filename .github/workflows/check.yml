@@ -29,8 +29,8 @@ jobs:
           go mod tidy
           go mod vendor
           git diff --exit-code || (echo "please run 'go mod tidy && go mod vendor', and submit your changes"; exit 1)
-  go-lint:
-    name: lint
+
+  golangci-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -44,8 +44,26 @@ jobs:
           version: v1.39.0
           args: --timeout 300s --skip-dirs-use-default -v -E goconst -E gofmt -E ineffassign -E goimports -E revive -E misspell -E vet -E deadcode
 
+  go-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Go
+        uses: actions/setup-go@v2.1.3
+        with:
+          go-version: 1.13.8
+      - uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Test
+        run: |
+          go test -v ./...
+          go test -race -v ./...
+
   shellcheck:
-    name: Shellcheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
