@@ -31,12 +31,9 @@ jobs:
           go test -race -coverprofile=coverage.txt -covermode=atomic ./...
       - uses: codecov/codecov-action@v1.5.0
         with:
-          token: 9da8d200-729c-4d90-a105-ae75b62788d5
           file: ./coverage.txt
           flags: unittests
-          name: codecov-rama
           fail_ci_if_error: true
-          verbose: true
 
   docker-build:
     runs-on: ubuntu-latest
