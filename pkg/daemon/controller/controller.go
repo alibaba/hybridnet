@@ -425,56 +425,58 @@ func (c *Controller) iptablesSyncLoop() {
 			}
 		}
 
-		// Record node ips.
-		nodeList, err := c.nodeLister.List(labels.Everything())
-		if err != nil {
-			return fmt.Errorf("list node failed: %v", err)
-		}
-
-		for _, node := range nodeList {
-			if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
-				node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
-				node.Annotations[constants.AnnotationNodeIPList] == "" {
-				klog.Infof("node %v's vtep information has not been updated", node.Name)
-				continue
-			}
-
-			ipStringList := strings.Split(node.Annotations[constants.AnnotationNodeIPList], ",")
-			for _, ipString := range ipStringList {
-				ip := net.ParseIP(ipString)
-				if ip.To4() != nil {
-					// v4 address
-					c.iptablesV4Manager.RecordNodeIP(ip)
-				} else {
-					// v6 address
-					c.iptablesV6Manager.RecordNodeIP(ip)
-				}
-			}
-		}
-
-		// Record subnet cidr.
-		subnetList, err := c.subnetLister.List(labels.Everything())
-		if err != nil {
-			return fmt.Errorf("list subnet failed: %v", err)
-		}
-
-		for _, subnet := range subnetList {
-			_, cidr, err := net.ParseCIDR(subnet.Spec.Range.CIDR)
-			if err != nil {
-				return fmt.Errorf("parse subnet cidr %v failed: %v", subnet.Spec.Range.CIDR, err)
-			}
-
-			network, err := c.networkLister.Get(subnet.Spec.Network)
-			if err != nil {
-				return fmt.Errorf("failed to get network for subnet %v", subnet.Name)
-			}
-
-			iptablesManager := c.getIPtablesManager(subnet.Spec.Range.Version)
-			iptablesManager.RecordSubnet(cidr, ramav1.GetNetworkType(network) == ramav1.NetworkTypeOverlay)
-		}
-
 		// Sync rules.
 		if overlayExist {
+			// Record node ips.
+			nodeList, err := c.nodeLister.List(labels.Everything())
+			if err != nil {
+				return fmt.Errorf("list node failed: %v", err)
+			}
+
+			for _, node := range nodeList {
+				// Underlay only environment should node print output
+
+				if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
+					node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
+					node.Annotations[constants.AnnotationNodeIPList] == "" {
+					klog.Infof("node %v's vtep information has not been updated", node.Name)
+					continue
+				}
+
+				ipStringList := strings.Split(node.Annotations[constants.AnnotationNodeIPList], ",")
+				for _, ipString := range ipStringList {
+					ip := net.ParseIP(ipString)
+					if ip.To4() != nil {
+						// v4 address
+						c.iptablesV4Manager.RecordNodeIP(ip)
+					} else {
+						// v6 address
+						c.iptablesV6Manager.RecordNodeIP(ip)
+					}
+				}
+			}
+
+			// Record subnet cidr.
+			subnetList, err := c.subnetLister.List(labels.Everything())
+			if err != nil {
+				return fmt.Errorf("list subnet failed: %v", err)
+			}
+
+			for _, subnet := range subnetList {
+				_, cidr, err := net.ParseCIDR(subnet.Spec.Range.CIDR)
+				if err != nil {
+					return fmt.Errorf("parse subnet cidr %v failed: %v", subnet.Spec.Range.CIDR, err)
+				}
+
+				network, err := c.networkLister.Get(subnet.Spec.Network)
+				if err != nil {
+					return fmt.Errorf("failed to get network for subnet %v", subnet.Name)
+				}
+
+				iptablesManager := c.getIPtablesManager(subnet.Spec.Range.Version)
+				iptablesManager.RecordSubnet(cidr, ramav1.GetNetworkType(network) == ramav1.NetworkTypeOverlay)
+			}
+
 			if err := c.iptablesV4Manager.SyncRules(); err != nil {
 				return fmt.Errorf("sync v4 iptables rule failed: %v", err)
 			}
