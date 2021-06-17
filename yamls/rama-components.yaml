@@ -1,7 +1,5 @@
----
-
-kind: DaemonSet
 apiVersion: apps/v1
+kind: DaemonSet
 metadata:
   name: rama-daemon
   namespace: kube-system
@@ -123,15 +121,15 @@ spec:
 
 ---
 
-kind: Deployment
 apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: rama-manager
   namespace: kube-system
   annotations:
     kubernetes.io/description: "rama manager"
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: rama-manager
@@ -166,21 +164,20 @@ spec:
 
 ---
 
-kind: DaemonSet
 apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: rama-webhook
   namespace: kube-system
   annotations:
     kubernetes.io/description: "rama webhook"
 spec:
+  replicas: 3
   selector:
     matchLabels:
       app: rama-webhook
-  updateStrategy:
-    rollingUpdate:
-      maxUnavailable: 1
-    type: RollingUpdate
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
@@ -206,27 +203,6 @@ spec:
           ports:
             - containerPort: 9898
               name: webhook-port
-          volumeMounts:
-            - mountPath: "/tmp/k8s-webhook-server/serving-certs"
-              name: cert
-              readOnly: true
-      volumes:
-        - name: cert
-          secret:
-            secretName: rama-certs
-
----
-
-apiVersion: v1
-kind: Secret
-metadata:
-  name: rama-certs
-  namespace: kube-system
-type: Opaque
-data:
-  ca.crt: "custom root CA certificate"
-  tls.key: "webhook server TLS private key"
-  tls.crt: "webhook server TLS certificate"
 
 ---
 
@@ -246,3 +222,89 @@ spec:
     app: rama-webhook
   sessionAffinity: None
 
+---
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: rama-validating-webhook
+webhooks:
+  - admissionReviewVersions: ["v1beta1", "v1"]
+    clientConfig:
+      caBundle: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNtakNDQVlJQ0NRRDZBUjVVNHoySUV6QU5CZ2txaGtpRzl3MEJBUXNGQURBUE1RMHdDd1lEVlFRRERBUnkKWVcxaE1CNFhEVEl4TURZeE56QTNNakF6TTFvWERUTXhNRFl4TlRBM01qQXpNMW93RHpFTk1Bc0dBMVVFQXd3RQpjbUZ0WVRDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTjR0RXhkeVQwU25lYSs0CkRjdmVnWldDOGFieE1DSTVRVld1QmVqbmJZU1Z0MEN4YzA2eGY1QmE2UExudWpxR0dKOGpqNGd1SE12SmN4TDIKTGZDVExwUVIxWTVJcDR6Z3l1QkVqTlFOTEFkRlZDQXlvS2ZCa1JkdjYyM1lnbmFxczh2WjI4YjJGci9JS0hOago4ODVzTkE1M1p2aEFXMi94WUhsbnBIS2FvVUdESnIrekNvMzRGbW9XYkxpTFRvQ296eDBGZFAvMGgvMTU2TlowCnovTW5rTmNtQTh1RkZ5OXE2NkJkT0dTaTVha3lLOWsvQWFZWW1CYXh4VysxVVc0SVAvRVdKYkloTzJNc2pFVXUKQm8vK2lBSm9sTmdUcDJLeDJhOTlLM2hYOUVwdkVMVVNJTWswZDhmczQrT2gzd1FWUGloWkk1d1R6dk5NVnltWgpkNGJVVjVzQ0F3RUFBVEFOQmdrcWhraUc5dzBCQVFzRkFBT0NBUUVBWXNrQXVvV0N0aUFNczY5SE5WWU42TXpWClZwbXR4b0JrZFo1QXkwMmVKK0NtUFdiSE9NZmVZdC9tell5UGR4TDFDdlJjQm5PcHZ1b0dBV3FaVXVmMzJkZXYKaC9uR0IzNVNFbDVsWVVRc2FUbkJSQ3JmSzh3TUZNRVJDVmEyOFRmQkdZa0VCazdZbnJzVGFXVHlDbnVNUnM4cgpEWW80YzBBbXFub2txUnptUWZiUHhSRVJuWE54QjJ2WlBjTkVFTlNrZVpZaVZQNlFSWFA2UG5KR3UrUmhBSVBiCmxoa3dtZVJnQVg5eGNUekYyM2JGbHpRSWVseDVHY0NQaVdZbDdob3NZY2pjWmZEVGUvOWlWdDE0KytvYlFVdjIKNFZ6Zk96eGk3ZEFqNFVBeUxBVytYQVVLWW5DNlZnMUpYZW1HcmZ2MjhxcUpJYlNwejNTUEloRWpzcVhsQVE9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+      service:
+        name: rama-webhook
+        namespace: kube-system
+        port: 443
+        path: "/validate"
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: rama-v1.validating.rama
+    objectSelector:
+      matchExpressions:
+        - key: webhook.rama.io/ignore
+          operator: In
+          values: ["TRUE", "true"]
+    rules:
+      - apiGroups: ["networking.alibaba.com"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "DELETE", "UPDATE"]
+        resources: ["networks", "subnets"]
+    sideEffects: None
+    timeoutSeconds: 10
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      caBundle: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNtakNDQVlJQ0NRRDZBUjVVNHoySUV6QU5CZ2txaGtpRzl3MEJBUXNGQURBUE1RMHdDd1lEVlFRRERBUnkKWVcxaE1CNFhEVEl4TURZeE56QTNNakF6TTFvWERUTXhNRFl4TlRBM01qQXpNMW93RHpFTk1Bc0dBMVVFQXd3RQpjbUZ0WVRDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTjR0RXhkeVQwU25lYSs0CkRjdmVnWldDOGFieE1DSTVRVld1QmVqbmJZU1Z0MEN4YzA2eGY1QmE2UExudWpxR0dKOGpqNGd1SE12SmN4TDIKTGZDVExwUVIxWTVJcDR6Z3l1QkVqTlFOTEFkRlZDQXlvS2ZCa1JkdjYyM1lnbmFxczh2WjI4YjJGci9JS0hOago4ODVzTkE1M1p2aEFXMi94WUhsbnBIS2FvVUdESnIrekNvMzRGbW9XYkxpTFRvQ296eDBGZFAvMGgvMTU2TlowCnovTW5rTmNtQTh1RkZ5OXE2NkJkT0dTaTVha3lLOWsvQWFZWW1CYXh4VysxVVc0SVAvRVdKYkloTzJNc2pFVXUKQm8vK2lBSm9sTmdUcDJLeDJhOTlLM2hYOUVwdkVMVVNJTWswZDhmczQrT2gzd1FWUGloWkk1d1R6dk5NVnltWgpkNGJVVjVzQ0F3RUFBVEFOQmdrcWhraUc5dzBCQVFzRkFBT0NBUUVBWXNrQXVvV0N0aUFNczY5SE5WWU42TXpWClZwbXR4b0JrZFo1QXkwMmVKK0NtUFdiSE9NZmVZdC9tell5UGR4TDFDdlJjQm5PcHZ1b0dBV3FaVXVmMzJkZXYKaC9uR0IzNVNFbDVsWVVRc2FUbkJSQ3JmSzh3TUZNRVJDVmEyOFRmQkdZa0VCazdZbnJzVGFXVHlDbnVNUnM4cgpEWW80YzBBbXFub2txUnptUWZiUHhSRVJuWE54QjJ2WlBjTkVFTlNrZVpZaVZQNlFSWFA2UG5KR3UrUmhBSVBiCmxoa3dtZVJnQVg5eGNUekYyM2JGbHpRSWVseDVHY0NQaVdZbDdob3NZY2pjWmZEVGUvOWlWdDE0KytvYlFVdjIKNFZ6Zk96eGk3ZEFqNFVBeUxBVytYQVVLWW5DNlZnMUpYZW1HcmZ2MjhxcUpJYlNwejNTUEloRWpzcVhsQVE9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+      service:
+        name: rama-webhook
+        namespace: kube-system
+        port: 443
+        path: "/validate"
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: core-v1.validating.rama
+    objectSelector:
+      matchExpressions:
+        - key: webhook.rama.io/ignore
+          operator: In
+          values: ["TRUE", "true"]
+    rules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["pods"]
+    sideEffects: None
+    timeoutSeconds: 10
+
+---
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: rama-mutating-webhook
+webhooks:
+  - admissionReviewVersions: ["v1beta1", "v1"]
+    clientConfig:
+      caBundle: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNtakNDQVlJQ0NRRDZBUjVVNHoySUV6QU5CZ2txaGtpRzl3MEJBUXNGQURBUE1RMHdDd1lEVlFRRERBUnkKWVcxaE1CNFhEVEl4TURZeE56QTNNakF6TTFvWERUTXhNRFl4TlRBM01qQXpNMW93RHpFTk1Bc0dBMVVFQXd3RQpjbUZ0WVRDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTjR0RXhkeVQwU25lYSs0CkRjdmVnWldDOGFieE1DSTVRVld1QmVqbmJZU1Z0MEN4YzA2eGY1QmE2UExudWpxR0dKOGpqNGd1SE12SmN4TDIKTGZDVExwUVIxWTVJcDR6Z3l1QkVqTlFOTEFkRlZDQXlvS2ZCa1JkdjYyM1lnbmFxczh2WjI4YjJGci9JS0hOago4ODVzTkE1M1p2aEFXMi94WUhsbnBIS2FvVUdESnIrekNvMzRGbW9XYkxpTFRvQ296eDBGZFAvMGgvMTU2TlowCnovTW5rTmNtQTh1RkZ5OXE2NkJkT0dTaTVha3lLOWsvQWFZWW1CYXh4VysxVVc0SVAvRVdKYkloTzJNc2pFVXUKQm8vK2lBSm9sTmdUcDJLeDJhOTlLM2hYOUVwdkVMVVNJTWswZDhmczQrT2gzd1FWUGloWkk1d1R6dk5NVnltWgpkNGJVVjVzQ0F3RUFBVEFOQmdrcWhraUc5dzBCQVFzRkFBT0NBUUVBWXNrQXVvV0N0aUFNczY5SE5WWU42TXpWClZwbXR4b0JrZFo1QXkwMmVKK0NtUFdiSE9NZmVZdC9tell5UGR4TDFDdlJjQm5PcHZ1b0dBV3FaVXVmMzJkZXYKaC9uR0IzNVNFbDVsWVVRc2FUbkJSQ3JmSzh3TUZNRVJDVmEyOFRmQkdZa0VCazdZbnJzVGFXVHlDbnVNUnM4cgpEWW80YzBBbXFub2txUnptUWZiUHhSRVJuWE54QjJ2WlBjTkVFTlNrZVpZaVZQNlFSWFA2UG5KR3UrUmhBSVBiCmxoa3dtZVJnQVg5eGNUekYyM2JGbHpRSWVseDVHY0NQaVdZbDdob3NZY2pjWmZEVGUvOWlWdDE0KytvYlFVdjIKNFZ6Zk96eGk3ZEFqNFVBeUxBVytYQVVLWW5DNlZnMUpYZW1HcmZ2MjhxcUpJYlNwejNTUEloRWpzcVhsQVE9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+      service:
+        name: rama-webhook
+        namespace: kube-system
+        port: 443
+        path: "/mutate"
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: core-v1.mutating.rama
+    objectSelector:
+      matchExpressions:
+        - key: webhook.rama.io/ignore
+          operator: In
+          values: ["TRUE", "true"]
+    reinvocationPolicy: Never
+    rules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["pods"]
+    sideEffects: None
+    timeoutSeconds: 10

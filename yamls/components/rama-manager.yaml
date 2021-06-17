@@ -1,12 +1,12 @@
-kind: Deployment
 apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: rama-manager
   namespace: kube-system
   annotations:
     kubernetes.io/description: "rama manager"
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: rama-manager
