@@ -16,6 +16,9 @@ RUN export GOCACHE=/tmp && \
     go build -o dist/images/rama-manager -v ./cmd/manager && \
     go build -o dist/images/rama-webhook -v ./cmd/webhook
 
+RUN cd /go/src/github.com/oecp/rama/dist/secrets && \
+    sh generate-tls-certificates.sh
+
 FROM arm64v8/alpine:3.8
 
 # replace apk source url
@@ -47,3 +50,8 @@ COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama /rama/rama
 COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama-daemon /rama/rama-daemon
 COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama-manager /rama/rama-manager
 COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama-webhook /rama/rama-webhook
+
+RUN mkdir -p /tmp/k8s-webhook-server/serving-certs
+
+COPY --from=builder /go/src/github.com/oecp/rama/dist/secrets/tls.crt /tmp/k8s-webhook-server/serving-certs/tls.crt
+COPY --from=builder /go/src/github.com/oecp/rama/dist/secrets/tls.key /tmp/k8s-webhook-server/serving-certs/tls.key
