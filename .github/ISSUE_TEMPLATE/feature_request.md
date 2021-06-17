@@ -9,12 +9,12 @@ labels: kind/feature
 Please try to use English to describe your issue, or at least provide a snippet of English translation.
 -->
 
-# Issue Description
+Issue Description
+---
 
 Type: *feature request*
 
-## Describe what feature you want
+### Describe what feature you want
 
-## Additional context
-
-Add any other context or screenshots about the feature request here.
+### Additional context
+<!-- Add any other context or screenshots about the feature request here. -->

@@ -9,19 +9,20 @@ labels: kind/bug
 Please try to use English to describe your issue, or at least provide a snippet of English translation.
 -->
 
-# Bug Report
+Bug Report
+---
 
 Type: *bug report*
 
-## What happened
+### What happened
 
-## What you expected to happen
+### What you expected to happen
 
-## How to reproduce it (as minimally and precisely as possible)
+### How to reproduce it (as minimally and precisely as possible)
 
-## Anything else we need to know?
+### Anything else we need to know?
 
-## Environment
+### Environment
 - rama version:
 - OS (e.g. `cat /etc/os-release`):
 - Kernel (e.g. `uname -a`):
