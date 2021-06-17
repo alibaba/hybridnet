@@ -29,7 +29,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/oecp/rama/cmd/webhook/configurations"
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/feature"
 	"github.com/oecp/rama/pkg/webhook/mutating"
@@ -39,9 +38,7 @@ import (
 var (
 	scheme             = runtime.NewScheme()
 	port               int
-	address            string
 	metricsBindAddress string
-	caCertPath         string
 )
 
 func init() {
@@ -51,9 +48,7 @@ func init() {
 	_ = admissionv1beta1.AddToScheme(scheme)
 
 	pflag.IntVar(&port, "port", 9898, "The port webhook listen on")
-	pflag.StringVar(&address, "address", "127.0.0.1", "The address webhook listen with")
 	pflag.StringVar(&metricsBindAddress, "metrics-bind-address", "0", "The bind address for metrics, eg :8080")
-	pflag.StringVar(&caCertPath, "ca-cert-path", "/tmp/k8s-webhook-server/serving-certs/ca.crt", "The root CA certificate for apiserver to invoke webhooks")
 
 	klog.InitFlags(nil)
 
@@ -78,17 +73,6 @@ func main() {
 	if err != nil {
 		klog.Fatal(err)
 	}
-
-	apiVersion, err := configurations.FetchAPIVersion(mgr.GetConfig())
-	if err != nil {
-		klog.Fatalf("fail to fetch api version: %v", err)
-	}
-	klog.Infof("prefer api version %s", apiVersion)
-
-	configurations.BuildConfigurations(apiVersion, address, port, caCertPath)
-
-	go configurations.EnsureValidatingWebhookConfiguration(apiVersion, mgr.GetConfig())
-	go configurations.EnsureMutatingWebhookConfiguration(apiVersion, mgr.GetConfig())
 
 	// create webhooks
 	mgr.GetWebhookServer().Register("/validate", &webhook.Admission{
