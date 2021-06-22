@@ -1,13 +1,19 @@
 # CRD
 
-Rama uses three Kubernetes CRDs as operating interfaces: **Network**, **Subnet**, **IPInstance**. And these CRDs follow a three-tier model:
-<img src="images/crd-model.png" alt="crd-model" style="zoom: 50%;" />
+Rama uses three Kubernetes CRDs as operating interfaces: **Network**, **Subnet**, **IPInstance**. And these CRDs follow
+a three-tier model:
+
+![crd-model](images/crd-model.jpg)
 
 ## Network
 
-A Network in Rama is a "Pod Scheduling Domain", which refer to a series of Kubernetes Nodes with the same network properties (e.g., attached to the same vlan, downlink of the same ASW). It means if a pod with a specific ip can be scheduled to Node *A*, it can be scheduled to any Node belongs to the same Network with Node *A*.
+A Network in Rama is a "Pod Scheduling Domain", which refer to a series of Kubernetes Nodes with the same network
+properties (e.g., attached to the same vlan, downlink of the same ASW). It means if a pod with a specific ip can be
+scheduled to Node *A*, it can be scheduled to any Node belongs to the same Network with Node *A*.
 
-Network is extremely important if you need an underlay container network, as taking care of Node's network environment is always needed. For Rama, which only provides a vlan type container network for now, a Network usually refers to a series of Nodes with the same ASW or TOR.
+Network is extremely important if you need an underlay container network, as taking care of Node's network environment
+is always needed. For Rama, which only provides a vlan type container network for now, a Network usually refers to a
+series of Nodes with the same ASW or TOR.
 
 Here is a yaml of a Network CR for underlay container network :
 
@@ -33,7 +39,10 @@ spec:
                                 # this network should be patched with this label.
 ```
 
-But if you just need a overlay container network, things get easier. Because we don't even care about how the Node's network going on,  every node seems to get the same network properties. For such an overlay Network, every Node of the Kubernetes cluster will be added to it automatically, and you don't need to configure it like applying an underlay Network. 
+But if you just need a overlay container network, things get easier. Because we don't even care about how the Node's
+network going on,  every node seems to get the same network properties. For such an overlay Network, every Node of the
+Kubernetes cluster will be added to it automatically, and you don't need to configure it like applying an underlay
+Network.
 
 Here is the yaml for an overlay Network:
 
@@ -56,11 +65,13 @@ spec:
 
 Overlay and Underlay type Network can exist in one Kubernetes cluster at the same time, which we called a **Hybrid** mode.
 
-For Rama, every Node of Kubernetes cluster should belong to at least one Network. If a Node does not belong to any Network yet, it will be patched with a *taint* of *network-unavailable* automatically, which makes this node unschedulable. 
+For Rama, every Node of Kubernetes cluster should belong to at least one Network. If a Node does not belong to any
+Network yet, it will be patched with a *taint* of *network-unavailable* automatically, which makes this node unschedulable.
 
 ## Subnet
 
-A Subnet refers to an actual address range which pod can use. Every Subnet belongs to a Network, and supports some features for flexible address management.
+A Subnet refers to an actual address range which pod can use. Every Subnet belongs to a Network, and supports some
+features for flexible address management.
 
 Here is a yaml for a Subnet:
 
@@ -107,7 +118,9 @@ spec:
 
 ## IPInstance
 
-An IPInstance refers to an actual ip assigned to pod by Rama. IPInstance is not a configurable CRD and only for monitoring, *DO NOT* edit it unless you know what you are doing.
+An IPInstance refers to an actual ip assigned to pod by Rama. IPInstance is not a configurable CRD and only for
+monitoring, *DO NOT* edit it unless you know what you are doing.
 
-Different from Network and Subnet, IPInstance is a namespace-scoped CRD (Network and Subnet is cluster-scoped). Every IPInstance is in the same namespace with the pod it attached to. 
+Different from Network and Subnet, IPInstance is a namespace-scoped CRD (Network and Subnet is cluster-scoped).
+Every IPInstance is in the same namespace with the pod it attached to.
 
