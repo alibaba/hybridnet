@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -85,6 +86,11 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 	case len(networkNameFromPod) > 0:
 		networkName = networkNameFromPod
 	case strategy.OwnByStatefulWorkload(pod):
+		if shouldReallocate, _ := strconv.ParseBool(pod.Annotations[constants.AnnotationIPReallocate]); shouldReallocate {
+			// reallocate means that pod will locate on node freely
+			break
+		}
+
 		ipList := &ramav1.IPInstanceList{}
 		if err = handler.Client.List(
 			ctx,
