@@ -30,9 +30,13 @@ import (
 	controllerruntime "sigs.k8s.io/controller-runtime"
 )
 
+var gitCommit string
+
 func main() {
 	klog.InitFlags(nil)
 	defer klog.Flush()
+
+	klog.Infof("Starting rama daemon with git commit: %v", gitCommit)
 
 	config, err := daemonconfig.ParseFlags()
 	if err != nil {

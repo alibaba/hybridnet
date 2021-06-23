@@ -11,10 +11,12 @@ RUN export GOCACHE=/tmp && \
     export GOARCH=${ARCH} && \
     export CGO_ENABLED=0 && \
     export GOOS=linux && \
-	go build -o dist/images/rama -ldflags "-w -s" -v ./cmd/cni && \
-	go build -o dist/images/rama-daemon -ldflags "-w -s" -v ./cmd/daemon && \
-    go build -o dist/images/rama-manager -v ./cmd/manager && \
-    go build -o dist/images/rama-webhook -v ./cmd/webhook
+    export COMMIT_ID=`git rev-parse --short HEAD 2>/dev/null` && \
+    go build -o dist/images/rama -ldflags "-w -s" -v ./cmd/cni && \
+    go build -ldflags "-w -s -X \"main.gitCommit=`echo $COMMIT_ID`\" " -o dist/images/rama-daemon -v ./cmd/daemon && \
+    go build -ldflags "-X \"main.gitCommit=`git rev-parse --short HEAD 2>/dev/null`\" " -o dist/images/rama-manager -v ./cmd/manager && \
+    go build -o dist/images/rama-webhook -v ./cmd/webhook && \
+    echo $COMMIT_ID > ./COMMIT_ID
 
 RUN cd /go/src/github.com/oecp/rama/dist/secrets && \
     sh generate-tls-certificates.sh
@@ -50,6 +52,7 @@ COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama /rama/rama
 COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama-daemon /rama/rama-daemon
 COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama-manager /rama/rama-manager
 COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama-webhook /rama/rama-webhook
+COPY --from=builder /go/src/github.com/oecp/rama/COMMIT_ID /rama/COMMIT_ID
 
 RUN mkdir -p /tmp/k8s-webhook-server/serving-certs
 
