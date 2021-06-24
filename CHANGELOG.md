@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 - Node need only one physical nic if container network is in the same vlan with node network
 - Non-zero-netId subnet and zero-netId subnet can be on the same node
 - Webhook configuration can be managed by an independent yaml
+- Use default-ip-retain global flag and ip-retain pod annotation to reallocate/retain IP
 
 ### Fixed Issues
 - Remove overlay logs for underlay-only mode
