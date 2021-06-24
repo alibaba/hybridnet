@@ -1,7 +1,7 @@
 # Rama Changelog
 All notable changes to this project will be documented in this file.
 
-## [v0.1.0]
+## v0.1.0
 ### New features
 - Support overlay (vxlan) network
 - Support hybrid overlay/underlay container network
