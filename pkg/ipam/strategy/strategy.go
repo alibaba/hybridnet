@@ -91,7 +91,7 @@ func GetKnownOwnReference(pod *v1.Pod) *metav1.OwnerReference {
 	return nil
 }
 
-func GetIPbyPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) (string, error) {
+func GetIPByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) (string, error) {
 	ips, err := ipLister.IPInstances(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return "", err
@@ -107,7 +107,7 @@ func GetIPbyPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) (string, error) {
 	return "", nil
 }
 
-func GetIPsbyPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) ([]string, error) {
+func GetIPsByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) ([]string, error) {
 	ips, err := ipLister.IPInstances(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return nil, err

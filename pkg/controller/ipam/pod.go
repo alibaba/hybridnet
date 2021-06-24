@@ -151,10 +151,15 @@ func (c *Controller) reconcilePod(key string) (err error) {
 
 func (c *Controller) statefulAllocate(key, networkName string, pod *v1.Pod) (err error) {
 	var (
-		preAssign           = len(pod.Annotations[constants.AnnotationIPPool]) > 0
-		shouldObserve       = true
-		startTime           = time.Now()
-		shouldReallocate, _ = strconv.ParseBool(pod.Annotations[constants.AnnotationIPReallocate])
+		preAssign     = len(pod.Annotations[constants.AnnotationIPPool]) > 0
+		shouldObserve = true
+		startTime     = time.Now()
+		// reallocate means that ip should be retained
+		// 1. global retain and pod retain or unset, ip should be retained
+		// 2. global retain and pod not retain, ip should be reallocated
+		// 3. global not retain and pod not retain or unset, ip should be reallocated
+		// 4. global not retain and pod retain, ip should be retained
+		shouldReallocate = !parseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], c.defaultRetainIP)
 	)
 
 	defer func() {
@@ -197,7 +202,7 @@ func (c *Controller) statefulAllocate(key, networkName string, pod *v1.Pod) (err
 			// reallocate
 			return c.allocate(key, networkName, pod)
 		default:
-			if ipCandidates, err = strategy.GetIPsbyPod(c.ipLister, pod); err != nil {
+			if ipCandidates, err = strategy.GetIPsByPod(c.ipLister, pod); err != nil {
 				return err
 			}
 
@@ -240,7 +245,7 @@ func (c *Controller) statefulAllocate(key, networkName string, pod *v1.Pod) (err
 			// reallocate
 			return c.allocate(key, networkName, pod)
 		default:
-			ipCandidate, err = strategy.GetIPbyPod(c.ipLister, pod)
+			ipCandidate, err = strategy.GetIPByPod(c.ipLister, pod)
 			if err != nil {
 				return err
 			}
