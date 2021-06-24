@@ -28,6 +28,8 @@ import (
 	"github.com/oecp/rama/pkg/manager"
 )
 
+var gitCommit string
+
 func init() {
 	klog.InitFlags(nil)
 }
@@ -36,6 +38,7 @@ func main() {
 	// parse flags
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
+	klog.Infof("Starting rama manager with git commit: %v", gitCommit)
 	klog.Infof("known features: %v", feature.KnownFeatures())
 
 	var (
