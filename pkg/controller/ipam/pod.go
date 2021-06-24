@@ -154,12 +154,12 @@ func (c *Controller) statefulAllocate(key, networkName string, pod *v1.Pod) (err
 		preAssign     = len(pod.Annotations[constants.AnnotationIPPool]) > 0
 		shouldObserve = true
 		startTime     = time.Now()
-		// reallocate means that ip should be retained
+		// reallocate means that ip should not be retained
 		// 1. global retain and pod retain or unset, ip should be retained
 		// 2. global retain and pod not retain, ip should be reallocated
 		// 3. global not retain and pod not retain or unset, ip should be reallocated
 		// 4. global not retain and pod retain, ip should be retained
-		shouldReallocate = !parseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], c.defaultRetainIP)
+		shouldReallocate = !utils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], strategy.DefaultIPRetain)
 	)
 
 	defer func() {
@@ -216,51 +216,51 @@ func (c *Controller) statefulAllocate(key, networkName string, pod *v1.Pod) (err
 
 		// forced assign for using reserved ips
 		return c.multiAssign(networkName, pod, ipFamilyMode, ipCandidates, true)
-	} else {
-		var ipCandidate string
+	}
 
-		switch {
-		case preAssign:
-			ipPool := strings.Split(pod.Annotations[constants.AnnotationIPPool], ",")
-			if idx := strategy.GetIndexFromName(pod.Name); idx < len(ipPool) {
-				ipCandidate = utils.NormalizedIP(ipPool[idx])
-			}
-			if len(ipCandidate) == 0 {
-				err = fmt.Errorf("no available ip in ip-pool %s for pod %s", pod.Annotations[constants.AnnotationIPPool], key)
-				return err
-			}
-		case shouldReallocate:
-			var allocatedIPs []*types.IP
-			if allocatedIPs, err = strategy.GetAllocatedIPsByPod(c.ipLister, pod); err != nil {
-				return err
-			}
+	var ipCandidate string
 
-			// reallocate means that the allocated ones should be recycled firstly
-			if len(allocatedIPs) > 0 {
-				if err = c.release(pod, allocatedIPs); err != nil {
-					return err
-				}
-			}
-
-			// reallocate
-			return c.allocate(key, networkName, pod)
-		default:
-			ipCandidate, err = strategy.GetIPByPod(c.ipLister, pod)
-			if err != nil {
-				return err
-			}
-			// when no valid ip found, it means that this is the first time of pod creation
-			if len(ipCandidate) == 0 {
-				// allocate has its own observation process, so just skip
-				shouldObserve = false
-				return c.allocate(key, networkName, pod)
-			}
-
+	switch {
+	case preAssign:
+		ipPool := strings.Split(pod.Annotations[constants.AnnotationIPPool], ",")
+		if idx := strategy.GetIndexFromName(pod.Name); idx < len(ipPool) {
+			ipCandidate = utils.NormalizedIP(ipPool[idx])
+		}
+		if len(ipCandidate) == 0 {
+			err = fmt.Errorf("no available ip in ip-pool %s for pod %s", pod.Annotations[constants.AnnotationIPPool], key)
+			return err
+		}
+	case shouldReallocate:
+		var allocatedIPs []*types.IP
+		if allocatedIPs, err = strategy.GetAllocatedIPsByPod(c.ipLister, pod); err != nil {
+			return err
 		}
 
-		// forced assign for using reserved ip
-		return c.assign(networkName, pod, ipCandidate, true)
+		// reallocate means that the allocated ones should be recycled firstly
+		if len(allocatedIPs) > 0 {
+			if err = c.release(pod, allocatedIPs); err != nil {
+				return err
+			}
+		}
+
+		// reallocate
+		return c.allocate(key, networkName, pod)
+	default:
+		ipCandidate, err = strategy.GetIPByPod(c.ipLister, pod)
+		if err != nil {
+			return err
+		}
+		// when no valid ip found, it means that this is the first time of pod creation
+		if len(ipCandidate) == 0 {
+			// allocate has its own observation process, so just skip
+			shouldObserve = false
+			return c.allocate(key, networkName, pod)
+		}
+
 	}
+
+	// forced assign for using reserved ip
+	return c.assign(networkName, pod, ipCandidate, true)
 }
 
 func (c *Controller) assign(networkName string, pod *v1.Pod, ipCandidate string, forced bool) (err error) {

@@ -39,9 +39,11 @@ var (
 	statelessWorkloadKindVar = ""
 	StatefulWorkloadKind     map[string]bool
 	StatelessWorkloadKind    map[string]bool
+	DefaultIPRetain          bool
 )
 
 func init() {
+	pflag.BoolVar(&DefaultIPRetain, "default-ip-retain", true, "Whether pod IP of stateful workloads will be retained by default.")
 	pflag.StringVar(&statefulWorkloadKindVar, "stateful-workload-kinds", statefulWorkloadKindVar, `stateful workload kinds to use strategic IP allocation,`+
 		`eg: "StatefulSet,AdvancedStatefulSet", default: "StatefulSet"`)
 	pflag.StringVar(&statelessWorkloadKindVar, "stateless-workload-kinds", statelessWorkloadKindVar, "stateless workload kinds to use strategic IP allocation,"+

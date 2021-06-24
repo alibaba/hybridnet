@@ -41,7 +41,6 @@ func initIPAMController(m *Manager) error {
 		m.RamaInformerFactory.Networking().V1().Networks(),
 		m.RamaInformerFactory.Networking().V1().Subnets(),
 		m.RamaInformerFactory.Networking().V1().IPInstances(),
-		m.Config.DefaultRetainIP,
 	)
 	return nil
 }

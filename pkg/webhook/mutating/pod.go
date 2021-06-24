@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -86,7 +85,7 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 	case len(networkNameFromPod) > 0:
 		networkName = networkNameFromPod
 	case strategy.OwnByStatefulWorkload(pod):
-		if shouldReallocate, _ := strconv.ParseBool(pod.Annotations[constants.AnnotationIPReallocate]); shouldReallocate {
+		if shouldReallocate := !utils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], strategy.DefaultIPRetain); shouldReallocate {
 			// reallocate means that pod will locate on node freely
 			break
 		}

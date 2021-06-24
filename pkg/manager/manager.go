@@ -67,11 +67,9 @@ type Manager struct {
 	recorder record.EventRecorder
 
 	StopEverything <-chan struct{}
-
-	Config Config
 }
 
-func NewManager(cfg Config) (*Manager, error) {
+func NewManager() (*Manager, error) {
 	config, err := clientconfig.GetConfig()
 	if err != nil {
 		return nil, fmt.Errorf("fail to get kubernetes config")
@@ -105,7 +103,6 @@ func NewManager(cfg Config) (*Manager, error) {
 		InformerFactory:      informerFactory,
 		RamaInformerFactory:  ramaInformerFactory,
 		recorder:             eventRecorder,
-		Config:               cfg,
 	}
 
 	err = initControllers(m)
