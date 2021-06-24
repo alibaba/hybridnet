@@ -85,6 +85,11 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 	case len(networkNameFromPod) > 0:
 		networkName = networkNameFromPod
 	case strategy.OwnByStatefulWorkload(pod):
+		if shouldReallocate := !utils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], strategy.DefaultIPRetain); shouldReallocate {
+			// reallocate means that pod will locate on node freely
+			break
+		}
+
 		ipList := &ramav1.IPInstanceList{}
 		if err = handler.Client.List(
 			ctx,

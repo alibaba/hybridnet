@@ -17,6 +17,7 @@
 package strategy
 
 import (
+	"fmt"
 	"math"
 	"net"
 	"strconv"
@@ -29,6 +30,8 @@ import (
 	"k8s.io/klog"
 
 	ramav1 "github.com/oecp/rama/pkg/client/listers/networking/v1"
+	"github.com/oecp/rama/pkg/ipam/types"
+	"github.com/oecp/rama/pkg/utils/transform"
 )
 
 var (
@@ -36,9 +39,11 @@ var (
 	statelessWorkloadKindVar = ""
 	StatefulWorkloadKind     map[string]bool
 	StatelessWorkloadKind    map[string]bool
+	DefaultIPRetain          bool
 )
 
 func init() {
+	pflag.BoolVar(&DefaultIPRetain, "default-ip-retain", true, "Whether pod IP of stateful workloads will be retained by default.")
 	pflag.StringVar(&statefulWorkloadKindVar, "stateful-workload-kinds", statefulWorkloadKindVar, `stateful workload kinds to use strategic IP allocation,`+
 		`eg: "StatefulSet,AdvancedStatefulSet", default: "StatefulSet"`)
 	pflag.StringVar(&statelessWorkloadKindVar, "stateless-workload-kinds", statelessWorkloadKindVar, "stateless workload kinds to use strategic IP allocation,"+
@@ -88,7 +93,7 @@ func GetKnownOwnReference(pod *v1.Pod) *metav1.OwnerReference {
 	return nil
 }
 
-func GetIPbyPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) (string, error) {
+func GetIPByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) (string, error) {
 	ips, err := ipLister.IPInstances(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return "", err
@@ -104,7 +109,7 @@ func GetIPbyPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) (string, error) {
 	return "", nil
 }
 
-func GetIPsbyPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) ([]string, error) {
+func GetIPsByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) ([]string, error) {
 	ips, err := ipLister.IPInstances(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return nil, err
@@ -123,6 +128,27 @@ func GetIPsbyPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) ([]string, error
 	}
 
 	return append(v4, v6...), nil
+}
+
+func GetAllocatedIPsByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) ([]*types.IP, error) {
+	ips, err := ipLister.IPInstances(pod.Namespace).List(labels.Everything())
+	if err != nil {
+		return nil, err
+	}
+
+	var allocatedIPs []*types.IP
+	var networkName string
+	for _, ip := range ips {
+		if ip.Status.PodName == pod.Name {
+			allocatedIPs = append(allocatedIPs, transform.TransferIPInstanceForIPAM(ip))
+			if len(networkName) > 0 && networkName != ip.Spec.Network {
+				return nil, fmt.Errorf("pod %s has allocated IPs from different networks", pod.Name)
+			}
+			networkName = ip.Spec.Network
+		}
+	}
+
+	return allocatedIPs, nil
 }
 
 func GetIndexFromName(name string) int {

@@ -40,6 +40,7 @@ import (
 const (
 	ReasonIPAllocationSucceed = "IPAllocationSucceed"
 	ReasonIPAllocationFail    = "IPAllocationFail"
+	ReasonIPReleaseSucceed    = "IPReleaseSucceed"
 )
 
 func (c *Controller) filterPod(obj interface{}) bool {
@@ -153,6 +154,12 @@ func (c *Controller) statefulAllocate(key, networkName string, pod *v1.Pod) (err
 		preAssign     = len(pod.Annotations[constants.AnnotationIPPool]) > 0
 		shouldObserve = true
 		startTime     = time.Now()
+		// reallocate means that ip should not be retained
+		// 1. global retain and pod retain or unset, ip should be retained
+		// 2. global retain and pod not retain, ip should be reallocated
+		// 3. global not retain and pod not retain or unset, ip should be reallocated
+		// 4. global not retain and pod retain, ip should be retained
+		shouldReallocate = !utils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], strategy.DefaultIPRetain)
 	)
 
 	defer func() {
@@ -167,7 +174,8 @@ func (c *Controller) statefulAllocate(key, networkName string, pod *v1.Pod) (err
 		var ipCandidates []string
 		var ipFamilyMode = types.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
 
-		if preAssign {
+		switch {
+		case preAssign:
 			ipPool := strings.Split(pod.Annotations[constants.AnnotationIPPool], ",")
 			if idx := strategy.GetIndexFromName(pod.Name); idx < len(ipPool) {
 				ipCandidates = strings.Split(ipPool[idx], "/")
@@ -178,8 +186,23 @@ func (c *Controller) statefulAllocate(key, networkName string, pod *v1.Pod) (err
 				err = fmt.Errorf("no available ip in ip-pool %s for pod %s", pod.Annotations[constants.AnnotationIPPool], key)
 				return err
 			}
-		} else {
-			if ipCandidates, err = strategy.GetIPsbyPod(c.ipLister, pod); err != nil {
+		case shouldReallocate:
+			var allocatedIPs []*types.IP
+			if allocatedIPs, err = strategy.GetAllocatedIPsByPod(c.ipLister, pod); err != nil {
+				return err
+			}
+
+			// reallocate means that the allocated ones should be recycled firstly
+			if len(allocatedIPs) > 0 {
+				if err = c.release(pod, allocatedIPs); err != nil {
+					return err
+				}
+			}
+
+			// reallocate
+			return c.allocate(key, networkName, pod)
+		default:
+			if ipCandidates, err = strategy.GetIPsByPod(c.ipLister, pod); err != nil {
 				return err
 			}
 
@@ -193,12 +216,12 @@ func (c *Controller) statefulAllocate(key, networkName string, pod *v1.Pod) (err
 
 		// forced assign for using reserved ips
 		return c.multiAssign(networkName, pod, ipFamilyMode, ipCandidates, true)
-
 	}
 
 	var ipCandidate string
 
-	if preAssign {
+	switch {
+	case preAssign:
 		ipPool := strings.Split(pod.Annotations[constants.AnnotationIPPool], ",")
 		if idx := strategy.GetIndexFromName(pod.Name); idx < len(ipPool) {
 			ipCandidate = utils.NormalizedIP(ipPool[idx])
@@ -207,8 +230,23 @@ func (c *Controller) statefulAllocate(key, networkName string, pod *v1.Pod) (err
 			err = fmt.Errorf("no available ip in ip-pool %s for pod %s", pod.Annotations[constants.AnnotationIPPool], key)
 			return err
 		}
-	} else {
-		ipCandidate, err = strategy.GetIPbyPod(c.ipLister, pod)
+	case shouldReallocate:
+		var allocatedIPs []*types.IP
+		if allocatedIPs, err = strategy.GetAllocatedIPsByPod(c.ipLister, pod); err != nil {
+			return err
+		}
+
+		// reallocate means that the allocated ones should be recycled firstly
+		if len(allocatedIPs) > 0 {
+			if err = c.release(pod, allocatedIPs); err != nil {
+				return err
+			}
+		}
+
+		// reallocate
+		return c.allocate(key, networkName, pod)
+	default:
+		ipCandidate, err = strategy.GetIPByPod(c.ipLister, pod)
 		if err != nil {
 			return err
 		}
@@ -218,6 +256,7 @@ func (c *Controller) statefulAllocate(key, networkName string, pod *v1.Pod) (err
 			shouldObserve = false
 			return c.allocate(key, networkName, pod)
 		}
+
 	}
 
 	// forced assign for using reserved ip
@@ -315,6 +354,23 @@ func (c *Controller) allocate(key, networkName string, pod *v1.Pod) (err error) 
 
 		c.recorder.Eventf(pod, v1.EventTypeNormal, ReasonIPAllocationSucceed, "allocate IP %s successfully", ip.String())
 	}
+	return nil
+}
+
+func (c *Controller) release(pod *v1.Pod, allocatedIPs []*types.IP) (err error) {
+	if feature.DualStackEnabled() {
+		if err = c.dualStackIPAMManager.Release(types.DualStack, allocatedIPs[0].Network, squashIPSliceToSubnets(allocatedIPs), squashIPSliceToIPs(allocatedIPs)); err != nil {
+			return fmt.Errorf("fail to release ips %v for pod %s", allocatedIPs, pod.Name)
+		}
+	} else {
+		for _, ip := range allocatedIPs {
+			if err = c.ipamManager.Release(ip.Network, ip.Subnet, ip.Address.IP.String()); err != nil {
+				return fmt.Errorf("fail to release ip %s for pod %s", ip.Address.String(), pod.Name)
+			}
+		}
+	}
+
+	c.recorder.Eventf(pod, v1.EventTypeNormal, ReasonIPReleaseSucceed, "release IPs %v successfully", squashIPSliceToIPs(allocatedIPs))
 	return nil
 }
 

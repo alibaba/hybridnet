@@ -28,7 +28,9 @@ import (
 	"github.com/oecp/rama/pkg/manager"
 )
 
-var gitCommit string
+var (
+	gitCommit string
+)
 
 func init() {
 	klog.InitFlags(nil)

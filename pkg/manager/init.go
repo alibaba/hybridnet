@@ -19,8 +19,9 @@ package manager
 import (
 	"fmt"
 
-	"github.com/oecp/rama/pkg/controller/ipam"
 	"k8s.io/klog"
+
+	"github.com/oecp/rama/pkg/controller/ipam"
 )
 
 type initFunc func(manager *Manager) error
