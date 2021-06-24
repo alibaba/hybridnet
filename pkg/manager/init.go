@@ -19,8 +19,9 @@ package manager
 import (
 	"fmt"
 
-	"github.com/oecp/rama/pkg/controller/ipam"
 	"k8s.io/klog"
+
+	"github.com/oecp/rama/pkg/controller/ipam"
 )
 
 type initFunc func(manager *Manager) error
@@ -40,6 +41,7 @@ func initIPAMController(m *Manager) error {
 		m.RamaInformerFactory.Networking().V1().Networks(),
 		m.RamaInformerFactory.Networking().V1().Subnets(),
 		m.RamaInformerFactory.Networking().V1().IPInstances(),
+		m.Config.DefaultRetainIP,
 	)
 	return nil
 }

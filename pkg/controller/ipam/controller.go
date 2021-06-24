@@ -90,6 +90,9 @@ type Controller struct {
 	ipamCache       *Cache
 	ipamUsageSyncer *UsageSyncer
 
+	// for default behavior on IP retain of stateful workloads
+	defaultRetainIP bool
+
 	recorder record.EventRecorder
 }
 
@@ -100,7 +103,8 @@ func NewController(
 	nodeInformer informerscorev1.NodeInformer,
 	networkInformer informers.NetworkInformer,
 	subnetInformer informers.SubnetInformer,
-	ipInformer informers.IPInstanceInformer) *Controller {
+	ipInformer informers.IPInstanceInformer,
+	defaultRetainIP bool) *Controller {
 	runtime.Must(networkingv1.AddToScheme(scheme.Scheme))
 	klog.V(4).Info("Creating event broadcaster")
 	eventBroadcaster := record.NewBroadcaster()
@@ -124,6 +128,7 @@ func NewController(
 		ipSynced:             ipInformer.Informer().HasSynced,
 		ipamManager:          nil,
 		dualStackIPAMManager: nil,
+		defaultRetainIP:      defaultRetainIP,
 		ipamStore:            store.NewWorker(kubeClientSet, networkingClientSet),
 		dualStackIPAMStroe:   store.NewDualStackWorker(kubeClientSet, networkingClientSet),
 		podQueue:             workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "pod"),

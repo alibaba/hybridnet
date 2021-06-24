@@ -28,10 +28,15 @@ import (
 	"github.com/oecp/rama/pkg/manager"
 )
 
-var gitCommit string
+var (
+	gitCommit       string
+	defaultIPRetain bool
+)
 
 func init() {
 	klog.InitFlags(nil)
+
+	pflag.BoolVar(&defaultIPRetain, "default-ip-retain", true, "Whether pod IP of stateful workloads will be retained by default.")
 }
 
 func main() {
@@ -61,7 +66,9 @@ func main() {
 	// setup metrics http server
 	go startMetricsServer()
 
-	mgr, err = manager.NewManager()
+	mgr, err = manager.NewManager(manager.Config{
+		DefaultRetainIP: defaultIPRetain,
+	})
 	if err != nil {
 		klog.Fatalf("fail to new RAMA manager : %v", err)
 	}
