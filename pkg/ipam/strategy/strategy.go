@@ -17,7 +17,6 @@
 package strategy
 
 import (
-	"fmt"
 	"math"
 	"net"
 	"strconv"
@@ -100,7 +99,8 @@ func GetIPByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) (string, error) {
 	}
 
 	for _, ip := range ips {
-		if ip.Status.PodName == pod.Name {
+		// terminating ipInstance should not be picked up
+		if ip.Status.PodName == pod.Name && ip.DeletionTimestamp == nil {
 			ipStr, _ := toIPFormat(ip.Name)
 			return ipStr, nil
 		}
@@ -117,7 +117,8 @@ func GetIPsByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) ([]string, error
 
 	var v4, v6 []string
 	for _, ip := range ips {
-		if ip.Status.PodName == pod.Name {
+		// terminating ipInstance should not be picked up
+		if ip.Status.PodName == pod.Name && ip.DeletionTimestamp == nil {
 			ipStr, isIPv6 := toIPFormat(ip.Name)
 			if isIPv6 {
 				v6 = append(v6, ipStr)
@@ -137,14 +138,10 @@ func GetAllocatedIPsByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) ([]*typ
 	}
 
 	var allocatedIPs []*types.IP
-	var networkName string
 	for _, ip := range ips {
-		if ip.Status.PodName == pod.Name {
+		// terminating ipInstance should not be picked up
+		if ip.Status.PodName == pod.Name && ip.DeletionTimestamp == nil {
 			allocatedIPs = append(allocatedIPs, transform.TransferIPInstanceForIPAM(ip))
-			if len(networkName) > 0 && networkName != ip.Spec.Network {
-				return nil, fmt.Errorf("pod %s has allocated IPs from different networks", pod.Name)
-			}
-			networkName = ip.Spec.Network
 		}
 	}
 
