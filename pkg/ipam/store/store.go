@@ -99,6 +99,10 @@ func (w *Worker) ReCouple(pod *v1.Pod, ip *ipamtypes.IP) (err error) {
 	return w.patchIPtoPod(pod, ip)
 }
 
+func (w *Worker) IPRecycle(namespace string, ip *ipamtypes.IP) (err error) {
+	return w.deleteIP(namespace, toDNSLabelFormat(ip))
+}
+
 func (w *Worker) IPUnBind(namespace, ip string) (err error) {
 	patchBody := `{"metadata":{"finalizers":null}}`
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
