@@ -94,8 +94,9 @@ func (cdh cniDaemonHandler) deleteNic(netns string) error {
 
 	return nsHandler.Do(func(netNS ns.NetNS) error {
 		containerLink, err := netlink.LinkByName(containernetwork.ContainerNicName)
+		// return nil if eth0 not found.
 		if err != nil {
-			return fmt.Errorf("can not find container nic %s error: %v", containernetwork.ContainerNicName, err)
+			return nil
 		}
 
 		addrList, err := netlink.AddrList(containerLink, netlink.FAMILY_ALL)
@@ -107,7 +108,6 @@ func (cdh cniDaemonHandler) deleteNic(netns string) error {
 			return nil
 		}
 
-		// Set link down and remove ip addresses on it, in case the netns is used to do arp proxy.
 		if err := netlink.LinkSetDown(containerLink); err != nil {
 			return fmt.Errorf("set delete ns %v %v error: %v", netns, containernetwork.ContainerNicName, err)
 		}
