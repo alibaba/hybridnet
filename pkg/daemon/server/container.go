@@ -98,12 +98,12 @@ func (cdh cniDaemonHandler) deleteNic(netns string) error {
 			return fmt.Errorf("can not find container nic %s error: %v", containernetwork.ContainerNicName, err)
 		}
 
-		addrs, err := netlink.AddrList(containerLink, netlink.FAMILY_ALL)
+		addrList, err := netlink.AddrList(containerLink, netlink.FAMILY_ALL)
 		if err != nil {
 			return fmt.Errorf("list addrs container nic %s error: %v", containernetwork.ContainerNicName, err)
 		}
 
-		if len(addrs) == 0 {
+		if len(addrList) == 0 {
 			return nil
 		}
 
@@ -112,7 +112,7 @@ func (cdh cniDaemonHandler) deleteNic(netns string) error {
 			return fmt.Errorf("set delete ns %v %v error: %v", netns, containernetwork.ContainerNicName, err)
 		}
 
-		for _, addr := range addrs {
+		for _, addr := range addrList {
 			if err := netlink.AddrDel(containerLink, &addr); err != nil {
 				return fmt.Errorf("delete ns %v %v addr %v error: %v", netns, containernetwork.ContainerNicName, addr.IP, err)
 			}
