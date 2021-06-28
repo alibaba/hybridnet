@@ -358,15 +358,16 @@ func (c *Controller) allocate(key, networkName string, pod *v1.Pod) (err error) 
 }
 
 func (c *Controller) release(pod *v1.Pod, allocatedIPs []*types.IP) (err error) {
+	var recycleFunc func(namespace string, ip *types.IP) (err error)
 	if feature.DualStackEnabled() {
-		if err = c.dualStackIPAMManager.Release(types.DualStack, allocatedIPs[0].Network, squashIPSliceToSubnets(allocatedIPs), squashIPSliceToIPs(allocatedIPs)); err != nil {
-			return fmt.Errorf("fail to release ips %v for pod %s", allocatedIPs, pod.Name)
-		}
+		recycleFunc = c.dualStackIPAMStroe.IPRecycle
 	} else {
-		for _, ip := range allocatedIPs {
-			if err = c.ipamManager.Release(ip.Network, ip.Subnet, ip.Address.IP.String()); err != nil {
-				return fmt.Errorf("fail to release ip %s for pod %s", ip.Address.String(), pod.Name)
-			}
+		recycleFunc = c.ipamStore.IPRecycle
+	}
+
+	for _, ip := range allocatedIPs {
+		if err = recycleFunc(pod.Namespace, ip); err != nil {
+			return fmt.Errorf("fail to recycle ip %v for pod %s", ip, pod.Name)
 		}
 	}
 

@@ -78,13 +78,18 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 			}); err != nil {
 			return admission.Errored(http.StatusInternalServerError, err)
 		}
-		if len(ipList.Items) >= 1 && ipList.Items[0].Spec.Network != specifiedNetwork {
-			return admission.Denied(fmt.Sprintf(
-				"pod has assigned ip %s of network %s, cannot assign to another network %s",
-				ipList.Items[0].Spec.Address.IP,
-				ipList.Items[0].Spec.Network,
-				specifiedNetwork,
-			))
+
+		for i := range ipList.Items {
+			var ipInstance = &ipList.Items[i]
+			// terminating ipInstance should be ignored
+			if ipInstance.DeletionTimestamp == nil && ipInstance.Spec.Network != specifiedNetwork {
+				return admission.Denied(fmt.Sprintf(
+					"pod has assigned ip %s of network %s, cannot assign to another network %s",
+					ipInstance.Spec.Address.IP,
+					ipInstance.Spec.Network,
+					specifiedNetwork,
+				))
+			}
 		}
 	}
 

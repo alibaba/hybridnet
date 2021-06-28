@@ -101,8 +101,13 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 			return admission.Errored(http.StatusInternalServerError, err)
 
 		}
-		if len(ipList.Items) >= 1 {
-			networkName = ipList.Items[0].Spec.Network
+
+		// ignore terminating ipInstance
+		for i := range ipList.Items {
+			if ipList.Items[i].DeletionTimestamp == nil {
+				networkName = ipList.Items[i].Spec.Network
+				break
+			}
 		}
 	}
 

@@ -132,6 +132,10 @@ func (d *DualStackWorker) ReCouple(pod *v1.Pod, IPs []*types.IP) (err error) {
 	return d.patchIPsToPod(pod, IPs)
 }
 
+func (d *DualStackWorker) IPRecycle(namespace string, ip *types.IP) (err error) {
+	return d.worker.IPRecycle(namespace, ip)
+}
+
 func (d *DualStackWorker) IPUnBind(namespace, ip string) (err error) {
 	return d.worker.IPUnBind(namespace, ip)
 }
