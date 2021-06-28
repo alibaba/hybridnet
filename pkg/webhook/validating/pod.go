@@ -85,8 +85,8 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 			if ipInstance.DeletionTimestamp == nil && ipInstance.Spec.Network != specifiedNetwork {
 				return admission.Denied(fmt.Sprintf(
 					"pod has assigned ip %s of network %s, cannot assign to another network %s",
-					ipList.Items[0].Spec.Address.IP,
-					ipList.Items[0].Spec.Network,
+					ipInstance.Spec.Address.IP,
+					ipInstance.Spec.Network,
 					specifiedNetwork,
 				))
 			}
