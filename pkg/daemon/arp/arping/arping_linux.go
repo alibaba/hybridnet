@@ -23,33 +23,46 @@ package arping
 // THE SOFTWARE.
 
 import (
+	"fmt"
 	"net"
 	"syscall"
+	"time"
 )
 
-func initialize(iface *net.Interface) (int, syscall.SockaddrLinklayer, error) {
-	toSockaddr := syscall.SockaddrLinklayer{Ifindex: iface.Index}
+type LinuxSocket struct {
+	sock       int
+	toSockaddr syscall.SockaddrLinklayer
+}
+
+func initialize(iface net.Interface) (s *LinuxSocket, err error) {
+	s = &LinuxSocket{}
+	s.toSockaddr = syscall.SockaddrLinklayer{Ifindex: iface.Index}
 
 	// 1544 = htons(ETH_P_ARP)
 	const proto = 1544
-	sock, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_RAW, proto)
-	return sock, toSockaddr, err
+	s.sock, err = syscall.Socket(syscall.AF_PACKET, syscall.SOCK_RAW, proto)
+	return s, err
 }
 
-func send(sock int, request arpDatagram, toSockaddr syscall.SockaddrLinklayer) error {
-	return syscall.Sendto(sock, request.MarshalWithEthernetHeader(), 0, &toSockaddr)
+func (s *LinuxSocket) send(request arpDatagram) (time.Time, error) {
+	return time.Now(), syscall.Sendto(s.sock, request.MarshalWithEthernetHeader(), 0, &s.toSockaddr)
 }
 
-func receive(sock int) (arpDatagram, error) {
+func (s *LinuxSocket) receive() (arpDatagram, time.Time, error) {
 	buffer := make([]byte, 128)
-	n, _, err := syscall.Recvfrom(sock, buffer, 0)
+	n, _, err := syscall.Recvfrom(s.sock, buffer, 0)
 	if err != nil {
-		return arpDatagram{}, err
+		return arpDatagram{}, time.Now(), err
+	}
+	if n <= 14 {
+		// amount of bytes read by socket is less than an ethernet header. clearly not what we look for
+		return arpDatagram{}, time.Now(), fmt.Errorf("buffer with invalid length")
+
 	}
 	// skip 14 bytes ethernet header
-	return parseArpDatagram(buffer[14:n]), nil
+	return parseArpDatagram(buffer[14:n]), time.Now(), nil
 }
 
-func deinitialize(sock int) error {
-	return syscall.Close(sock)
+func (s *LinuxSocket) deinitialize() error {
+	return syscall.Close(s.sock)
 }

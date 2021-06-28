@@ -45,13 +45,13 @@ func PingOverIface(srcIP, dstIP net.IP, iface *net.Interface, timeout time.Durat
 	srcMac := iface.HardwareAddr
 	request := newArpDatagram(Request, srcMac, srcIP, ethernet.Broadcast, dstIP)
 
-	sock, toSockaddr, err := initialize(iface)
+	sock, err := initialize(*iface)
 	if err != nil {
 		return nil, err
 	}
 
 	defer func() {
-		_ = deinitialize(sock)
+		_ = sock.deinitialize()
 	}()
 
 	type PingResult struct {
@@ -61,14 +61,14 @@ func PingOverIface(srcIP, dstIP net.IP, iface *net.Interface, timeout time.Durat
 	pingResultChan := make(chan PingResult, 1)
 
 	// send arp request once
-	if err := send(sock, request, toSockaddr); err != nil {
+	if _, err := sock.send(request); err != nil {
 		return nil, fmt.Errorf("send arp request over interface %v failed: %v", iface.Name, err)
 	}
 
 	go func() {
 		for {
 			// receive arp response
-			response, err := receive(sock)
+			response, _, err := sock.receive()
 
 			if err != nil {
 				pingResultChan <- PingResult{nil, err}
@@ -99,20 +99,20 @@ func validateIP(ip net.IP) error {
 }
 
 func GratuitousOverIface(ip net.IP, iface *net.Interface) error {
-	sock, toSockaddr, err := initialize(iface)
+	sock, err := initialize(*iface)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
-		_ = deinitialize(sock)
+		_ = sock.deinitialize()
 	}()
 
 	for _, op := range []Operation{Request, Reply} {
 		pkt := newArpDatagram(op, iface.HardwareAddr, ip, ethernet.Broadcast, ip)
 
 		// send arp request once
-		if err := send(sock, pkt, toSockaddr); err != nil {
+		if _, err := sock.send(pkt); err != nil {
 			return err
 		}
 	}
