@@ -67,6 +67,15 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 		return "", fmt.Errorf("failed to open netns %q: %v", netns, err)
 	}
 
+	containerLink, err := netlink.LinkByName(containerNicName)
+	if err != nil {
+		return "", fmt.Errorf("can not find container nic %s %v", containerNicName, err)
+	}
+
+	if err = netlink.LinkSetNsFd(containerLink, int(podNS.Fd())); err != nil {
+		return "", fmt.Errorf("failed to link netns %v", err)
+	}
+
 	if err = containernetwork.ConfigureHostNic(hostNicName, allocatedIPs, cdh.config.LocalDirectTableNum); err != nil {
 		return "", err
 	}

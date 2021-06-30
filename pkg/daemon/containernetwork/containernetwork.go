@@ -243,16 +243,12 @@ func ConfigureContainerNic(nicName, nodeIfName string, allocatedIPs map[ramav1.I
 		}
 	}
 
-	containerLink, err := netlink.LinkByName(nicName)
-	if err != nil {
-		return fmt.Errorf("can not find container nic %s %v", nicName, err)
-	}
-
-	if err = netlink.LinkSetNsFd(containerLink, int(netns.Fd())); err != nil {
-		return fmt.Errorf("failed to link netns %v", err)
-	}
-
 	if err := ns.WithNetNSPath(netns.Path(), func(_ ns.NetNS) error {
+		containerLink, err := netlink.LinkByName(nicName)
+		if err != nil {
+			return fmt.Errorf("can not find container nic %s %v", nicName, err)
+		}
+
 		if err = netlink.LinkSetName(containerLink, ContainerNicName); err != nil {
 			return err
 		}
