@@ -15,7 +15,7 @@ Network is extremely important if you need an underlay container network, as tak
 is always needed. For Rama, which only provides a vlan type container network for now, a Network usually refers to a
 series of Nodes with the same ASW or TOR.
 
-Here is a yaml of a Network CR for underlay container network :
+Here is a yaml of a Network CR for underlay container network:
 
 ```yaml
 apiVersion: networking.alibaba.com/v1
@@ -107,11 +107,11 @@ spec:
     
     excludeIPs: "192.168.56.103","192.168.56.104"     # Optional. The exclued ips for unusable. 
   config:
-    autoNatOutgoing: false                            # Optional, Overlay Network only. 
+    autoNatOutgoing: false                            # Optional, Overlay Network only, Default is true. 
                                                       # If pods in this sunbet can access to addresses outside 
                                                       # the cluster by NAT.
     
-    private: true                                     # Optional. 
+    private: true                                     # Optional. Default is false.
                                                       # If addresses of the subnet can be allocated to pod
                                                       # without special assignment.
 ```

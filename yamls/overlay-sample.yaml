@@ -1,0 +1,21 @@
+---
+apiVersion: networking.alibaba.com/v1
+kind: Network
+metadata:
+  name: overlay-network
+spec:
+  netID: 4
+  type: Overlay
+  switchID: "virtual-switch"
+
+---
+apiVersion: networking.alibaba.com/v1
+kind: Subnet
+metadata:
+  name: overlay-subnet1
+spec:
+  network: overlay-network
+  range:
+    version: "4"
+    cidr: "10.14.100.0/24"
+    gateway: "10.14.100.1"
