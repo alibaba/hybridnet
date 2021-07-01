@@ -25,7 +25,7 @@ spec:
       hostPID: true
       initContainers:
         - name: install-cni
-          image: "REGISTRY/rama-daemon:dev"
+          image: "ramanetworking/rama:latest"
           imagePullPolicy: IfNotPresent
           command: ["/rama/install-cni.sh"]
           securityContext:
@@ -38,13 +38,13 @@ spec:
               name: cni-bin
       containers:
         - name: cni-daemon
-          image: "REGISTRY/rama-daemon:dev"
+          image: "ramanetworking/rama:latest"
           imagePullPolicy: IfNotPresent
           command:
             - sh
             - /rama/start-daemon.sh
-          args:
-            - --prefer-interfaces=$NET_INTERFACE1,$NET_INTERFACE2
+#          args:
+#            - --prefer-vlan-interfaces=enp0s8
           securityContext:
             runAsUser: 0
             privileged: true
@@ -155,10 +155,13 @@ spec:
       hostNetwork: true
       containers:
         - name: rama-manager
-          image: "REGISTRY/rama-manager:dev"
+          image: "ramanetworking/rama:latest"
           imagePullPolicy: IfNotPresent
           command:
             - /rama/rama-manager
+          env:
+            - name: DEFAULT_NETWORK_TYPE
+              value: Overlay
       nodeSelector:
         node-role.kubernetes.io/master: ""
 
@@ -182,7 +185,7 @@ spec:
     metadata:
       labels:
         app: rama-webhook
-        webhook.rama.io/ignore: true
+        webhook.rama.io/ignore: "true"
     spec:
       tolerations:
         - operator: Exists
@@ -194,7 +197,7 @@ spec:
       hostNetwork: true
       containers:
         - name: rama-webhook
-          image: "REGISTRY/rama-webhook:dev"
+          image: "ramanetworking/rama:latest"
           imagePullPolicy: IfNotPresent
           command:
             - /rama/rama-webhook
