@@ -20,6 +20,7 @@ import (
 	"flag"
 
 	"github.com/spf13/pflag"
+	admissionv1 "k8s.io/api/admission/v1"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -46,6 +47,7 @@ func init() {
 	_ = appsv1.AddToScheme(scheme)
 	_ = ramav1.AddToScheme(scheme)
 	_ = admissionv1beta1.AddToScheme(scheme)
+	_ = admissionv1.AddToScheme(scheme)
 
 	pflag.IntVar(&port, "port", 9898, "The port webhook listen on")
 	pflag.StringVar(&metricsBindAddress, "metrics-bind-address", "0", "The bind address for metrics, eg :8080")
