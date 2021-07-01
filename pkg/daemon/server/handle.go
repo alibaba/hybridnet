@@ -106,8 +106,8 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		}
 
 		// wait for ip instance to be coupled
-		annotaion := pod.GetAnnotations()
-		_, exist := annotaion[constants.AnnotationIP]
+		annotation := pod.GetAnnotations()
+		_, exist := annotation[constants.AnnotationIP]
 		if exist {
 			break
 		} else if i == retries-1 {

@@ -19,6 +19,7 @@ package containernetwork
 import (
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/containernetworking/plugins/pkg/ipam"
@@ -152,7 +153,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 }
 
 // ipAddr is a CIDR notation IP address and prefix length
-func ConfigureContainerNic(nicName, nodeIfName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
+func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 	macAddr net.HardwareAddr, vlanID *uint32, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration,
 	networkType ramav1.NetworkType) error {
 
@@ -198,7 +199,7 @@ func ConfigureContainerNic(nicName, nodeIfName string, allocatedIPs map[ramav1.I
 			return fmt.Errorf("failed to enable ipv4 forwarding: %v", err)
 		}
 
-		if err := ensureRpFilterConfigs(); err != nil {
+		if err := ensureRpFilterConfigs(hostNicName); err != nil {
 			return fmt.Errorf("failed to ensure sysctl config: %v", err)
 		}
 
@@ -243,16 +244,12 @@ func ConfigureContainerNic(nicName, nodeIfName string, allocatedIPs map[ramav1.I
 		}
 	}
 
-	containerLink, err := netlink.LinkByName(nicName)
-	if err != nil {
-		return fmt.Errorf("can not find container nic %s %v", nicName, err)
-	}
-
-	if err = netlink.LinkSetNsFd(containerLink, int(netns.Fd())); err != nil {
-		return fmt.Errorf("failed to link netns %v", err)
-	}
-
 	if err := ns.WithNetNSPath(netns.Path(), func(_ ns.NetNS) error {
+		containerLink, err := netlink.LinkByName(containerNicName)
+		if err != nil {
+			return fmt.Errorf("can not find container nic %s %v", containerNicName, err)
+		}
+
 		if err = netlink.LinkSetName(containerLink, ContainerNicName); err != nil {
 			return err
 		}
@@ -338,20 +335,29 @@ func GenerateContainerVethPair(containerID string) (string, string) {
 	return fmt.Sprintf("%s%s", containerID[0:12], ContainerHostLinkSuffix), fmt.Sprintf("%s%s", containerID[0:12], ContainerInitLinkSuffix)
 }
 
-func ensureRpFilterConfigs() error {
+func ensureRpFilterConfigs(containerHostIf string) error {
+	for _, key := range []string{"default", "all"} {
+		sysctlPath := fmt.Sprintf(RpFilterSysctl, key)
+		if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
+			return fmt.Errorf("error set: %s sysctl path to 0, error: %v", sysctlPath, err)
+		}
+	}
+
+	sysctlPath := fmt.Sprintf(RpFilterSysctl, containerHostIf)
+	if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
+		return fmt.Errorf("error set: %s sysctl path to 0, error: %v", sysctlPath, err)
+	}
+
 	existInterfaces, err := net.Interfaces()
 	if err != nil {
 		return fmt.Errorf("error get exist interfaces on system: %v", err)
 	}
 
-	for _, key := range []string{"default", "all"} {
-		sysctlPath := fmt.Sprintf(RpFilterSysctl, key)
-		if err = daemonutils.SetSysctl(sysctlPath, 0); err != nil {
-			return fmt.Errorf("error set: %s sysctl path to 0, error: %v", sysctlPath, err)
-		}
-	}
-
 	for _, existIf := range existInterfaces {
+		if strings.HasSuffix(existIf.Name, ContainerHostLinkSuffix) || strings.HasSuffix(existIf.Name, ContainerInitLinkSuffix) {
+			continue
+		}
+
 		sysctlPath := fmt.Sprintf(RpFilterSysctl, existIf.Name)
 		sysctlValue, err := daemonutils.GetSysctl(sysctlPath)
 		if err != nil {
