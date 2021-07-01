@@ -45,35 +45,14 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 		nodeIfName = cdh.config.NodeVxlanIfName
 	}
 
-	hostNicName, containerNicName := containernetwork.GenerateContainerVethPair(containerID)
-	veth := netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: hostNicName, MTU: mtu}, PeerName: containerNicName}
-	if err = netlink.LinkAdd(&veth); err != nil {
-		return "", fmt.Errorf("create veth pair for pod %v failed: %v", podName, err)
-	}
-
-	defer func() {
-		// Remove veth link in case any error during creating pod network.
-		if err != nil {
-			_ = netlink.LinkDel(&veth)
-		}
-	}()
-
 	macAddr, err := net.ParseMAC(mac)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse mac %s %v", macAddr, err)
 	}
-	podNS, err := ns.GetNS(netns)
-	if err != nil {
-		return "", fmt.Errorf("failed to open netns %q: %v", netns, err)
-	}
 
-	containerLink, err := netlink.LinkByName(containerNicName)
+	containerNicName, hostNicName, podNS, err := initContainerNic(podName, netns, containerID, mtu)
 	if err != nil {
-		return "", fmt.Errorf("can not find container nic %s %v", containerNicName, err)
-	}
-
-	if err = netlink.LinkSetNsFd(containerLink, int(podNS.Fd())); err != nil {
-		return "", fmt.Errorf("failed to link netns %v", err)
+		return "", fmt.Errorf("init container nic for pod %v failed: %v", podName, err)
 	}
 
 	if err = containernetwork.ConfigureHostNic(hostNicName, allocatedIPs, cdh.config.LocalDirectTableNum); err != nil {
@@ -128,4 +107,46 @@ func (cdh cniDaemonHandler) deleteNic(netns string) error {
 		}
 		return nil
 	})
+}
+
+func initContainerNic(podName, netns, containerID string, mtu int) (string, string, ns.NetNS, error) {
+	podNS, err := ns.GetNS(netns)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to open netns %q: %v", netns, err)
+	}
+
+	hostNS, err := ns.GetCurrentNS()
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to open current namespace: %v", err)
+	}
+
+	hostNicName, containerNicName := containernetwork.GenerateContainerVethPair(containerID)
+
+	if err := ns.WithNetNSPath(podNS.Path(), func(_ ns.NetNS) error {
+		veth := netlink.Veth{
+			LinkAttrs: netlink.LinkAttrs{
+				Name: hostNicName,
+				MTU:  mtu,
+			},
+			PeerName: containerNicName,
+		}
+		if err = netlink.LinkAdd(&veth); err != nil {
+			return fmt.Errorf("create veth pair in netns %v for pod %v failed: %v", podNS.Path(), podName, err)
+		}
+
+		containerHostLink, err := netlink.LinkByName(hostNicName)
+		if err != nil {
+			return fmt.Errorf("can not find container host nic %s in netns %v: %v", hostNicName, podNS.Path(), err)
+		}
+
+		if err = netlink.LinkSetNsFd(containerHostLink, int(hostNS.Fd())); err != nil {
+			return fmt.Errorf("failed to link netns %v", err)
+		}
+
+		return nil
+	}); err != nil {
+		return "", "", nil, fmt.Errorf("generate veth pair for pod %v failed: %v", podName, err)
+	}
+
+	return containerNicName, hostNicName, podNS, nil
 }
