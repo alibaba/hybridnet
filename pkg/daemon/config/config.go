@@ -46,6 +46,10 @@ const (
 	DefaultIptablesCheckDuration  = 5 * time.Second
 	DefaultVxlanBaseReachableTime = 5 * time.Second
 
+	DefaultNeighGCThresh1 = 1024
+	DefaultNeighGCThresh2 = 2048
+	DefaultNeighGCThresh3 = 4096
+
 	DefaultLocalDirectTableNum     = 39999
 	DefaultToOverlaySubnetTableNum = 40000
 	DefaultOverlayMarkTableNum     = 40001
@@ -81,6 +85,10 @@ type Configuration struct {
 
 	KubeClient kubernetes.Interface
 	RamaClient clientset.Interface
+
+	NeighGCThresh1 int
+	NeighGCThresh2 int
+	NeighGCThresh3 int
 }
 
 // ParseFlags will parse cmd args then init kubeClient and configuration
@@ -99,6 +107,9 @@ func ParseFlags() (*Configuration, error) {
 		argVlanCheckTimeout        = pflag.Duration("vlan-check-timeout", DefaultVlanCheckTimeout, "The timeout of vlan network environment check while pod creating")
 		argVxlanUDPPort            = pflag.Int("vxlan-udp-port", DefaultVxlanUDPPort, "The local udp port which vxlan tunnel use")
 		argVxlanBaseReachableTime  = pflag.Duration("vxlan-base-reachable-time", DefaultVxlanBaseReachableTime, "The time for neigh caches of vxlan device to get STALE from REACHABLE")
+		argNeighGCThresh1          = pflag.Int("neigh-gc-thresh1", DefaultNeighGCThresh1, "value to set net.ipv4/ipv6.neigh.default.gc_thresh1")
+		argNeighGCThresh2          = pflag.Int("neigh-gc-thresh2", DefaultNeighGCThresh2, "value to set net.ipv4/ipv6.neigh.default.gc_thresh2")
+		argNeighGCThresh3          = pflag.Int("neigh-gc-thresh3", DefaultNeighGCThresh3, "value to set net.ipv4/ipv6.neigh.default.gc_thresh3")
 	)
 
 	// mute info log for ipset lib
@@ -141,6 +152,9 @@ func ParseFlags() (*Configuration, error) {
 		VxlanUDPPort:            *argVxlanUDPPort,
 		IptablesCheckDuration:   *argIptableCheckDuration,
 		VxlanBaseReachableTime:  *argVxlanBaseReachableTime,
+		NeighGCThresh1:          *argNeighGCThresh1,
+		NeighGCThresh2:          *argNeighGCThresh2,
+		NeighGCThresh3:          *argNeighGCThresh3,
 	}
 
 	if *argPreferVlanInterfaces == "" {

@@ -155,7 +155,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 // ipAddr is a CIDR notation IP address and prefix length
 func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 	macAddr net.HardwareAddr, vlanID *uint32, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration,
-	networkType ramav1.NetworkType) error {
+	networkType ramav1.NetworkType, neighGCThresh1, neighGCThresh2, neighGCThresh3 int) error {
 
 	var defaultRouteNets []*types.Route
 	var ipConfigs []*current.IPConfig
@@ -199,6 +199,10 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 			return fmt.Errorf("failed to enable ipv4 forwarding: %v", err)
 		}
 
+		if err := ensureNeighGCThresh(netlink.FAMILY_V4, neighGCThresh1, neighGCThresh2, neighGCThresh3); err != nil {
+			return fmt.Errorf("failed to ensure ipv4 neigh gc thresh: %v", err)
+		}
+
 		if err := ensureRpFilterConfigs(hostNicName); err != nil {
 			return fmt.Errorf("failed to ensure sysctl config: %v", err)
 		}
@@ -234,6 +238,10 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 
 		if err := enableIPForward(netlink.FAMILY_V6); err != nil {
 			return fmt.Errorf("failed to enable ipv6 forwarding: %v", err)
+		}
+
+		if err := ensureNeighGCThresh(netlink.FAMILY_V6, neighGCThresh1, neighGCThresh2, neighGCThresh3); err != nil {
+			return fmt.Errorf("failed to ensure ipv6 neigh gc thresh: %v", err)
 		}
 
 		if networkType == ramav1.NetworkTypeUnderlay {
@@ -378,4 +386,53 @@ func enableIPForward(family int) error {
 		return ip.EnableIP4Forward()
 	}
 	return ip.EnableIP6Forward()
+}
+
+func ensureNeighGCThresh(family int, neighGCThresh1, neighGCThresh2, neighGCThresh3 int) error {
+	if family == netlink.FAMILY_V4 {
+		// From kernel doc:
+		// neigh/default/gc_thresh1 - INTEGER
+		//     Minimum number of entries to keep.  Garbage collector will not
+		//     purge entries if there are fewer than this number.
+		//     Default: 128
+		if err := daemonutils.SetSysctl(IPv4NeighGCThresh1, neighGCThresh1); err != nil {
+			return fmt.Errorf("error set: %s sysctl path to %v, error: %v", IPv4NeighGCThresh1, neighGCThresh1, err)
+		}
+
+		// From kernel doc:
+		// neigh/default/gc_thresh2 - INTEGER
+		//     Threshold when garbage collector becomes more aggressive about
+		//     purging entries. Entries older than 5 seconds will be cleared
+		//     when over this number.
+		//     Default: 512
+		if err := daemonutils.SetSysctl(IPv4NeighGCThresh2, neighGCThresh2); err != nil {
+			return fmt.Errorf("error set: %s sysctl path to %v, error: %v", IPv4NeighGCThresh2, neighGCThresh2, err)
+		}
+
+		// From kernel doc:
+		// neigh/default/gc_thresh3 - INTEGER
+		//     Maximum number of neighbor entries allowed.  Increase this
+		//     when using large numbers of interfaces and when communicating
+		//     with large numbers of directly-connected peers.
+		//     Default: 1024
+		if err := daemonutils.SetSysctl(IPv4NeighGCThresh3, neighGCThresh3); err != nil {
+			return fmt.Errorf("error set: %s sysctl path to %v, error: %v", IPv4NeighGCThresh3, neighGCThresh3, err)
+		}
+
+		return nil
+	}
+
+	if err := daemonutils.SetSysctl(IPv6NeighGCThresh1, neighGCThresh1); err != nil {
+		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", IPv6NeighGCThresh1, neighGCThresh1, err)
+	}
+
+	if err := daemonutils.SetSysctl(IPv6NeighGCThresh2, neighGCThresh2); err != nil {
+		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", IPv6NeighGCThresh2, neighGCThresh2, err)
+	}
+
+	if err := daemonutils.SetSysctl(IPv6NeighGCThresh3, neighGCThresh3); err != nil {
+		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", IPv6NeighGCThresh3, neighGCThresh3, err)
+	}
+
+	return nil
 }

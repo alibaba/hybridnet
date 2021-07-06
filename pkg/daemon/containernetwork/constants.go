@@ -33,6 +33,14 @@ const (
 
 	RpFilterSysctl = "/proc/sys/net/ipv4/conf/%s/rp_filter"
 
+	IPv4NeighGCThresh1 = "/proc/sys/net/ipv4/neigh/default/gc_thresh1"
+	IPv4NeighGCThresh2 = "/proc/sys/net/ipv4/neigh/default/gc_thresh2"
+	IPv4NeighGCThresh3 = "/proc/sys/net/ipv4/neigh/default/gc_thresh3"
+
+	IPv6NeighGCThresh1 = "/proc/sys/net/ipv6/neigh/default/gc_thresh1"
+	IPv6NeighGCThresh2 = "/proc/sys/net/ipv6/neigh/default/gc_thresh2"
+	IPv6NeighGCThresh3 = "/proc/sys/net/ipv6/neigh/default/gc_thresh3"
+
 	ProxyNdpSysctl       = "/proc/sys/net/ipv6/conf/%s/proxy_ndp"
 	IPv6ForwardingSysctl = "/proc/sys/net/ipv6/conf/%s/forwarding"
 
