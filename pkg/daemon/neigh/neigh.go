@@ -39,7 +39,7 @@ type Manager struct {
 func CreateNeighManager(family int) *Manager {
 	return &Manager{
 		family:                family,
-		interfaceToIPSliceMap: nil,
+		interfaceToIPSliceMap: make(map[string]IPMap),
 	}
 }
 
