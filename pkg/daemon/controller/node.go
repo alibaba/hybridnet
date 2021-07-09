@@ -239,7 +239,7 @@ func (c *Controller) reconcileNodeInfo() error {
 			}
 		}
 
-		if isNodeObjectAddr {
+		if isNodeObjectAddr || addr.IP.Equal(vtepIP) {
 			nodeLocalVxlanAddr = append(nodeLocalVxlanAddr, addr)
 			continue
 		}

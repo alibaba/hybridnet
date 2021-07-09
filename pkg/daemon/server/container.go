@@ -61,7 +61,8 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 
 	klog.Infof("Configure container nic for %v.%v", podName, podNamespace)
 	if err = containernetwork.ConfigureContainerNic(containerNicName, hostNicName, nodeIfName,
-		allocatedIPs, macAddr, vlanID, podNS, mtu, cdh.config.VlanCheckTimeout, networkType); err != nil {
+		allocatedIPs, macAddr, vlanID, podNS, mtu, cdh.config.VlanCheckTimeout, networkType,
+		cdh.config.NeighGCThresh1, cdh.config.NeighGCThresh2, cdh.config.NeighGCThresh3); err != nil {
 		return "", fmt.Errorf("failed to configure container nic for %v.%v: %v", podName, podNamespace, err)
 	}
 
