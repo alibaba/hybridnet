@@ -73,7 +73,7 @@ func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string)
 			return fmt.Errorf("parse node vtep mac %v failed: %v", node.Annotations[constants.AnnotationNodeVtepMac], err)
 		}
 
-		ipStringList := strings.Split(node.Annotations[constants.AnnotationNodeIPList], ",")
+		ipStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
 		for _, ipString := range ipStringList {
 			nic.nodeIPMap[ipString] = macAddr
 		}
@@ -228,10 +228,34 @@ func (c *Controller) reconcileNodeInfo() error {
 		return fmt.Errorf("list address for all interfaces failed: %v", err)
 	}
 
+	var nodeLocalVxlanAddr []netlink.Addr
+	for _, addr := range existAllAddrList {
+		// Add vtep ip and node object ip by default.
+		isNodeObjectAddr := false
+		for _, nodeObjectAddr := range thisNode.Status.Addresses {
+			if nodeObjectAddr.Address == addr.IP.String() {
+				isNodeObjectAddr = true
+				break
+			}
+		}
+
+		if isNodeObjectAddr {
+			nodeLocalVxlanAddr = append(nodeLocalVxlanAddr, addr)
+			continue
+		}
+
+		// Add extra node local vxlan ip.
+		for _, cidr := range c.config.ExtraNodeLocalVxlanIPCidrs {
+			if cidr.Contains(addr.IP) {
+				nodeLocalVxlanAddr = append(nodeLocalVxlanAddr, addr)
+			}
+		}
+	}
+
 	patchData := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s","%s":"%s","%s":"%s"}}}`,
 		constants.AnnotationNodeVtepIP, vtepIP.String(),
 		constants.AnnotationNodeVtepMac, vtepMac.String(),
-		constants.AnnotationNodeIPList, containernetwork.GenerateIPListString(existAllAddrList))
+		constants.AnnotationNodeLocalVxlanIPList, containernetwork.GenerateIPListString(nodeLocalVxlanAddr))
 
 	if _, err := c.config.KubeClient.CoreV1().Nodes().Patch(context.TODO(),
 		c.config.NodeName, types.StrategicMergePatchType,
@@ -250,9 +274,9 @@ func (c *Controller) reconcileNodeInfo() error {
 		return fmt.Errorf("create vxlan device %v failed: %v", vxlanLinkName, err)
 	}
 
-	existAllAddrMap := map[string]bool{}
-	for _, addr := range existAllAddrList {
-		existAllAddrMap[addr.IP.String()] = true
+	nodeLocalVxlanAddrMap := map[string]bool{}
+	for _, addr := range nodeLocalVxlanAddr {
+		nodeLocalVxlanAddrMap[addr.IP.String()] = true
 	}
 
 	vxlanDevAddrList, err := containernetwork.ListAllAddress(vxlanDev.Link())
@@ -265,8 +289,8 @@ func (c *Controller) reconcileNodeInfo() error {
 		existVxlanDevAddrMap[addr.IP.String()] = true
 	}
 
-	// Add all node ip address to vxlan interface.
-	for _, addr := range existAllAddrList {
+	// Add all node local vxlan ip address to vxlan interface.
+	for _, addr := range nodeLocalVxlanAddr {
 		if _, exist := existVxlanDevAddrMap[addr.IP.String()]; !exist {
 			if err := netlink.AddrAdd(vxlanDev.Link(), &netlink.Addr{
 				IPNet: addr.IPNet,
@@ -280,7 +304,7 @@ func (c *Controller) reconcileNodeInfo() error {
 
 	// Delete invalid address.
 	for _, addr := range vxlanDevAddrList {
-		if _, exist := existAllAddrMap[addr.IP.String()]; !exist {
+		if _, exist := nodeLocalVxlanAddrMap[addr.IP.String()]; !exist {
 			if err := netlink.AddrDel(vxlanDev.Link(), &addr); err != nil {
 				return fmt.Errorf("del addr %v for link %v failed: %v", addr.IP.String(), vxlanDev.Link().Name, err)
 			}
@@ -294,7 +318,7 @@ func (c *Controller) reconcileNodeInfo() error {
 	for _, node := range nodeList {
 		if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
 			node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
-			node.Annotations[constants.AnnotationNodeIPList] == "" {
+			node.Annotations[constants.AnnotationNodeLocalVxlanIPList] == "" {
 			klog.Infof("node %v's vtep information has not been updated", node.Name)
 			continue
 		}

@@ -438,13 +438,13 @@ func (c *Controller) iptablesSyncLoop() {
 
 				if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
 					node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
-					node.Annotations[constants.AnnotationNodeIPList] == "" {
+					node.Annotations[constants.AnnotationNodeLocalVxlanIPList] == "" {
 					klog.Infof("node %v's vtep information has not been updated", node.Name)
 					continue
 				}
 
-				ipStringList := strings.Split(node.Annotations[constants.AnnotationNodeIPList], ",")
-				for _, ipString := range ipStringList {
+				nodeLocalVxlanipStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
+				for _, ipString := range nodeLocalVxlanipStringList {
 					ip := net.ParseIP(ipString)
 					if ip.To4() != nil {
 						// v4 address

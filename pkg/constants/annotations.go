@@ -28,7 +28,7 @@ const (
 
 	AnnotationNetworkType = "networking.alibaba.com/network-type"
 
-	AnnotationNodeVtepIP  = "networking.alibaba.com/vtep-ip"
-	AnnotationNodeVtepMac = "networking.alibaba.com/vtep-mac"
-	AnnotationNodeIPList  = "networking.alibaba.com/ip-list"
+	AnnotationNodeVtepIP           = "networking.alibaba.com/vtep-ip"
+	AnnotationNodeVtepMac          = "networking.alibaba.com/vtep-mac"
+	AnnotationNodeLocalVxlanIPList = "networking.alibaba.com/local-vxlan-ip-list"
 )
