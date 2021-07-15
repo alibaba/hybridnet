@@ -19,7 +19,9 @@ package config
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
+	"strings"
 	"time"
 
 	clientset "github.com/oecp/rama/pkg/client/clientset/versioned"
@@ -64,8 +66,9 @@ type Configuration struct {
 	VlanMTU  int
 	VxlanMTU int
 
-	NodeVlanIfName  string
-	NodeVxlanIfName string
+	NodeVlanIfName             string
+	NodeVxlanIfName            string
+	ExtraNodeLocalVxlanIPCidrs []*net.IPNet
 
 	BindPort     int
 	VxlanUDPPort int
@@ -94,22 +97,23 @@ type Configuration struct {
 // ParseFlags will parse cmd args then init kubeClient and configuration
 func ParseFlags() (*Configuration, error) {
 	var (
-		argPreferInterfaces        = pflag.String("prefer-interfaces", "", "[deprecated]The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
-		argPreferVlanInterfaces    = pflag.String("prefer-vlan-interfaces", "", "The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
-		argPreferVxlanInterfaces   = pflag.String("prefer-vxlan-interfaces", "", "The preferred vxlan interfaces used to inter-host pod communication, default: the default route interface")
-		argBindSocket              = pflag.String("bind-socket", "/var/run/rama.sock", "The socket daemon bind to.")
-		argKubeConfigFile          = pflag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information. If not set use the inCluster token.")
-		argBindPort                = pflag.Int("healthy-server-port", DefaultBindPort, "The port which daemon server bind")
-		argLocalDirectTableNum     = pflag.Int("local-direct-table", DefaultLocalDirectTableNum, "The number of local direct routing table")
-		argIptableCheckDuration    = pflag.Duration("iptables-check-duration", DefaultIptablesCheckDuration, "The time period for iptables manager to check iptables rules")
-		argToOverlaySubnetTableNum = pflag.Int("to-overlay-table", DefaultToOverlaySubnetTableNum, "The number of to overlay subnet routing table")
-		argOverlayMarkTableNum     = pflag.Int("overlay-mark-table", DefaultOverlayMarkTableNum, "The number of overlay mark routing table")
-		argVlanCheckTimeout        = pflag.Duration("vlan-check-timeout", DefaultVlanCheckTimeout, "The timeout of vlan network environment check while pod creating")
-		argVxlanUDPPort            = pflag.Int("vxlan-udp-port", DefaultVxlanUDPPort, "The local udp port which vxlan tunnel use")
-		argVxlanBaseReachableTime  = pflag.Duration("vxlan-base-reachable-time", DefaultVxlanBaseReachableTime, "The time for neigh caches of vxlan device to get STALE from REACHABLE")
-		argNeighGCThresh1          = pflag.Int("neigh-gc-thresh1", DefaultNeighGCThresh1, "value to set net.ipv4/ipv6.neigh.default.gc_thresh1")
-		argNeighGCThresh2          = pflag.Int("neigh-gc-thresh2", DefaultNeighGCThresh2, "value to set net.ipv4/ipv6.neigh.default.gc_thresh2")
-		argNeighGCThresh3          = pflag.Int("neigh-gc-thresh3", DefaultNeighGCThresh3, "value to set net.ipv4/ipv6.neigh.default.gc_thresh3")
+		argPreferInterfaces           = pflag.String("prefer-interfaces", "", "[deprecated]The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
+		argPreferVlanInterfaces       = pflag.String("prefer-vlan-interfaces", "", "The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
+		argPreferVxlanInterfaces      = pflag.String("prefer-vxlan-interfaces", "", "The preferred vxlan interfaces used to inter-host pod communication, default: the default route interface")
+		argBindSocket                 = pflag.String("bind-socket", "/var/run/rama.sock", "The socket daemon bind to.")
+		argKubeConfigFile             = pflag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information. If not set use the inCluster token.")
+		argBindPort                   = pflag.Int("healthy-server-port", DefaultBindPort, "The port which daemon server bind")
+		argLocalDirectTableNum        = pflag.Int("local-direct-table", DefaultLocalDirectTableNum, "The number of local direct routing table")
+		argIptableCheckDuration       = pflag.Duration("iptables-check-duration", DefaultIptablesCheckDuration, "The time period for iptables manager to check iptables rules")
+		argToOverlaySubnetTableNum    = pflag.Int("to-overlay-table", DefaultToOverlaySubnetTableNum, "The number of to overlay subnet routing table")
+		argOverlayMarkTableNum        = pflag.Int("overlay-mark-table", DefaultOverlayMarkTableNum, "The number of overlay mark routing table")
+		argVlanCheckTimeout           = pflag.Duration("vlan-check-timeout", DefaultVlanCheckTimeout, "The timeout of vlan network environment check while pod creating")
+		argVxlanUDPPort               = pflag.Int("vxlan-udp-port", DefaultVxlanUDPPort, "The local udp port which vxlan tunnel use")
+		argVxlanBaseReachableTime     = pflag.Duration("vxlan-base-reachable-time", DefaultVxlanBaseReachableTime, "The time for neigh caches of vxlan device to get STALE from REACHABLE")
+		argNeighGCThresh1             = pflag.Int("neigh-gc-thresh1", DefaultNeighGCThresh1, "value to set net.ipv4/ipv6.neigh.default.gc_thresh1")
+		argNeighGCThresh2             = pflag.Int("neigh-gc-thresh2", DefaultNeighGCThresh2, "value to set net.ipv4/ipv6.neigh.default.gc_thresh2")
+		argNeighGCThresh3             = pflag.Int("neigh-gc-thresh3", DefaultNeighGCThresh3, "value to set net.ipv4/ipv6.neigh.default.gc_thresh3")
+		argExtraNodeLocalVxlanIPCidrs = pflag.String("extra-node-local-vxlan-ip-cidrs", "", "Cidrs to select node extra local vxlan ip, e.g., \"192.168.10.0/24,10.2.3.0/24\"")
 	)
 
 	// mute info log for ipset lib
@@ -159,6 +163,15 @@ func ParseFlags() (*Configuration, error) {
 
 	if *argPreferVlanInterfaces == "" {
 		config.NodeVlanIfName = *argPreferInterfaces
+	}
+
+	if *argExtraNodeLocalVxlanIPCidrs != "" {
+		var err error
+		config.ExtraNodeLocalVxlanIPCidrs, err = parseCidrString(*argExtraNodeLocalVxlanIPCidrs)
+		if err != nil {
+			klog.Errorf("parse extra node local vxlan ip cidrs failed: %v", err)
+			return nil, fmt.Errorf("parse extra node local vxlan ip cidrs failed: %v", err)
+		}
 	}
 
 	if err := config.initNicConfig(); err != nil {
@@ -249,4 +262,19 @@ func (config *Configuration) initKubeClient() error {
 	}
 
 	return nil
+}
+
+func parseCidrString(cidrListString string) ([]*net.IPNet, error) {
+	var cidrList []*net.IPNet
+	cidrStringList := strings.Split(cidrListString, ",")
+	for _, cidrString := range cidrStringList {
+		_, cidr, err := net.ParseCIDR(cidrString)
+		if err != nil {
+			return nil, fmt.Errorf("parse cidr %v failed: %v", cidrString, err)
+		}
+
+		cidrList = append(cidrList, cidr)
+	}
+
+	return cidrList, nil
 }
