@@ -25,6 +25,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/oecp/rama/pkg/daemon/addr"
+
 	"github.com/vishvananda/netns"
 
 	"github.com/oecp/rama/pkg/daemon/iptables"
@@ -86,6 +88,8 @@ type Controller struct {
 	neighV4Manager *neigh.Manager
 	neighV6Manager *neigh.Manager
 
+	addrV4Manager *addr.Manager
+
 	iptablesV4Manager  *iptables.Manager
 	iptablesV6Manager  *iptables.Manager
 	iptablesSyncCh     chan struct{}
@@ -137,6 +141,8 @@ func NewController(config *daemonconfig.Configuration,
 		return nil, fmt.Errorf("create ipv6 iptables manager error: %v", err)
 	}
 
+	addrV4Manager := addr.CreateAddrManager(netlink.FAMILY_V4, config.NodeName)
+
 	if err := ipInstanceInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{
 		ByInstanceIPIndexer: indexByInstanceIP,
 	}); err != nil {
@@ -167,6 +173,8 @@ func NewController(config *daemonconfig.Configuration,
 
 		neighV4Manager: neighV4Manager,
 		neighV6Manager: neighV6Manager,
+
+		addrV4Manager: addrV4Manager,
 
 		iptablesV4Manager:  iptablesV4Manager,
 		iptablesV6Manager:  iptablesV6Manager,
@@ -253,7 +261,7 @@ func (c *Controller) GetIPInstanceSynced() cache.InformerSynced {
 	return c.ipInstanceSynced
 }
 
-// Once node network interface is set down to up for some reasons, the routes and neigh caches for this interface
+// Once node network interface is set from down to up for some reasons, the routes and neigh caches for this interface
 // will be cleaned, which should cause unrecoverable problems. Listening "UP" netlink events for interfaces and
 // triggering subnet and ip instance reconcile loop will be the best way to recover routes and neigh caches.
 //
@@ -306,22 +314,13 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 		if mac, exist := c.nodeIPCache.SearchIP(ip); exist {
 			vtepMac = mac
 		} else {
-			ipInstanceList, err := c.ipInstanceIndexer.ByIndex(ByInstanceIPIndexer, ip.String())
+			ipInstance, err := c.getIPInstanceByAddress(ip)
 			if err != nil {
-				return fmt.Errorf("get ip instance by ip %v indexer failed: %v", ip.String(), err)
+				return fmt.Errorf("get ip instance by address %v failed: %v", ip.String(), err)
 			}
 
-			if len(ipInstanceList) > 1 {
-				return fmt.Errorf("get more than one ip instance for ip %v", ip.String())
-			}
-
-			if len(ipInstanceList) == 1 {
-				instance, ok := ipInstanceList[0].(*ramav1.IPInstance)
-				if !ok {
-					return fmt.Errorf("transform obj to ipinstance failed")
-				}
-
-				nodeName := instance.Labels[constants.LabelNode]
+			if ipInstance != nil {
+				nodeName := ipInstance.Labels[constants.LabelNode]
 
 				node, err := c.nodeLister.Get(nodeName)
 				if err != nil {
@@ -374,6 +373,8 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 	}
 
 	go func() {
+		errorMessageWrapper := initErrorMessageWrapper("handle vxlan interface neigh event failed: ")
+
 		for {
 			update := <-ch
 			if isNeighResolving(update.State) {
@@ -383,7 +384,7 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 
 				link, err := netlink.LinkByIndex(update.LinkIndex)
 				if err != nil {
-					klog.Errorf("get link by index %v failed: %v", update.LinkIndex, err)
+					klog.Errorf(errorMessageWrapper("get link by index %v failed: %v", update.LinkIndex, err))
 					continue
 				}
 
