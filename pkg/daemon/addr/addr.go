@@ -24,6 +24,7 @@ import (
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/daemon/containernetwork"
 
+	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/oecp/rama/pkg/constants"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
@@ -75,6 +76,8 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*ramav1.IPI
 	}
 
 	existEnhancedAddrMap := map[string]map[string]netlink.Addr{}
+	existManualAddrSubnetMap := map[string]map[string]bool{}
+	existLinkMap := map[string]netlink.Link{}
 
 	for _, link := range linkList {
 		// ignore container network virtual interfaces
@@ -96,34 +99,31 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*ramav1.IPI
 				return fmt.Errorf("check addr %v enhanced address failed: %v", addr.String(), err)
 			}
 
-			if isEnhancedAddr {
-				linkName := link.Attrs().Name
+			linkName := link.Attrs().Name
+			cidr := ip.Network(addr.IPNet)
 
+			if isEnhancedAddr {
 				if existEnhancedAddrMap[linkName] == nil {
 					existEnhancedAddrMap[linkName] = map[string]netlink.Addr{}
 				}
-
-				cidr := net.IPNet{
-					IP:   addr.IP.Mask(addr.Mask),
-					Mask: addr.Mask,
-				}
-
 				existEnhancedAddrMap[linkName][cidr.String()] = addr
+			} else {
+				if existManualAddrSubnetMap[linkName] == nil {
+					existManualAddrSubnetMap[linkName] = map[string]bool{}
+				}
+				existManualAddrSubnetMap[linkName][cidr.String()] = true
 			}
 		}
+
+		existLinkMap[link.Attrs().Name] = link
 	}
 
 	// clear enhanced addresses which are impossible to be used
 	for existLinkName, existSubnetMap := range existEnhancedAddrMap {
-		existLink, err := netlink.LinkByName(existLinkName)
-		if err != nil {
-			return fmt.Errorf("find exist link %v failed: %v", existLinkName, err)
-		}
-
 		if targetSubnetMap, exist := m.interfaceToSubnetMap[existLinkName]; !exist {
 			// link doesn't need enhanced address any more
 			for _, enhancedAddr := range existSubnetMap {
-				if err := netlink.AddrDel(existLink, &enhancedAddr); err != nil {
+				if err := netlink.AddrDel(existLinkMap[existLinkName], &enhancedAddr); err != nil {
 					return fmt.Errorf("delete link enhanced addr %v failed: %v", enhancedAddr.String(), err)
 				}
 			}
@@ -131,7 +131,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*ramav1.IPI
 			// subnet doesn't need enhanced address any more
 			for subnetString, enhancedAddr := range existSubnetMap {
 				if _, exist := targetSubnetMap[subnetString]; !exist {
-					if err := netlink.AddrDel(existLink, &enhancedAddr); err != nil {
+					if err := netlink.AddrDel(existLinkMap[existLinkName], &enhancedAddr); err != nil {
 						return fmt.Errorf("delete link subnet enhanced addr %v failed: %v", enhancedAddr.String(), err)
 					}
 				}
@@ -148,13 +148,18 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*ramav1.IPI
 
 		for subnetString, podIP := range targetSubnetMap {
 			var outOfDateEnhancedAddr *netlink.Addr
-			_, subnetCidr, err := net.ParseCIDR(subnetString)
-			if err != nil {
-				return fmt.Errorf("parse subnet cidr %v failed: %v", subnetString, err)
+
+			// check if manual address exist for subnet, if exist, don't do anything
+			if _, exist := existManualAddrSubnetMap[forwardNodeIfName]; exist {
+				if _, exist := existManualAddrSubnetMap[forwardNodeIfName][subnetString]; exist {
+					// When add a new address to an interface with old addresses exist, and mask length
+					// of all address are different, new address will never become a secondary address.
+					continue
+				}
 			}
 
-			// subnet enhanced address exists
 			if _, exist := existEnhancedAddrMap[forwardNodeIfName]; exist {
+				// subnet enhanced address already exists
 				if _, exist := existEnhancedAddrMap[forwardNodeIfName][subnetString]; exist {
 					// if forward node if has exist enhanced address which is in the same subnet with target pod ip
 					if enhancedAddr, exist := existEnhancedAddrMap[forwardNodeIfName][subnetString]; exist {
@@ -181,6 +186,11 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*ramav1.IPI
 						outOfDateEnhancedAddr = &enhancedAddr
 					}
 				}
+			}
+
+			_, subnetCidr, err := net.ParseCIDR(subnetString)
+			if err != nil {
+				return fmt.Errorf("parse subnet cidr %v failed: %v", subnetString, err)
 			}
 
 			if err := ensureSubnetEnhancedAddr(forwardNodeIf, &netlink.Addr{
