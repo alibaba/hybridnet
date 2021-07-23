@@ -224,7 +224,7 @@ func (m *Manager) SyncRoutes() error {
 		}
 	}
 
-	var allValidSubnet []*net.IPNet
+	var allValidUnderlaySubnet []*net.IPNet
 	for _, info := range m.subnetInfoMap {
 		if info.isOverlay {
 			if _, exist := existOverlaySubnetRouteMap[info.cidr.String()]; !exist {
@@ -243,9 +243,9 @@ func (m *Manager) SyncRoutes() error {
 					return fmt.Errorf("add to overlay pod subnet route for %v failed: %v", info.cidr.String(), err)
 				}
 			}
+		} else {
+			allValidUnderlaySubnet = append(allValidUnderlaySubnet, info.cidr)
 		}
-
-		allValidSubnet = append(allValidSubnet, info.cidr)
 	}
 
 	// Ensure overlay mark table rule if overlay interface exist.
@@ -295,7 +295,7 @@ func (m *Manager) SyncRoutes() error {
 	for _, info := range m.subnetInfoMap {
 		// Append from pod subnet rules which don't exist and adapter subnet configuration
 		if err := ensureFromPodSubnetRuleAndRoutes(info.forwardNodeIfName, info.cidr,
-			info.gateway, info.autoNatOutgoing, info.isOverlay, m.family, allValidSubnet); err != nil {
+			info.gateway, info.autoNatOutgoing, info.isOverlay, m.family, allValidUnderlaySubnet); err != nil {
 			return fmt.Errorf("add subnet %v rule and routes failed: %v", info, err)
 		}
 	}
