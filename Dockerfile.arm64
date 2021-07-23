@@ -21,11 +21,13 @@ RUN export GOCACHE=/tmp && \
 RUN cd /go/src/github.com/oecp/rama/dist/secrets && \
     sh generate-tls-certificates.sh
 
-FROM arm64v8/alpine:3.8
+FROM arm64v8/alpine:3.14
 
 # replace apk source url
 RUN sed -i s@/dl-cdn.alpinelinux.org/@/mirrors.aliyun.com/@g /etc/apk/repositories && \
 	chmod +x /bin/*
+
+RUN apk update
 
 RUN apk add --no-cache --allow-untrusted \
     bash \
@@ -36,8 +38,10 @@ RUN apk add --no-cache --allow-untrusted \
 	conntrack-tools \
 	curl \
 	perl \
-	tar && \
-    cp /usr/etc/ethertypes /etc/ethertypes
+	tar
+
+COPY dist/images/iptables-wrapper-installer.sh /
+RUN /iptables-wrapper-installer.sh --no-sanity-check
 
 ENV CNI_VERSION=v0.9.1
 RUN mkdir -p cni-plugins/ && \
