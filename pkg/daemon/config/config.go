@@ -110,9 +110,9 @@ func ParseFlags() (*Configuration, error) {
 		argVlanCheckTimeout           = pflag.Duration("vlan-check-timeout", DefaultVlanCheckTimeout, "The timeout of vlan network environment check while pod creating")
 		argVxlanUDPPort               = pflag.Int("vxlan-udp-port", DefaultVxlanUDPPort, "The local udp port which vxlan tunnel use")
 		argVxlanBaseReachableTime     = pflag.Duration("vxlan-base-reachable-time", DefaultVxlanBaseReachableTime, "The time for neigh caches of vxlan device to get STALE from REACHABLE")
-		argNeighGCThresh1             = pflag.Int("neigh-gc-thresh1", DefaultNeighGCThresh1, "value to set net.ipv4/ipv6.neigh.default.gc_thresh1")
-		argNeighGCThresh2             = pflag.Int("neigh-gc-thresh2", DefaultNeighGCThresh2, "value to set net.ipv4/ipv6.neigh.default.gc_thresh2")
-		argNeighGCThresh3             = pflag.Int("neigh-gc-thresh3", DefaultNeighGCThresh3, "value to set net.ipv4/ipv6.neigh.default.gc_thresh3")
+		argNeighGCThresh1             = pflag.Int("neigh-gc-thresh1", DefaultNeighGCThresh1, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh1")
+		argNeighGCThresh2             = pflag.Int("neigh-gc-thresh2", DefaultNeighGCThresh2, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh2")
+		argNeighGCThresh3             = pflag.Int("neigh-gc-thresh3", DefaultNeighGCThresh3, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh3")
 		argExtraNodeLocalVxlanIPCidrs = pflag.String("extra-node-local-vxlan-ip-cidrs", "", "Cidrs to select node extra local vxlan ip, e.g., \"192.168.10.0/24,10.2.3.0/24\"")
 	)
 

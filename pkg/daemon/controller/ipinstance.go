@@ -130,13 +130,15 @@ func (c *Controller) reconcileIPInfo() error {
 	c.neighV4Manager.ResetInfos()
 	c.neighV6Manager.ResetInfos()
 
+	c.addrV4Manager.ResetInfos()
+
 	for _, ipInstance := range ipInstances {
 		netID := ipInstance.Spec.Address.NetID
 		if netID == nil {
 			return fmt.Errorf("NetID of ip instance %v should not be nil", ipInstance.Name)
 		}
 
-		podIP, _, err := net.ParseCIDR(ipInstance.Spec.Address.IP)
+		podIP, subnetCidr, err := net.ParseCIDR(ipInstance.Spec.Address.IP)
 		if err != nil {
 			return fmt.Errorf("parse pod ip %v error: %v", ipInstance.Spec.Address.IP, err)
 		}
@@ -153,6 +155,11 @@ func (c *Controller) reconcileIPInfo() error {
 			if err != nil {
 				return fmt.Errorf("generate vlan forward node interface name failed: %v", err)
 			}
+
+			if ipInstance.Spec.Address.Version == ramav1.IPv4 {
+				c.addrV4Manager.TryAddPodInfo(forwardNodeIfName, subnetCidr, podIP)
+			}
+
 		case ramav1.NetworkTypeOverlay:
 			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
 			if err != nil {
@@ -177,6 +184,10 @@ func (c *Controller) reconcileIPInfo() error {
 
 	if err := c.neighV6Manager.SyncNeighs(); err != nil {
 		return fmt.Errorf("sync ipv6 neighs failed: %v", err)
+	}
+
+	if err := c.addrV4Manager.SyncAddresses(c.getIPInstanceByAddress); err != nil {
+		return fmt.Errorf("sync ipv4 addresses failed: %v", err)
 	}
 
 	return nil
