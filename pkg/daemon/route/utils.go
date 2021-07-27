@@ -21,6 +21,10 @@ import (
 	"net"
 	"strings"
 
+	"golang.org/x/sys/unix"
+
+	daemonutils "github.com/oecp/rama/pkg/daemon/utils"
+
 	"github.com/oecp/rama/pkg/daemon/containernetwork"
 
 	"github.com/vishvananda/netlink"
@@ -33,6 +37,18 @@ const (
 	MaxRulePriority   = 32767
 	NodeLocalTableNum = 255
 )
+
+type SubnetInfo struct {
+	cidr              *net.IPNet
+	gateway           net.IP
+	forwardNodeIfName string
+	autoNatOutgoing   bool
+	excludeIPs        []net.IP
+	reservedIPs       []net.IP
+	includedIPRanges  []*daemonutils.IPRange
+}
+
+type SubnetInfoMap map[string]*SubnetInfo
 
 func checkIfRouteTableEmpty(tableNum, family int) (bool, error) {
 	routeList, err := netlink.RouteListFiltered(family, &netlink.Route{
@@ -193,7 +209,8 @@ func clearRouteTable(table int, family int) error {
 }
 
 func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
-	gateway net.IP, autoNatOutgoing, isOverlay bool, family int, allSubnet []*net.IPNet) error {
+	gateway net.IP, autoNatOutgoing, isOverlay bool, family int, underlaySubnetInfoMap SubnetInfoMap,
+	underlayExcludeIPBlockMap map[string]*net.IPNet) error {
 
 	var table int
 	var err error
@@ -263,14 +280,14 @@ func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
 			}
 
 		} else {
-			validSubnetMap := map[string]*net.IPNet{}
-			for _, cidr := range allSubnet {
-				validSubnetMap[cidr.String()] = cidr
-			}
-
 			for _, route := range routeList {
+				// skip exclude routes
+				if isExcludeRoute(&route) {
+					continue
+				}
+
 				if route.Dst != nil {
-					if _, exist := validSubnetMap[route.Dst.String()]; exist {
+					if _, exist := underlaySubnetInfoMap[route.Dst.String()]; exist {
 						continue
 					}
 				} else {
@@ -283,10 +300,10 @@ func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
 				}
 			}
 
-			for _, subnet := range validSubnetMap {
+			for _, subnet := range underlaySubnetInfoMap {
 				subnetRoute := &netlink.Route{
 					LinkIndex: forwardLink.Attrs().Index,
-					Dst:       subnet,
+					Dst:       subnet.cidr,
 					Table:     table,
 					Scope:     netlink.SCOPE_UNIVERSE,
 				}
@@ -295,7 +312,13 @@ func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
 					return fmt.Errorf("set overlay route %v for table %v failed: %v", subnetRoute.String(), table, err)
 				}
 			}
+
+			// For overlay pod to access underlay excluded ip addresses, should not be forced to pass through vxlan device.
+			if err := ensureExcludedIPBlockRoutes(underlayExcludeIPBlockMap, table, family); err != nil {
+				return fmt.Errorf("ensure exclude all ip block routes failed: %v", err)
+			}
 		}
+
 	} else {
 		defaultRoute := &netlink.Route{
 			LinkIndex: forwardLink.Attrs().Index,
@@ -366,4 +389,59 @@ func defaultRouteDstByFamily(family int) *net.IPNet {
 		IP:   net.ParseIP("0.0.0.0").To4(),
 		Mask: net.CIDRMask(0, 32),
 	}
+}
+
+func ensureExcludedIPBlockRoutes(excludeIPBlockMap map[string]*net.IPNet, table, family int) error {
+	excludedRouteList, err := netlink.RouteListFiltered(family, &netlink.Route{
+		Table: table,
+		Type:  unix.RTN_THROW,
+	}, netlink.RT_FILTER_TABLE|netlink.RT_FILTER_TYPE)
+
+	if err != nil {
+		return fmt.Errorf("list excluded routes failed: %v", err)
+	}
+
+	for _, route := range excludedRouteList {
+		if _, exist := excludeIPBlockMap[route.Dst.String()]; !exist {
+			if err := netlink.RouteDel(&route); err != nil {
+				return fmt.Errorf("delete excluded route %v failed: %v", route, err)
+			}
+		}
+	}
+
+	for _, cidr := range excludeIPBlockMap {
+		if err := netlink.RouteReplace(&netlink.Route{
+			Dst:   cidr,
+			Table: table,
+			Type:  unix.RTN_THROW,
+		}); err != nil {
+			return fmt.Errorf("add excluded route for block %v failed: %v", cidr.String(), err)
+		}
+	}
+
+	return nil
+}
+
+func findExcludeIPBlockMap(subnetInfoMap SubnetInfoMap) (map[string]*net.IPNet, error) {
+	excludeIPBlockMap := map[string]*net.IPNet{}
+	for _, info := range subnetInfoMap {
+		excludeIPBlocks, err := daemonutils.FindSubnetExcludeIPBlocks(info.cidr, info.includedIPRanges,
+			info.gateway, info.excludeIPs, info.reservedIPs)
+
+		if err != nil {
+			return nil, fmt.Errorf("find excluded ip blocks for subnet %v failed: %v", info.cidr, err)
+		}
+
+		for _, block := range excludeIPBlocks {
+			excludeIPBlockMap[block.String()] = block
+		}
+	}
+	return excludeIPBlockMap, nil
+}
+
+func isExcludeRoute(route *netlink.Route) bool {
+	if route == nil {
+		return false
+	}
+	return route.Type == unix.RTN_THROW
 }

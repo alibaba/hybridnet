@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/vishvananda/netlink"
+
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/daemon/iptables"
 	"github.com/oecp/rama/pkg/daemon/neigh"
@@ -78,4 +80,61 @@ func initErrorMessageWrapper(prefix string) func(string, ...interface{}) string 
 	return func(format string, args ...interface{}) string {
 		return prefix + fmt.Sprintf(format, args...)
 	}
+}
+
+func parseSubnetSpecRangeMeta(addressRange *ramav1.AddressRange) (cidr *net.IPNet, gateway, start, end net.IP,
+	excludeIPs, reservedIPs []net.IP, err error) {
+
+	if addressRange == nil {
+		return nil, nil, nil, nil, nil, nil,
+			fmt.Errorf("cannot parse a nil range")
+	}
+
+	cidr, err = netlink.ParseIPNet(addressRange.CIDR)
+	if err != nil {
+		return nil, nil, nil, nil, nil, nil,
+			fmt.Errorf("failed to parse subnet cidr %v error: %v", addressRange.CIDR, err)
+	}
+
+	gateway = net.ParseIP(addressRange.Gateway)
+	if gateway == nil {
+		return nil, nil, nil, nil, nil, nil,
+			fmt.Errorf("invalid gateway ip %v", addressRange.Gateway)
+	}
+
+	if addressRange.Start != "" {
+		start = net.ParseIP(addressRange.Start)
+		if start == nil {
+			return nil, nil, nil, nil, nil, nil,
+				fmt.Errorf("invalid start ip %v", addressRange.Start)
+		}
+	}
+
+	if addressRange.End != "" {
+		end = net.ParseIP(addressRange.End)
+		if end == nil {
+			return nil, nil, nil, nil, nil, nil,
+				fmt.Errorf("invalid end ip %v", addressRange.End)
+		}
+	}
+
+	for _, ipString := range addressRange.ExcludeIPs {
+		excludeIP := net.ParseIP(ipString)
+		if excludeIP == nil {
+			return nil, nil, nil, nil, nil, nil,
+				fmt.Errorf("invalid exclude ip %v", ipString)
+		}
+		excludeIPs = append(excludeIPs, excludeIP)
+	}
+
+	for _, ipString := range addressRange.ReservedIPs {
+		reservedIP := net.ParseIP(ipString)
+		if reservedIP == nil {
+			return nil, nil, nil, nil, nil, nil,
+				fmt.Errorf("invalid reserved ip %v", ipString)
+		}
+		reservedIPs = append(reservedIPs, reservedIP)
+	}
+
+	return
 }
