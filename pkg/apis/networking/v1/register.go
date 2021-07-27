@@ -51,6 +51,12 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&SubnetList{},
 		&Network{},
 		&NetworkList{},
+		&RemoteCluster{},
+		&RemoteClusterList{},
+		&RemoteSubnet{},
+		&RemoteSubnetList{},
+		&RemoteVtep{},
+		&RemoteVtepList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil

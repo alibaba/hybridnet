@@ -76,6 +76,34 @@ func (c *Controller) getIPInstanceByAddress(address net.IP) (*ramav1.IPInstance,
 	return nil, fmt.Errorf("ip instance for address %v not found", address.String())
 }
 
+func (c *Controller) getRemoteVtepByPodAddress(address net.IP) (*ramav1.RemoteVtep, error) {
+	// try to find remote pod ip
+	remoteVtepList, err := c.remoteVtepIndexer.ByIndex(ByPodIPListIndexer, address.String())
+	if err != nil {
+		return nil, fmt.Errorf("get remote vtep by ip %v indexer failed: %v", address.String(), err)
+	}
+
+	if len(remoteVtepList) > 1 {
+		return nil, fmt.Errorf("get more than one remote vtep for ip %v", address.String())
+	}
+
+	if len(remoteVtepList) == 1 {
+		vtep, ok := remoteVtepList[0].(*ramav1.RemoteVtep)
+		if !ok {
+			return nil, fmt.Errorf("transform obj to remote vtep failed")
+		}
+
+		return vtep, nil
+	}
+
+	if len(remoteVtepList) == 0 {
+		// not found
+		return nil, nil
+	}
+
+	return nil, fmt.Errorf("remote vtep for pod address %v not found", address.String())
+}
+
 func initErrorMessageWrapper(prefix string) func(string, ...interface{}) string {
 	return func(format string, args ...interface{}) string {
 		return prefix + fmt.Sprintf(format, args...)

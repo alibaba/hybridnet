@@ -72,6 +72,12 @@ type Manager struct {
 	protocol Protocol
 
 	c chan struct{}
+
+	// add cluster-mesh remote ips
+	remoteOverlaySubnet  []*net.IPNet
+	remoteUnderlaySubnet []*net.IPNet
+	remoteNodeIPList     []net.IP
+	remoteOverlayIfName  string
 }
 
 func (mgr *Manager) lock() {
@@ -118,6 +124,11 @@ func CreateIPtablesManager(protocol Protocol) (*Manager, error) {
 
 		protocol: protocol,
 		c:        make(chan struct{}, 1),
+
+		remoteOverlaySubnet:  []*net.IPNet{},
+		remoteUnderlaySubnet: []*net.IPNet{},
+		remoteNodeIPList:     []net.IP{},
+		remoteOverlayIfName:  RemoteOverlayNotExists,
 	}
 
 	return mgr, nil
@@ -150,7 +161,20 @@ func (mgr *Manager) SyncRules() error {
 	mgr.lock()
 	defer mgr.unlock()
 
-	if mgr.overlayIfName == "" {
+	// check out remote subnet configurations
+	configRemote, rcErr := mgr.configureRemote()
+	if rcErr != nil {
+		return fmt.Errorf("canot sync iptables rules with illegal remote overlay interface name, [local=%s, remote=%s]",
+			mgr.overlayIfName, mgr.remoteOverlayIfName)
+	}
+
+	// find out overlay interface name
+	var overlayIfName = mgr.overlayIfName
+	if mgr.isValidRemoteOverlayIfName() {
+		overlayIfName = mgr.remoteOverlayIfName
+	}
+
+	if overlayIfName == "" {
 		return fmt.Errorf("cannot sync iptables rules with empty overlay interface name")
 	}
 
@@ -168,6 +192,18 @@ func (mgr *Manager) SyncRules() error {
 
 	for _, ip := range mgr.nodeIPList {
 		nodeIPs = append(nodeIPs, ip.String())
+	}
+
+	if configRemote {
+		for _, cidr := range mgr.remoteOverlaySubnet {
+			overlayIPNets = append(overlayIPNets, cidr.String())
+		}
+		for _, cidr := range mgr.remoteUnderlaySubnet {
+			allIPNets = append(allIPNets, cidr.String())
+		}
+		for _, ip := range mgr.remoteNodeIPList {
+			nodeIPs = append(nodeIPs, ip.String())
+		}
 	}
 
 	allIPNets = append(allIPNets, overlayIPNets...)
@@ -212,8 +248,8 @@ func (mgr *Manager) SyncRules() error {
 	writeLine(mangleChains, utiliptables.MakeChainLine(ChainRamaPostRouting))
 
 	// Append rules.
-	writeLine(natRules, generateMasqueradeRuleSpec(mgr.overlayIfName, mgr.protocol)...)
-	writeLine(filterRules, generateVxlanFilterRuleSpec(mgr.overlayIfName, mgr.protocol)...)
+	writeLine(natRules, generateMasqueradeRuleSpec(overlayIfName, mgr.protocol)...)
+	writeLine(filterRules, generateVxlanFilterRuleSpec(overlayIfName, mgr.protocol)...)
 	writeLine(mangleRules, generateVxlanPodToNodeReplyMarkRuleSpec(mgr.protocol)...)
 	writeLine(mangleRules, generateVxlanPodToNodeReplyRemoveMarkRuleSpec(mgr.protocol)...)
 

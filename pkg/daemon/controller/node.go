@@ -161,16 +161,29 @@ func (c *Controller) reconcileNodeInfo() error {
 		return fmt.Errorf("failed to list network %v", err)
 	}
 
-	var overlayNetwork *ramav1.Network
+	remoteSubnetList, err := c.remoteSubnetLister.List(labels.Everything())
+	if err != nil {
+		return fmt.Errorf("failed to list remote subnet %v", err)
+	}
+
+	var overlayNetID *uint32
 	for _, network := range networkList {
 		if ramav1.GetNetworkType(network) == ramav1.NetworkTypeOverlay {
-			overlayNetwork = network
+			overlayNetID = network.Spec.NetID
+			break
+		}
+	}
+
+	// extract overlayNetID from remote subnets
+	for _, remoteSubnet := range remoteSubnetList {
+		if ramav1.GetRemoteSubnetType(remoteSubnet) == ramav1.NetworkTypeOverlay {
+			overlayNetID = remoteSubnet.Spec.OverlayNetID
 			break
 		}
 	}
 
 	// overlay network not exist, do nothing
-	if overlayNetwork == nil {
+	if overlayNetID == nil {
 		return nil
 	}
 
@@ -218,7 +231,7 @@ func (c *Controller) reconcileNodeInfo() error {
 	}
 	vtepMac := link.Attrs().HardwareAddr
 
-	vxlanLinkName, err := containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, overlayNetwork.Spec.NetID)
+	vxlanLinkName, err := containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, overlayNetID)
 	if err != nil {
 		return fmt.Errorf("generate vxlan interface name failed: %v", err)
 	}
@@ -268,7 +281,12 @@ func (c *Controller) reconcileNodeInfo() error {
 		return fmt.Errorf("list node failed: %v", err)
 	}
 
-	vxlanDev, err := vxlan.NewVxlanDevice(vxlanLinkName, int(*overlayNetwork.Spec.NetID),
+	remoteVtepList, err := c.remoteVtepLister.List(labels.Everything())
+	if err != nil {
+		return fmt.Errorf("list remote vtep failed: %v", err)
+	}
+
+	vxlanDev, err := vxlan.NewVxlanDevice(vxlanLinkName, int(*overlayNetID),
 		c.config.NodeVxlanIfName, vtepIP, c.config.VxlanUDPPort, c.config.VxlanBaseReachableTime, true)
 	if err != nil {
 		return fmt.Errorf("create vxlan device %v failed: %v", vxlanLinkName, err)
@@ -315,6 +333,10 @@ func (c *Controller) reconcileNodeInfo() error {
 		return fmt.Errorf("update node ip cache failed: %v", err)
 	}
 
+	if err := c.remoteVtepCache.UpdateRemoteVtepIPs(remoteVtepList); err != nil {
+		return fmt.Errorf("update remote vtep ip cache failed: %v", err)
+	}
+
 	for _, node := range nodeList {
 		if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
 			node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
@@ -334,6 +356,20 @@ func (c *Controller) reconcileNodeInfo() error {
 		}
 
 		vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
+	}
+
+	for _, remoteVtep := range remoteVtepList {
+		vtepMac, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
+		if err != nil {
+			return fmt.Errorf("parse node vtep mac string %v failed: %v", remoteVtep.Spec.VtepMAC, err)
+		}
+
+		vtepIP := net.ParseIP(remoteVtep.Spec.VtepIP)
+		if vtepIP == nil {
+			return fmt.Errorf("parse node vtep ip string %v failed", remoteVtep.Spec.VtepIP)
+		}
+
+		vxlanDev.RecordRemoteVtepInfo(vtepMac, vtepIP)
 	}
 
 	if err := vxlanDev.SyncVtepInfo(); err != nil {

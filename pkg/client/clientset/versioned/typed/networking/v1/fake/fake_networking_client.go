@@ -35,6 +35,18 @@ func (c *FakeNetworkingV1) Networks() v1.NetworkInterface {
 	return &FakeNetworks{c}
 }
 
+func (c *FakeNetworkingV1) RemoteClusters() v1.RemoteClusterInterface {
+	return &FakeRemoteClusters{c}
+}
+
+func (c *FakeNetworkingV1) RemoteSubnets() v1.RemoteSubnetInterface {
+	return &FakeRemoteSubnets{c}
+}
+
+func (c *FakeNetworkingV1) RemoteVteps() v1.RemoteVtepInterface {
+	return &FakeRemoteVteps{c}
+}
+
 func (c *FakeNetworkingV1) Subnets() v1.SubnetInterface {
 	return &FakeSubnets{c}
 }
