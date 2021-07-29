@@ -290,7 +290,7 @@ func (m *Manager) SyncRoutes() error {
 		if err := ensureFromPodSubnetRuleAndRoutes(info.forwardNodeIfName, info.cidr,
 			info.gateway, info.autoNatOutgoing, true, m.family,
 			m.underlaySubnetInfoMap, underlayExcludeIPBlockMap); err != nil {
-			return fmt.Errorf("add subnet %v rule and routes failed: %v", info, err)
+			return fmt.Errorf("add subnet %v rule and routes failed: %v", info.cidr, err)
 		}
 	}
 
@@ -299,7 +299,7 @@ func (m *Manager) SyncRoutes() error {
 		if err := ensureFromPodSubnetRuleAndRoutes(info.forwardNodeIfName, info.cidr,
 			info.gateway, info.autoNatOutgoing, false, m.family,
 			nil, nil); err != nil {
-			return fmt.Errorf("add subnet %v rule and routes failed: %v", info, err)
+			return fmt.Errorf("add subnet %v rule and routes failed: %v", info.cidr, err)
 		}
 	}
 

@@ -164,6 +164,11 @@ func checkIsFromPodSubnetRule(rule netlink.Rule, family int) (bool, error) {
 	}
 
 	for _, route := range routes {
+		// skip exclude routes
+		if isExcludeRoute(&route) {
+			continue
+		}
+
 		link, err := netlink.LinkByIndex(route.LinkIndex)
 		if err != nil {
 			return false, fmt.Errorf("get link for route %v failed: %v", route.String(), err)
@@ -225,21 +230,6 @@ func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
 		table, err = findEmptyRouteTable(family)
 		if err != nil {
 			return fmt.Errorf("find empty route table failed: %v", err)
-		}
-
-		priority, err := findHighestUnusedRulePriority(family)
-		if err != nil {
-			return fmt.Errorf("find highest unused rule priority failed: %v", err)
-		}
-
-		rule := netlink.NewRule()
-		rule.Table = table
-		rule.Priority = priority
-		rule.Src = cidr
-		rule.Family = family
-
-		if err := netlink.RuleAdd(rule); err != nil {
-			return fmt.Errorf("add rule %v failed: %v", rule, err)
 		}
 	} else {
 		table = existRule.Table
@@ -320,12 +310,20 @@ func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
 		}
 
 	} else {
-		defaultRoute := &netlink.Route{
-			LinkIndex: forwardLink.Attrs().Index,
-			Table:     table,
-			Scope:     netlink.SCOPE_UNIVERSE,
-			Flags:     int(netlink.FLAG_ONLINK),
-			Gw:        gateway,
+		localAddrList, err := netlink.AddrList(nil, family)
+		if err != nil {
+			return fmt.Errorf("list local addresses failed: %v", err)
+		}
+
+		isLocalSubnet := false
+		for _, address := range localAddrList {
+			if cidr.Contains(address.IP) {
+				// Check if address is an enhanced address or used to connect a subnet.
+				if address.Flags&unix.IFA_F_NOPREFIXROUTE == 0 {
+					isLocalSubnet = true
+					break
+				}
+			}
 		}
 
 		subnetDirectRoute := &netlink.Route{
@@ -335,12 +333,72 @@ func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
 			Scope:     netlink.SCOPE_UNIVERSE,
 		}
 
+		if isLocalSubnet {
+			// Check if forward interface has default route which has the same gateway ip with this rama subnet.
+			defaultRoute, err := containernetwork.GetDefaultRoute(family)
+			if err != nil && err != daemonutils.NotExist {
+				return fmt.Errorf("get default route failed: %v", err)
+			}
+
+			if defaultRoute != nil {
+				if defaultRoute.LinkIndex == forwardLink.Attrs().Index &&
+					defaultRoute.Gw != nil && !defaultRoute.Gw.Equal(gateway) {
+					return fmt.Errorf("exist default route of forward interface %v has a different gateway %v with %v",
+						forwardNodeIfName, defaultRoute.Gw, gateway)
+				}
+			}
+
+			// Check if forward interface has subnet direct route.
+			directRouteList, err := netlink.RouteListFiltered(family, &netlink.Route{
+				LinkIndex: forwardLink.Attrs().Index,
+				Dst:       cidr,
+			}, netlink.RT_FILTER_OIF|netlink.RT_FILTER_DST)
+
+			if err != nil {
+				return fmt.Errorf("list direct route for interface %v and subnet %v failed: %v",
+					forwardNodeIfName, cidr.String(), err)
+			}
+
+			if len(directRouteList) == 0 {
+				return fmt.Errorf("forward interface %v should have direct route for local subnet %v",
+					forwardNodeIfName, cidr.String())
+			}
+
+			subnetDirectRoute.Src = directRouteList[0].Src
+		}
+
+		defaultRoute := &netlink.Route{
+			LinkIndex: forwardLink.Attrs().Index,
+			Table:     table,
+			Scope:     netlink.SCOPE_UNIVERSE,
+			Flags:     int(netlink.FLAG_ONLINK),
+			Gw:        gateway,
+		}
+
 		if err := netlink.RouteReplace(subnetDirectRoute); err != nil {
-			return fmt.Errorf("add vlan subent %v direct route %v failed: %v", cidr.String(), defaultRoute.String(), err)
+			return fmt.Errorf("add vlan subent %v direct route %v failed: %v", cidr.String(), subnetDirectRoute.String(), err)
 		}
 
 		if err := netlink.RouteReplace(defaultRoute); err != nil {
 			return fmt.Errorf("add vlan subnet %v default route %v failed: %v", cidr.String(), defaultRoute.String(), err)
+		}
+	}
+
+	// Add rule at the last in case error happens while failed to add any routes to table.
+	if !ruleExist {
+		priority, err := findHighestUnusedRulePriority(family)
+		if err != nil {
+			return fmt.Errorf("find highest unused rule priority failed: %v", err)
+		}
+
+		rule := netlink.NewRule()
+		rule.Table = table
+		rule.Priority = priority
+		rule.Src = cidr
+		rule.Family = family
+
+		if err := netlink.RuleAdd(rule); err != nil {
+			return fmt.Errorf("add rule %v failed: %v", rule, err)
 		}
 	}
 
