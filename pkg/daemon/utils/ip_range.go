@@ -1,3 +1,19 @@
+/*
+Copyright 2021 The Rama Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package utils
 
 import (
@@ -33,19 +49,24 @@ func (ir *IPRange) TryAddIP(ipAddr net.IP) (success bool) {
 	if ipAddr.Equal(ip.PrevIP(ir.start)) {
 		ir.start = ipAddr
 		return true
-	} else if ipAddr.Equal(ip.NextIP(ir.end)) {
+	}
+
+	if ipAddr.Equal(ip.NextIP(ir.end)) {
 		ir.end = ipAddr
 		return true
-	} else if ip.Cmp(ipAddr, ir.start) >= 0 && ip.Cmp(ipAddr, ir.end) <= 0 {
+	}
+
+	if ip.Cmp(ipAddr, ir.start) >= 0 && ip.Cmp(ipAddr, ir.end) <= 0 {
 		// a range exist which includes this ip address
 		return true
 	}
+
 	return false
 }
 
 // Translate a subnet range into a series ip block description.
 func FindSubnetExcludeIPBlocks(cidr *net.IPNet, includedRanges []*IPRange, gateway net.IP,
-	excludeIPs, reservedIPs []net.IP) ([]*net.IPNet, error) {
+	excludeIPs []net.IP) ([]*net.IPNet, error) {
 
 	cidrStart := cidr.IP
 	cidrEnd := LastIP(cidr)
@@ -104,10 +125,6 @@ func FindSubnetExcludeIPBlocks(cidr *net.IPNet, includedRanges []*IPRange, gatew
 	}
 
 	allExcludedIPs := excludeIPs
-	if len(reservedIPs) != 0 {
-		allExcludedIPs = append(allExcludedIPs, reservedIPs...)
-	}
-
 	if gateway != nil {
 		allExcludedIPs = append(allExcludedIPs, gateway)
 	}

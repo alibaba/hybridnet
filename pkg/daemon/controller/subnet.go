@@ -122,7 +122,7 @@ func (c *Controller) reconcileSubnet() error {
 		}
 
 		subnetCidr, gatewayIP, startIP, endIP, excludeIPs,
-			reservedIPs, err := parseSubnetSpecRangeMeta(&subnet.Spec.Range)
+			_, err := parseSubnetSpecRangeMeta(&subnet.Spec.Range)
 
 		if err != nil {
 			return fmt.Errorf("parse subnet %v spec range meta failed: %v", subnet.Name, err)
@@ -148,7 +148,7 @@ func (c *Controller) reconcileSubnet() error {
 
 		// create policy route
 		routeManager := c.getRouterManager(subnet.Spec.Range.Version)
-		routeManager.AddSubnetInfo(subnetCidr, gatewayIP, startIP, endIP, excludeIPs, reservedIPs,
+		routeManager.AddSubnetInfo(subnetCidr, gatewayIP, startIP, endIP, excludeIPs,
 			forwardNodeIfName, autoNatOutgoing, isOverlay)
 	}
 

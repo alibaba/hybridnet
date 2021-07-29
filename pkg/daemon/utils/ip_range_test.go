@@ -1,3 +1,19 @@
+/*
+Copyright 2021 The Rama Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package utils
 
 import (
@@ -11,7 +27,6 @@ type TestSubnetSpec struct {
 	includedRanges []*IPRange
 	gateway        net.IP
 	excludeIPs     []net.IP
-	reservedIPs    []net.IP
 
 	expectIPBlocks []*net.IPNet
 }
@@ -184,8 +199,6 @@ func TestFindSubnetExcludeIPBlocks(t *testing.T) {
 				net.ParseIP("192.168.3.50"),
 				net.ParseIP("192.168.3.120"),
 				net.ParseIP("192.168.3.121"),
-			},
-			reservedIPs: []net.IP{
 				net.ParseIP("192.168.3.160"),
 				net.ParseIP("192.168.3.207"),
 				net.ParseIP("192.168.3.224"),
@@ -228,23 +241,6 @@ func TestFindSubnetExcludeIPBlocks(t *testing.T) {
 			excludeIPs: []net.IP{
 				net.ParseIP("192.168.3.100"),
 			},
-			reservedIPs: []net.IP{
-				net.ParseIP("192.168.3.100"),
-			},
-			expectIPBlocks: []*net.IPNet{
-				{
-					IP:   net.ParseIP("192.168.3.100"),
-					Mask: net.CIDRMask(32, 32),
-				},
-			},
-		}, {
-			cidr: &net.IPNet{
-				IP:   net.ParseIP("192.168.3.100"),
-				Mask: net.CIDRMask(32, 32),
-			},
-			reservedIPs: []net.IP{
-				net.ParseIP("192.168.3.100"),
-			},
 			expectIPBlocks: []*net.IPNet{
 				{
 					IP:   net.ParseIP("192.168.3.100"),
@@ -254,19 +250,19 @@ func TestFindSubnetExcludeIPBlocks(t *testing.T) {
 		},
 	}
 
-	for _, test := range testCases {
+	for index, test := range testCases {
 		ipBlocks, _ := FindSubnetExcludeIPBlocks(test.cidr, test.includedRanges,
-			test.gateway, test.excludeIPs, test.reservedIPs)
+			test.gateway, test.excludeIPs)
 
 		if !blockSliceEqual(ipBlocks, test.expectIPBlocks) {
-			t.Fatalf("failed to parse ip range %v, result ip blocks: %v", test.String(), ipBlocks)
+			t.Fatalf("failed to parse case %v ip range %v, result ip blocks: %v", index, test.String(), ipBlocks)
 		}
 	}
 }
 
 func (ts *TestSubnetSpec) String() string {
-	return fmt.Sprintf("cidr: %v, includedIPRanges: %v, gateway: %v, excludeIPs: %v, reservedIPs: %v",
-		ts.cidr.String(), ts.includedRanges, ts.gateway.String(), ts.excludeIPs, ts.reservedIPs)
+	return fmt.Sprintf("cidr: %v, includedIPRanges: %v, gateway: %v, excludeIPs: %v",
+		ts.cidr.String(), ts.includedRanges, ts.gateway.String(), ts.excludeIPs)
 }
 
 func blockSliceEqual(slice1, slice2 []*net.IPNet) bool {

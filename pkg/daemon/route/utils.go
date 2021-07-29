@@ -44,7 +44,6 @@ type SubnetInfo struct {
 	forwardNodeIfName string
 	autoNatOutgoing   bool
 	excludeIPs        []net.IP
-	reservedIPs       []net.IP
 	includedIPRanges  []*daemonutils.IPRange
 }
 
@@ -484,7 +483,7 @@ func findExcludeIPBlockMap(subnetInfoMap SubnetInfoMap) (map[string]*net.IPNet, 
 	excludeIPBlockMap := map[string]*net.IPNet{}
 	for _, info := range subnetInfoMap {
 		excludeIPBlocks, err := daemonutils.FindSubnetExcludeIPBlocks(info.cidr, info.includedIPRanges,
-			info.gateway, info.excludeIPs, info.reservedIPs)
+			info.gateway, info.excludeIPs)
 
 		if err != nil {
 			return nil, fmt.Errorf("find excluded ip blocks for subnet %v failed: %v", info.cidr, err)

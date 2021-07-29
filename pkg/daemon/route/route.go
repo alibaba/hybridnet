@@ -173,7 +173,7 @@ func (m *Manager) ResetInfos() {
 	m.overlaySubnetInfoMap = SubnetInfoMap{}
 }
 
-func (m *Manager) AddSubnetInfo(cidr *net.IPNet, gateway, start, end net.IP, excludeIPs, reservedIPs []net.IP,
+func (m *Manager) AddSubnetInfo(cidr *net.IPNet, gateway, start, end net.IP, excludeIPs []net.IP,
 	forwardNodeIfName string, autoNatOutgoing, isOverlay bool) {
 
 	cidrString := cidr.String()
@@ -185,15 +185,10 @@ func (m *Manager) AddSubnetInfo(cidr *net.IPNet, gateway, start, end net.IP, exc
 			autoNatOutgoing:   autoNatOutgoing,
 			includedIPRanges:  []*daemonutils.IPRange{},
 			excludeIPs:        []net.IP{},
-			reservedIPs:       []net.IP{},
 		}
 	}
 
 	subnetInfo := m.totalSubnetInfoMap[cidrString]
-
-	if len(reservedIPs) != 0 {
-		subnetInfo.reservedIPs = append(subnetInfo.reservedIPs, reservedIPs...)
-	}
 
 	if len(excludeIPs) != 0 {
 		subnetInfo.excludeIPs = append(subnetInfo.excludeIPs, excludeIPs...)
