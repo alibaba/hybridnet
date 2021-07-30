@@ -90,12 +90,12 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 
 	var returnIPAddress []request.IPAddress
 
-	backoffBase := 5 * time.Microsecond
+	backOffBase := 5 * time.Microsecond
 	retries := 11
 
 	for i := 0; i < retries; i++ {
-		time.Sleep(backoffBase)
-		backoffBase = backoffBase * 2
+		time.Sleep(backOffBase)
+		backOffBase = backOffBase * 2
 
 		pod, err := cdh.KubeClient.CoreV1().Pods(podRequest.PodNamespace).Get(context.TODO(), podRequest.PodName, metav1.GetOptions{})
 		if err != nil {

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	daemonutils "github.com/oecp/rama/pkg/daemon/utils"
 
@@ -234,4 +235,70 @@ func ListLocalAddressExceptLink(exceptLinkName string) ([]netlink.Addr, error) {
 
 func CheckIPIsGlobalUnicast(ip net.IP) bool {
 	return !ip.IsInterfaceLocalMulticast() && ip.IsGlobalUnicast()
+}
+
+func checkPodRuleExist(podCidr *net.IPNet, family int) (bool, error) {
+	ruleList, err := netlink.RuleList(family)
+	if err != nil {
+		return false, fmt.Errorf("list rule failed: %v", err)
+	}
+
+	for _, rule := range ruleList {
+		if rule.Src != nil && podCidr.String() == rule.Src.String() {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func checkPodNeighExist(podIP net.IP, forwardNodeIfIndex int, family int) (bool, error) {
+	neighList, err := netlink.NeighProxyList(forwardNodeIfIndex, family)
+	if err != nil {
+		return false, fmt.Errorf("list neighs for forward node if index %v failed: %v", forwardNodeIfIndex, err)
+	}
+
+	for _, neigh := range neighList {
+		if neigh.IP.Equal(podIP) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex int, family int) error {
+	backOffBase := 100 * time.Microsecond
+	retries := 4
+
+	for i := 0; i < retries; i++ {
+		time.Sleep(backOffBase)
+		backOffBase = backOffBase * 2
+
+		neighExist, err := checkPodNeighExist(podIP, forwardNodeIfIndex, family)
+		if err != nil {
+			return fmt.Errorf("check pod ip %v neigh exist failed: %v", podIP, err)
+		}
+
+		ruleExist, err := checkPodRuleExist(podCidr, family)
+		if err != nil {
+			return fmt.Errorf("check cidr %v rule exist failed: %v", podCidr, err)
+		}
+
+		if neighExist && ruleExist {
+			break
+		}
+
+		if i == retries-1 {
+			if !neighExist {
+				return fmt.Errorf("proxy neigh for %v is not created, waiting for daemon to create it", podIP)
+			}
+
+			if !ruleExist {
+				return fmt.Errorf("policy rule for %v is not created, waiting for daemon to create it", podCidr)
+			}
+		}
+	}
+
+	return nil
 }

@@ -154,26 +154,32 @@ func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 
 // ipAddr is a CIDR notation IP address and prefix length
 func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
-	macAddr net.HardwareAddr, vlanID *uint32, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration,
+	macAddr net.HardwareAddr, netID *uint32, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration,
 	networkType ramav1.NetworkType, neighGCThresh1, neighGCThresh2, neighGCThresh3 int) error {
 
 	var defaultRouteNets []*types.Route
 	var ipConfigs []*current.IPConfig
+	var forwardNodeIfName string
+	var err error
 
 	ipv4AddressAllocated := false
 	ipv6AddressAllocated := false
 
-	var vlanIf *net.Interface
 	if networkType == ramav1.NetworkTypeUnderlay {
-		vlanIfName, err := EnsureVlanIf(nodeIfName, vlanID)
+		forwardNodeIfName, err = GenerateVlanNetIfName(nodeIfName, netID)
 		if err != nil {
-			return fmt.Errorf("ensure vlan interface %v error: %v", vlanIfName, err)
+			return fmt.Errorf("generate vlan forward node interface name failed: %v", err)
 		}
+	} else {
+		forwardNodeIfName, err = GenerateVxlanNetIfName(nodeIfName, netID)
+		if err != nil {
+			return fmt.Errorf("generate vxlan forward node interface name failed: %v", err)
+		}
+	}
 
-		vlanIf, err = net.InterfaceByName(vlanIfName)
-		if err != nil {
-			return fmt.Errorf("get interface by name %v failed: %v", vlanIfName, err)
-		}
+	forwardNodeIf, err := net.InterfaceByName(forwardNodeIfName)
+	if err != nil {
+		return fmt.Errorf("get forward node interface %v failed: %v; if not exist, waiting for daemon to create it", forwardNodeIfName, err)
 	}
 
 	if allocatedIPs[ramav1.IPv4] != nil {
@@ -185,11 +191,14 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 			GW:  allocatedIPs[ramav1.IPv4].Gw,
 		})
 
+		podIP := allocatedIPs[ramav1.IPv4].Addr
+		podCidr := allocatedIPs[ramav1.IPv4].Cidr
+
 		ipConfigs = append(ipConfigs, &current.IPConfig{
 			Version: "4",
 			Address: net.IPNet{
-				IP:   allocatedIPs[ramav1.IPv4].Addr,
-				Mask: allocatedIPs[ramav1.IPv4].Cidr.Mask,
+				IP:   podIP,
+				Mask: podCidr.Mask,
 			},
 			Gateway:   allocatedIPs[ramav1.IPv4].Gw,
 			Interface: current.Int(0),
@@ -210,10 +219,14 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 		// Underlay gw ipv4 ip should be resolved here.
 		// Only underlay network need to do this.
 		if networkType == ramav1.NetworkTypeUnderlay {
-			if err := arp.CheckWithTimeout(vlanIf, allocatedIPs[ramav1.IPv4].Addr,
+			if err := arp.CheckWithTimeout(forwardNodeIf, podIP,
 				allocatedIPs[ramav1.IPv4].Gw, vlanCheckTimeout); err != nil {
 				return fmt.Errorf("ipv4 vlan check failed: %v", err)
 			}
+		}
+
+		if err := checkPodNetConfigReady(podIP, podCidr, forwardNodeIf.Index, netlink.FAMILY_V4); err != nil {
+			return fmt.Errorf("check pod ip %v network configuration failed: %v", podIP, err)
 		}
 	}
 
@@ -226,11 +239,14 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 			GW:  allocatedIPs[ramav1.IPv6].Gw,
 		})
 
+		podIP := allocatedIPs[ramav1.IPv6].Addr
+		podCidr := allocatedIPs[ramav1.IPv6].Cidr
+
 		ipConfigs = append(ipConfigs, &current.IPConfig{
 			Version: "6",
 			Address: net.IPNet{
-				IP:   allocatedIPs[ramav1.IPv6].Addr,
-				Mask: allocatedIPs[ramav1.IPv6].Cidr.Mask,
+				IP:   podIP,
+				Mask: podCidr.Mask,
 			},
 			Gateway:   allocatedIPs[ramav1.IPv6].Gw,
 			Interface: current.Int(0),
@@ -245,10 +261,14 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 		}
 
 		if networkType == ramav1.NetworkTypeUnderlay {
-			if err := ndp.CheckWithTimeout(vlanIf, allocatedIPs[ramav1.IPv6].Addr,
+			if err := ndp.CheckWithTimeout(forwardNodeIf, podIP,
 				allocatedIPs[ramav1.IPv6].Gw, vlanCheckTimeout); err != nil {
 				return fmt.Errorf("ipv6 vlan check failed: %v", err)
 			}
+		}
+
+		if err := checkPodNetConfigReady(podIP, podCidr, forwardNodeIf.Index, netlink.FAMILY_V6); err != nil {
+			return fmt.Errorf("check pod ip %v network configuration failed: %v", podIP, err)
 		}
 	}
 

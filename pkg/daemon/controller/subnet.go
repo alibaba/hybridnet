@@ -18,12 +18,9 @@ package controller
 
 import (
 	"fmt"
-	"net"
 
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/daemon/containernetwork"
-
-	"github.com/vishvananda/netlink"
 
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog"
@@ -124,14 +121,11 @@ func (c *Controller) reconcileSubnet() error {
 			netID = network.Spec.NetID
 		}
 
-		subnetCidr, err := netlink.ParseIPNet(subnet.Spec.Range.CIDR)
-		if err != nil {
-			return fmt.Errorf("failed to parse subnet cidr %v error: %v", subnet.Spec.Range.CIDR, err)
-		}
+		subnetCidr, gatewayIP, startIP, endIP, excludeIPs,
+			_, err := parseSubnetSpecRangeMeta(&subnet.Spec.Range)
 
-		gatewayIP := net.ParseIP(subnet.Spec.Range.Gateway)
-		if gatewayIP == nil {
-			return fmt.Errorf("invalid gateway ip %v", subnet.Spec.Range.Gateway)
+		if err != nil {
+			return fmt.Errorf("parse subnet %v spec range meta failed: %v", subnet.Name, err)
 		}
 
 		var forwardNodeIfName string
@@ -154,7 +148,8 @@ func (c *Controller) reconcileSubnet() error {
 
 		// create policy route
 		routeManager := c.getRouterManager(subnet.Spec.Range.Version)
-		routeManager.AddSubnetInfo(subnetCidr, gatewayIP, forwardNodeIfName, autoNatOutgoing, isOverlay)
+		routeManager.AddSubnetInfo(subnetCidr, gatewayIP, startIP, endIP, excludeIPs,
+			forwardNodeIfName, autoNatOutgoing, isOverlay)
 	}
 
 	if err := c.routeV4Manager.SyncRoutes(); err != nil {
