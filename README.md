@@ -1,5 +1,9 @@
 # Rama
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/oecp/rama)](https://goreportcard.com/report/github.com/oecp/rama)
+[![Github All Releases](https://img.shields.io/docker/pulls/ramanetworking/rama.svg)](https://hub.docker.com/r/ramanetworking/rama/tags)
+[![codecov](https://codecov.io/gh/oecp/rama/branch/main/graphs/badge.svg)](https://codecov.io/gh/oecp/rama)
+
 ## What is Rama?
 
 Rama is an open source container networking solution, integrated with Kubernetes and used officially by following well-known PaaS platforms,
