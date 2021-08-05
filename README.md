@@ -2,7 +2,11 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/oecp/rama)](https://goreportcard.com/report/github.com/oecp/rama)
 [![Github All Releases](https://img.shields.io/docker/pulls/ramanetworking/rama.svg)](https://hub.docker.com/r/ramanetworking/rama/tags)
+[![Version](https://img.shields.io/github/v/release/oecp/rama)](https://github.com/oecp/rama/releases)
 [![codecov](https://codecov.io/gh/oecp/rama/branch/main/graphs/badge.svg)](https://codecov.io/gh/oecp/rama)
+[![License](https://img.shields.io/github/license/oecp/rama)](https://www.apache.org/licenses/LICENSE-2.0.html)
+![workflow check](https://github.com/oecp/rama/actions/workflows/check.yml/badge.svg)
+![workflow build](https://github.com/oecp/rama/actions/workflows/build.yml/badge.svg)
 
 ## What is Rama?
 
