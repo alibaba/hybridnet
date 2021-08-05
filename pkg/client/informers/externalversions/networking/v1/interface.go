@@ -27,6 +27,12 @@ type Interface interface {
 	IPInstances() IPInstanceInformer
 	// Networks returns a NetworkInformer.
 	Networks() NetworkInformer
+	// RemoteClusters returns a RemoteClusterInformer.
+	RemoteClusters() RemoteClusterInformer
+	// RemoteSubnets returns a RemoteSubnetInformer.
+	RemoteSubnets() RemoteSubnetInformer
+	// RemoteVteps returns a RemoteVtepInformer.
+	RemoteVteps() RemoteVtepInformer
 	// Subnets returns a SubnetInformer.
 	Subnets() SubnetInformer
 }
@@ -50,6 +56,21 @@ func (v *version) IPInstances() IPInstanceInformer {
 // Networks returns a NetworkInformer.
 func (v *version) Networks() NetworkInformer {
 	return &networkInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// RemoteClusters returns a RemoteClusterInformer.
+func (v *version) RemoteClusters() RemoteClusterInformer {
+	return &remoteClusterInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// RemoteSubnets returns a RemoteSubnetInformer.
+func (v *version) RemoteSubnets() RemoteSubnetInformer {
+	return &remoteSubnetInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// RemoteVteps returns a RemoteVtepInformer.
+func (v *version) RemoteVteps() RemoteVtepInformer {
+	return &remoteVtepInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // Subnets returns a SubnetInformer.
