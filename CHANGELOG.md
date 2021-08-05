@@ -29,3 +29,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed Issues
 - Fix error data path for overlay pod to access underlay gateway and excluded ip addresses
+
+## v0.1.2
+### Improvements
+- Clear stale neigh entries for overlay network

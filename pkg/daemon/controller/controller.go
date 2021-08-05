@@ -332,6 +332,12 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 					return fmt.Errorf("parse vtep mac %v failed: %v",
 						node.Annotations[constants.AnnotationNodeVtepMac], err)
 				}
+			} else {
+				// if ip not exist, try to clear it's neigh entries
+				if err := neigh.ClearStaleNeighEntryByIP(link.Attrs().Index, ip); err != nil {
+					return fmt.Errorf("clear stale neigh for link %v and ip %v failed: %v",
+						link.Attrs().Name, ip.String(), err)
+				}
 			}
 		}
 
@@ -362,6 +368,21 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 	}
 
 	ch := make(chan netlink.NeighUpdate)
+
+	// clear stale neigh entries for vxlan interface at the first time
+	linkList, err := netlink.LinkList()
+	if err != nil {
+		return fmt.Errorf("list link failed: %v", err)
+	}
+
+	for _, link := range linkList {
+		if strings.Contains(link.Attrs().Name, containernetwork.VxlanLinkInfix) {
+			if err := neigh.ClearStaleNeighEntries(link.Attrs().Index); err != nil {
+				return fmt.Errorf("clear stale neigh entries for link %v failed: %v",
+					link.Attrs().Name, err)
+			}
+		}
+	}
 
 	hostNetNs, err := netns.Get()
 	if err != nil {
