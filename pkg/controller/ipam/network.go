@@ -20,13 +20,12 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
-
 	v1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/feature"
 	ipamtypes "github.com/oecp/rama/pkg/ipam/types"
 	"github.com/oecp/rama/pkg/utils/transform"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 func (c *Controller) filterNetwork(obj interface{}) bool {
@@ -35,23 +34,13 @@ func (c *Controller) filterNetwork(obj interface{}) bool {
 }
 
 func (c *Controller) addNetwork(obj interface{}) {
-	n, ok := obj.(*v1.Network)
-	if !ok {
-		return
-	}
-
+	n, _ := obj.(*v1.Network)
 	c.enqueueNetwork(n.Name)
 }
 
 func (c *Controller) updateNetwork(oldObj, newObj interface{}) {
-	old, ok := oldObj.(*v1.Network)
-	if !ok {
-		return
-	}
-	new, ok := newObj.(*v1.Network)
-	if !ok {
-		return
-	}
+	old, _ := oldObj.(*v1.Network)
+	new, _ := newObj.(*v1.Network)
 
 	if old.ResourceVersion == new.ResourceVersion {
 		return
@@ -69,11 +58,7 @@ func (c *Controller) updateNetwork(oldObj, newObj interface{}) {
 }
 
 func (c *Controller) delNetwork(obj interface{}) {
-	n, ok := obj.(*v1.Network)
-	if !ok {
-		return
-	}
-
+	n, _ := obj.(*v1.Network)
 	c.enqueueNetwork(n.Name)
 }
 

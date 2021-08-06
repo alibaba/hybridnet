@@ -16,6 +16,8 @@
 
 package utils
 
+import jsoniter "github.com/json-iterator/go"
+
 func PickFirstNonEmptyString(ss ...string) string {
 	for _, s := range ss {
 		if len(s) > 0 {
@@ -23,4 +25,9 @@ func PickFirstNonEmptyString(ss ...string) string {
 		}
 	}
 	return ""
+}
+
+func ToJsonString(i interface{}) string {
+	s, _ := jsoniter.MarshalToString(i)
+	return s
 }

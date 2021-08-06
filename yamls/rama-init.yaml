@@ -22,6 +22,12 @@ rules:
       - subnets/status
       - ipinstances
       - ipinstances/status
+      - remoteclusters
+      - remoteclusters/status
+      - remotesubnets
+      - remotesubnets/status
+      - remotevteps
+      - remotevteps/status
     verbs:
       - "*"
   - apiGroups:
@@ -215,3 +221,93 @@ spec:
     - name: SwitchID
       type: string
       JSONPath: .spec.switchID
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: remoteclusters.networking.alibaba.com
+spec:
+  group: networking.alibaba.com
+  version: v1
+  scope: Cluster
+  names:
+    plural: remoteclusters
+    singular: remotecluster
+    kind: RemoteCluster
+    shortNames:
+      - rcc
+  subresources:
+    status: {}
+  additionalPrinterColumns:
+    - name: Endpoint
+      type: string
+      JSONPath: .spec.connConfig.endpoint
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: remotesubnets.networking.alibaba.com
+spec:
+  group: networking.alibaba.com
+  version: v1
+  scope: Cluster
+  names:
+    plural: remotesubnets
+    singular: remotesubnet
+    kind: RemoteSubnet
+    shortNames:
+      - rcs
+  subresources:
+    status: {}
+  additionalPrinterColumns:
+    - name: Version
+      type: string
+      JSONPath: .spec.range.version
+    - name: CIDR
+      type: string
+      JSONPath: .spec.range.cidr
+    - name: Type
+      type: string
+      JSONPath: .spec.type
+    - name: ClusterName
+      type: string
+      JSONPath: .spec.clusterName
+    - name: Gateway
+      type: string
+      JSONPath: .spec.range.gateway
+    - name: OverlayNetID
+      type: integer
+      JSONPath: .spec.tunnelNetID
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: remotevteps.networking.alibaba.com
+spec:
+  group: networking.alibaba.com
+  version: v1
+  scope: Cluster
+  names:
+    plural: remotevteps
+    singular: remotevtep
+    kind: RemoteVtep
+    shortNames:
+      - rcv
+  subresources:
+    status: {}
+  additionalPrinterColumns:
+    - name: ClusterName
+      type: string
+      JSONPath: .spec.clusterName
+    - name: NodeName
+      type: string
+      JSONPath: .spec.nodeName
+    - name: VtepIP
+      type: string
+      JSONPath: .spec.vtepIP
+    - name: VtepMAC
+      type: string
+      JSONPath: .spec.vtepMAC

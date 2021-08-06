@@ -20,13 +20,16 @@ import (
 	"fmt"
 
 	"github.com/oecp/rama/pkg/controller/ipam"
+	"github.com/oecp/rama/pkg/controller/remotecluster"
+	"github.com/pkg/errors"
 	"k8s.io/klog"
 )
 
 type runFunc func(m *Manager) error
 
 var runFuncMap = map[string]runFunc{
-	ipam.ControllerName: runIPAMController,
+	ipam.ControllerName:          runIPAMController,
+	remotecluster.ControllerName: runRemoteClusterController,
 }
 
 func runIPAMController(m *Manager) error {
@@ -39,6 +42,20 @@ func runIPAMController(m *Manager) error {
 			klog.Fatalf("unexpected controller %s exit: %v", ipam.ControllerName, err)
 		}
 		klog.Warningf("controller %s exit successfully", ipam.ControllerName)
+	}()
+
+	return nil
+}
+
+func runRemoteClusterController(m *Manager) error {
+	if rcController == nil {
+		return errors.New("remote cluster Controller is not initialized")
+	}
+	go func() {
+		if err := rcController.Run(m.StopEverything); err != nil {
+			klog.Fatalf("unexpected controller %s exit: %v", remotecluster.ControllerName, err)
+		}
+		klog.Warningf("controller %s exit successfully", remotecluster.ControllerName)
 	}()
 
 	return nil

@@ -16,7 +16,11 @@
 
 package utils
 
-import "net"
+import (
+	"net"
+
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
+)
 
 func StringToIPNet(in string) *net.IPNet {
 	ip, cidr, _ := net.ParseCIDR(in)
@@ -24,10 +28,21 @@ func StringToIPNet(in string) *net.IPNet {
 	return cidr
 }
 
-// If IP is valid, return itself otherwise empty string
+// NormalizedIP If IP is valid, return itself otherwise empty string
 func NormalizedIP(ip string) string {
 	if net.ParseIP(ip) != nil {
 		return ip
 	}
 	return ""
+}
+
+func Intersect(cidr1 string, ipVersion1 networkingv1.IPVersion,
+	cidr2 string, ipVersion2 networkingv1.IPVersion) bool {
+	if ipVersion1 != ipVersion2 {
+		return false
+	}
+	_, net1, _ := net.ParseCIDR(cidr1)
+	_, net2, _ := net.ParseCIDR(cidr2)
+
+	return net1.Contains(net2.IP) || net2.Contains(net1.IP)
 }

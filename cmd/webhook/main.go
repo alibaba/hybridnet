@@ -40,6 +40,7 @@ var (
 	scheme             = runtime.NewScheme()
 	port               int
 	metricsBindAddress string
+	stopCh             = make(chan struct{})
 )
 
 func init() {
@@ -57,6 +58,10 @@ func init() {
 	// controller-runtime initialize logger with fake implementation
 	// so we should new another Logger for this
 	ctrl.SetLogger(klogr.New())
+
+	if feature.MultiClusterEnabled() {
+		validating.InitRemoteClusterInformer(stopCh)
+	}
 }
 
 func main() {
@@ -85,6 +90,7 @@ func main() {
 	})
 
 	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		close(stopCh)
 		klog.Fatal(err)
 	}
 }

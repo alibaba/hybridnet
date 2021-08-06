@@ -25,8 +25,9 @@ import (
 
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
+	"github.com/oecp/rama/pkg/feature"
+	"github.com/oecp/rama/pkg/utils"
 	"github.com/oecp/rama/pkg/utils/transform"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -113,6 +114,18 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 		// we assume that all existing subnets all have been canonicalized
 		if err = comparedSubnet.Canonicalize(); err == nil && comparedSubnet.Overlap(ipamSubnet) {
 			return admission.Denied(fmt.Sprintf("overlap with existing subnet %s", comparedSubnet.Name))
+		}
+	}
+
+	if feature.MultiClusterEnabled() {
+		rcSubnetList := &ramav1.RemoteSubnetList{}
+		if err = handler.Client.List(ctx, rcSubnetList); err != nil {
+			return admission.Errored(http.StatusInternalServerError, err)
+		}
+		for _, rcSubnet := range rcSubnetList.Items {
+			if utils.Intersect(subnet.Spec.Range.CIDR, subnet.Spec.Range.Version, rcSubnet.Spec.Range.CIDR, rcSubnet.Spec.Range.Version) {
+				return admission.Denied(fmt.Sprintf("overlap with existing RemoteSubnet %s", rcSubnet.Name))
+			}
 		}
 	}
 

@@ -23,10 +23,8 @@ import (
 	daemonconfig "github.com/oecp/rama/pkg/daemon/config"
 	"github.com/oecp/rama/pkg/daemon/controller"
 	"github.com/oecp/rama/pkg/daemon/server"
-
 	"k8s.io/client-go/informers"
 	"k8s.io/klog"
-
 	controllerruntime "sigs.k8s.io/controller-runtime"
 )
 
