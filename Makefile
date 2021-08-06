@@ -14,3 +14,6 @@ release:
 	@for arch in ${ARCHS} ; do \
 		docker build -t ${REGISTRY}/rama:${RELEASE_TAG}-$$arch -f Dockerfile.$$arch ./; \
 	done
+
+code-gen:
+	cd hack && chmod u+x ./update-codegen.sh && ./update-codegen.sh

@@ -21,4 +21,10 @@ type IPInstanceExpansion interface{}
 
 type NetworkExpansion interface{}
 
+type RemoteClusterExpansion interface{}
+
+type RemoteSubnetExpansion interface{}
+
+type RemoteVtepExpansion interface{}
+
 type SubnetExpansion interface{}
