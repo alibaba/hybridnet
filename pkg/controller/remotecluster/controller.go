@@ -208,7 +208,7 @@ func (c *Controller) updateSingleRCStatus(manager *rcmanager.Manager, rc *networ
 	manager.IsReadyLock.Lock()
 	defer manager.IsReadyLock.Unlock()
 
-	conditions := CheckCondition(c, manager.RamaClient, manager.ClusterName, InitializeChecker)
+	conditions := CheckCondition(c, manager.RamaClient, manager.ClusterName, DefaultChecker)
 	newIsReady := IsReady(conditions)
 	if manager.IsReady == false && newIsReady {
 		manager.IsReady = true

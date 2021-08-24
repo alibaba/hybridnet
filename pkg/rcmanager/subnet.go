@@ -233,7 +233,6 @@ func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet, networ
 			Range:       subnet.Spec.Range,
 			Type:        network.Spec.Type,
 			ClusterName: m.ClusterName,
-			TunnelNetID: network.Spec.NetID,
 		},
 	}
 	return rs, nil
