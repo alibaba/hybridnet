@@ -175,7 +175,7 @@ func (m *Manager) filterNode(obj interface{}) bool {
 		return false
 	}
 	// todo debug
-	klog.Infof("[RemoteCluster-Node]debug. node=%v", utils.ToJsonString(obj))
+	klog.Infof("[RemoteCluster-Node]debug. node=%v", utils.ToJSONString(obj))
 	_, ok := obj.(*apiv1.Node)
 	return ok
 }

@@ -22,6 +22,9 @@ func InitRemoteClusterInformer(stopCh <-chan struct{}) {
 	}
 	// creates the clientset
 	ramaClient, err := clientset.NewForConfig(rest.AddUserAgent(config, UserAgent))
+	if err != nil {
+		panic(err.Error())
+	}
 	ramaInformerFactory := ramainformer.NewSharedInformerFactory(ramaClient, 0)
 	RCLister = ramaInformerFactory.Networking().V1().RemoteClusters().Lister()
 	rcSynced := ramaInformerFactory.Networking().V1().RemoteClusters().Informer().HasSynced

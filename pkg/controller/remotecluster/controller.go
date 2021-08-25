@@ -210,7 +210,8 @@ func (c *Controller) updateSingleRCStatus(manager *rcmanager.Manager, rc *networ
 
 	conditions := CheckCondition(c, manager.RamaClient, manager.ClusterName, DefaultChecker)
 	newIsReady := IsReady(conditions)
-	if manager.IsReady == false && newIsReady {
+
+	if !manager.IsReady && newIsReady {
 		manager.IsReady = true
 		ResumeReconcile(manager)
 	}

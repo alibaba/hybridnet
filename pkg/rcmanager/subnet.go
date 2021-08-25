@@ -26,7 +26,7 @@ const (
 )
 
 func (m *Manager) reconcileSubnet() error {
-	klog.Infof("[remote cluster] Starting reconcile subnet from cluster %v, subnet name=%v", m.ClusterName)
+	klog.Infof("[remote cluster] Starting reconcile subnet from cluster %v", m.ClusterName)
 
 	localClusterSubnets, err := m.localClusterSubnetLister.List(labels.NewSelector())
 	if err != nil {

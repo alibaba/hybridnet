@@ -103,7 +103,7 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	defer func() {
 		if err := recover(); err != nil {
 			klog.Errorf("Panic hanppened. Can't new remote cluster manager. Maybe wrong kube config. "+
-				"err=%v. remote cluster=%v\n%v", err, utils.ToJsonString(rc), debug.Stack())
+				"err=%v. remote cluster=%v\n%v", err, utils.ToJSONString(rc), debug.Stack())
 		}
 	}()
 	klog.Infof("NewRemoteClusterManager %v", rc.Name)

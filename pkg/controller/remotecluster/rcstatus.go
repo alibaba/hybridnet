@@ -5,12 +5,11 @@ import (
 	"runtime/debug"
 	"strings"
 
-	apiv1 "k8s.io/api/core/v1"
-
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/client/clientset/versioned"
 	"github.com/oecp/rama/pkg/utils"
 	"github.com/pkg/errors"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog"
@@ -64,10 +63,7 @@ func meetCondition(conditions []networkingv1.ClusterCondition) bool {
 			}
 		}
 	}
-	if cnt == len(ConditionAllReady) {
-		return true
-	}
-	return false
+	return cnt == len(ConditionAllReady)
 }
 
 func HealChecker(c *Controller, ramaClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error) {
@@ -78,12 +74,11 @@ func HealChecker(c *Controller, ramaClient *versioned.Clientset, clusterName str
 		runtimeutil.HandleError(errors.Wrapf(err, "Cluster Health Check failed for cluster %v", clusterName))
 		conditions = append(conditions, utils.NewClusterOffline(err))
 		return conditions, err
+	}
+	if !strings.EqualFold(string(body), "ok") {
+		conditions = append(conditions, utils.NewHealthCheckNotReady(err), utils.NewClusterNotOffline())
 	} else {
-		if !strings.EqualFold(string(body), "ok") {
-			conditions = append(conditions, utils.NewHealthCheckNotReady(err), utils.NewClusterNotOffline())
-		} else {
-			conditions = append(conditions, utils.NewHealthCheckReady())
-		}
+		conditions = append(conditions, utils.NewHealthCheckReady())
 	}
 	return conditions, nil
 }
