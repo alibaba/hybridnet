@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -28,12 +28,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/constants"
-	"github.com/oecp/rama/pkg/feature"
-	"github.com/oecp/rama/pkg/ipam/strategy"
-	ipamtypes "github.com/oecp/rama/pkg/ipam/types"
-	"github.com/oecp/rama/pkg/utils"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 // Copy from latest k8s
@@ -55,7 +55,7 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 	}
 
 	if pod.Spec.HostNetwork {
-		// make sure host-networking pod will not be affected by taint from rama
+		// make sure host-networking pod will not be affected by taint from hybridnet
 		return generatePatchResponseFromPod(req.Object.Raw, ensureTolerationInPod(pod, &corev1.Toleration{
 			Key:      TaintNodeNetworkUnavailable,
 			Operator: corev1.TolerationOpExists,
@@ -90,7 +90,7 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 			break
 		}
 
-		ipList := &ramav1.IPInstanceList{}
+		ipList := &networkingv1.IPInstanceList{}
 		if err = handler.Client.List(
 			ctx,
 			ipList,
@@ -113,7 +113,7 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 
 	var networkType = ipamtypes.ParseNetworkTypeFromString(utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType]))
 	if len(networkName) > 0 {
-		network := &ramav1.Network{}
+		network := &networkingv1.Network{}
 		if err = handler.Client.Get(ctx, types.NamespacedName{Name: networkName}, network); err != nil {
 			return admission.Errored(http.StatusInternalServerError, err)
 		}

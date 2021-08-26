@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,11 +21,11 @@ import (
 	"net"
 	"strings"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/daemon/containernetwork"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 
+	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/containernetworking/plugins/pkg/ip"
-	"github.com/oecp/rama/pkg/constants"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
@@ -68,7 +68,7 @@ func (m *Manager) TryAddPodInfo(forwardNodeIfName string, subnet *net.IPNet, pod
 // the arp request will be take as invalid and dropped.
 //
 // So we will always keep an valid local pod address in the vlan interface without local routes.
-func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*ramav1.IPInstance, error)) error {
+func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networkingv1.IPInstance, error)) error {
 	// clear all invalid enhanced addresses
 	linkList, err := netlink.LinkList()
 	if err != nil {

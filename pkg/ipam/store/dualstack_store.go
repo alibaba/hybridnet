@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -28,26 +28,26 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/client/clientset/versioned"
-	"github.com/oecp/rama/pkg/constants"
-	"github.com/oecp/rama/pkg/ipam/types"
-	"github.com/oecp/rama/pkg/utils/mac"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/utils/mac"
 )
 
 type DualStackWorker struct {
-	kubeClient kubernetes.Interface
-	ramaClient versioned.Interface
-	worker     *Worker
+	kubeClient      kubernetes.Interface
+	hybridnetClient versioned.Interface
+	worker          *Worker
 }
 
-func NewDualStackWorker(kubeClient kubernetes.Interface, ramaClient versioned.Interface) *DualStackWorker {
+func NewDualStackWorker(kubeClient kubernetes.Interface, hybridnetClient versioned.Interface) *DualStackWorker {
 	return &DualStackWorker{
-		kubeClient: kubeClient,
-		ramaClient: ramaClient,
+		kubeClient:      kubeClient,
+		hybridnetClient: hybridnetClient,
 		worker: &Worker{
-			kubeClient: kubeClient,
-			ramaClient: ramaClient,
+			kubeClient:      kubeClient,
+			hybridnetClient: hybridnetClient,
 		},
 	}
 }
@@ -155,7 +155,7 @@ func (d *DualStackWorker) SyncNetworkUsage(name string, usages [3]*types.Usage) 
 	)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err = d.ramaClient.NetworkingV1().Networks().Patch(context.TODO(), name, apitypes.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
+		_, err = d.hybridnetClient.NetworkingV1().Networks().Patch(context.TODO(), name, apitypes.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
 		return err
 	})
 }

@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,20 +22,20 @@ import (
 	"strings"
 	"time"
 
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/containernetworking/plugins/pkg/ipam"
 	"github.com/containernetworking/plugins/pkg/ns"
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 
+	"github.com/alibaba/hybridnet/pkg/daemon/arp"
+	"github.com/alibaba/hybridnet/pkg/daemon/ndp"
+	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/plugins/pkg/ip"
-	"github.com/oecp/rama/pkg/daemon/arp"
-	"github.com/oecp/rama/pkg/daemon/ndp"
-	daemonutils "github.com/oecp/rama/pkg/daemon/utils"
 	"github.com/vishvananda/netlink"
 )
 
-func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo, localDirectTableNum int) error {
+func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*IPInfo, localDirectTableNum int) error {
 	hostLink, err := netlink.LinkByName(nicName)
 	if err != nil {
 		return fmt.Errorf("can not find host nic %s %v", nicName, err)
@@ -54,7 +54,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 		return fmt.Errorf("failed to set mac address to nic %s %v", hostLink, err)
 	}
 
-	if allocatedIPs[ramav1.IPv4] != nil {
+	if allocatedIPs[networkingv1.IPv4] != nil {
 		// Enable proxy ARP, this makes the host respond to all ARP requests with its own
 		// MAC.  This has a couple of advantages:
 		//
@@ -76,7 +76,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 		}
 
 		// Normally, the kernel has a delay before responding to proxy ARP but we know
-		// that's not needed in a Rama network so we disable it.
+		// that's not needed in a Hybridnet network so we disable it.
 		sysctlPath = fmt.Sprintf(ProxyDelaySysctl, nicName)
 		if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
 			return fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
@@ -94,7 +94,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 		localPodRoute := &netlink.Route{
 			LinkIndex: hostLink.Attrs().Index,
 			Dst: &net.IPNet{
-				IP:   allocatedIPs[ramav1.IPv4].Addr,
+				IP:   allocatedIPs[networkingv1.IPv4].Addr,
 				Mask: mask,
 			},
 			Table: localDirectTableNum,
@@ -105,7 +105,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 		}
 	}
 
-	if allocatedIPs[ramav1.IPv6] != nil {
+	if allocatedIPs[networkingv1.IPv6] != nil {
 
 		// Enable proxy NDP, similarly to proxy ARP, described above.
 		//
@@ -128,7 +128,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 		localPodRoute := &netlink.Route{
 			LinkIndex: hostLink.Attrs().Index,
 			Dst: &net.IPNet{
-				IP:   allocatedIPs[ramav1.IPv6].Addr,
+				IP:   allocatedIPs[networkingv1.IPv6].Addr,
 				Mask: mask,
 			},
 			Table: localDirectTableNum,
@@ -142,9 +142,9 @@ func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 			LinkIndex: hostLink.Attrs().Index,
 			Family:    netlink.FAMILY_V6,
 			Flags:     netlink.NTF_PROXY,
-			IP:        allocatedIPs[ramav1.IPv6].Gw,
+			IP:        allocatedIPs[networkingv1.IPv6].Gw,
 		}); err != nil {
-			return fmt.Errorf("add neigh for ip %v/%v failed: %v", allocatedIPs[ramav1.IPv6].Gw.String(),
+			return fmt.Errorf("add neigh for ip %v/%v failed: %v", allocatedIPs[networkingv1.IPv6].Gw.String(),
 				hostLink.Attrs().Name, err)
 		}
 	}
@@ -153,9 +153,9 @@ func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 }
 
 // ipAddr is a CIDR notation IP address and prefix length
-func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
+func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, allocatedIPs map[networkingv1.IPVersion]*IPInfo,
 	macAddr net.HardwareAddr, netID *uint32, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration,
-	networkType ramav1.NetworkType, neighGCThresh1, neighGCThresh2, neighGCThresh3 int) error {
+	networkType networkingv1.NetworkType, neighGCThresh1, neighGCThresh2, neighGCThresh3 int) error {
 
 	var defaultRouteNets []*types.Route
 	var ipConfigs []*current.IPConfig
@@ -165,7 +165,7 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 	ipv4AddressAllocated := false
 	ipv6AddressAllocated := false
 
-	if networkType == ramav1.NetworkTypeUnderlay {
+	if networkType == networkingv1.NetworkTypeUnderlay {
 		forwardNodeIfName, err = GenerateVlanNetIfName(nodeIfName, netID)
 		if err != nil {
 			return fmt.Errorf("generate vlan forward node interface name failed: %v", err)
@@ -182,17 +182,17 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 		return fmt.Errorf("get forward node interface %v failed: %v; if not exist, waiting for daemon to create it", forwardNodeIfName, err)
 	}
 
-	if allocatedIPs[ramav1.IPv4] != nil {
+	if allocatedIPs[networkingv1.IPv4] != nil {
 
 		ipv4AddressAllocated = true
 		// ipv4 address
 		defaultRouteNets = append(defaultRouteNets, &types.Route{
 			Dst: net.IPNet{IP: net.ParseIP("0.0.0.0").To4(), Mask: net.CIDRMask(0, 32)},
-			GW:  allocatedIPs[ramav1.IPv4].Gw,
+			GW:  allocatedIPs[networkingv1.IPv4].Gw,
 		})
 
-		podIP := allocatedIPs[ramav1.IPv4].Addr
-		podCidr := allocatedIPs[ramav1.IPv4].Cidr
+		podIP := allocatedIPs[networkingv1.IPv4].Addr
+		podCidr := allocatedIPs[networkingv1.IPv4].Cidr
 
 		ipConfigs = append(ipConfigs, &current.IPConfig{
 			Version: "4",
@@ -200,7 +200,7 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 				IP:   podIP,
 				Mask: podCidr.Mask,
 			},
-			Gateway:   allocatedIPs[ramav1.IPv4].Gw,
+			Gateway:   allocatedIPs[networkingv1.IPv4].Gw,
 			Interface: current.Int(0),
 		})
 
@@ -218,9 +218,9 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 
 		// Underlay gw ipv4 ip should be resolved here.
 		// Only underlay network need to do this.
-		if networkType == ramav1.NetworkTypeUnderlay {
+		if networkType == networkingv1.NetworkTypeUnderlay {
 			if err := arp.CheckWithTimeout(forwardNodeIf, podIP,
-				allocatedIPs[ramav1.IPv4].Gw, vlanCheckTimeout); err != nil {
+				allocatedIPs[networkingv1.IPv4].Gw, vlanCheckTimeout); err != nil {
 				return fmt.Errorf("ipv4 vlan check failed: %v", err)
 			}
 		}
@@ -230,17 +230,17 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 		}
 	}
 
-	if allocatedIPs[ramav1.IPv6] != nil {
+	if allocatedIPs[networkingv1.IPv6] != nil {
 
 		ipv6AddressAllocated = true
 		// ipv6 address
 		defaultRouteNets = append(defaultRouteNets, &types.Route{
 			Dst: net.IPNet{IP: net.ParseIP("::").To16(), Mask: net.CIDRMask(0, 128)},
-			GW:  allocatedIPs[ramav1.IPv6].Gw,
+			GW:  allocatedIPs[networkingv1.IPv6].Gw,
 		})
 
-		podIP := allocatedIPs[ramav1.IPv6].Addr
-		podCidr := allocatedIPs[ramav1.IPv6].Cidr
+		podIP := allocatedIPs[networkingv1.IPv6].Addr
+		podCidr := allocatedIPs[networkingv1.IPv6].Cidr
 
 		ipConfigs = append(ipConfigs, &current.IPConfig{
 			Version: "6",
@@ -248,7 +248,7 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 				IP:   podIP,
 				Mask: podCidr.Mask,
 			},
-			Gateway:   allocatedIPs[ramav1.IPv6].Gw,
+			Gateway:   allocatedIPs[networkingv1.IPv6].Gw,
 			Interface: current.Int(0),
 		})
 
@@ -260,9 +260,9 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 			return fmt.Errorf("failed to ensure ipv6 neigh gc thresh: %v", err)
 		}
 
-		if networkType == ramav1.NetworkTypeUnderlay {
+		if networkType == networkingv1.NetworkTypeUnderlay {
 			if err := ndp.CheckWithTimeout(forwardNodeIf, podIP,
-				allocatedIPs[ramav1.IPv6].Gw, vlanCheckTimeout); err != nil {
+				allocatedIPs[networkingv1.IPv6].Gw, vlanCheckTimeout); err != nil {
 				return fmt.Errorf("ipv6 vlan check failed: %v", err)
 			}
 		}
@@ -315,7 +315,7 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 		// IPv6 subnet direct route should not be configured here, for proxy_ndp usage described above.
 		if ipv6AddressAllocated {
 			v6RouteList, err := netlink.RouteListFiltered(netlink.FAMILY_V6, &netlink.Route{
-				Dst: allocatedIPs[ramav1.IPv6].Cidr,
+				Dst: allocatedIPs[networkingv1.IPv6].Cidr,
 			}, netlink.RT_FILTER_DST)
 			if err != nil {
 				return fmt.Errorf("list container ipv6 route failed: %v", err)
@@ -331,7 +331,7 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 		// Also delete ipv4 subnet direct route for consistency.
 		if ipv4AddressAllocated {
 			v4RouteList, err := netlink.RouteListFiltered(netlink.FAMILY_V4, &netlink.Route{
-				Dst: allocatedIPs[ramav1.IPv4].Cidr,
+				Dst: allocatedIPs[networkingv1.IPv4].Cidr,
 			}, netlink.RT_FILTER_DST)
 			if err != nil {
 				return fmt.Errorf("list container ipv4 route failed: %v", err)

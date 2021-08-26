@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CNI_SOCK=/run/cni/rama.sock
+CNI_SOCK=/run/cni/hybridnet.sock
 
 if [[ -e "$CNI_SOCK" ]]
 then
@@ -9,4 +9,4 @@ then
 	rm ${CNI_SOCK}
 fi
 
-/rama/rama-daemon --bind-socket=${CNI_SOCK} "$@"
+/hybridnet/hybridnet-daemon --bind-socket=${CNI_SOCK} "$@"

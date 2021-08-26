@@ -1,4 +1,4 @@
-REGISTRY=github/oecp
+REGISTRY=github/alibaba
 ARCHS?=amd64 arm64
 DEV_TAG?=dev
 RELEASE_TAG?=release
@@ -7,10 +7,10 @@ RELEASE_TAG?=release
 
 build-dev-images:
 	@for arch in ${ARCHS} ; do \
-    	docker build -t ${REGISTRY}/rama:${DEV_TAG}-$$arch -f Dockerfile.$$arch ./; \
+    	docker build -t ${REGISTRY}/hybridnet:${DEV_TAG}-$$arch -f Dockerfile.$$arch ./; \
     done
 
 release:
 	@for arch in ${ARCHS} ; do \
-		docker build -t ${REGISTRY}/rama:${RELEASE_TAG}-$$arch -f Dockerfile.$$arch ./; \
+		docker build -t ${REGISTRY}/hybridnet:${RELEASE_TAG}-$$arch -f Dockerfile.$$arch ./; \
 	done

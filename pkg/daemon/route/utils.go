@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,9 +23,9 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	daemonutils "github.com/oecp/rama/pkg/daemon/utils"
+	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 
-	"github.com/oecp/rama/pkg/daemon/containernetwork"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 
 	"github.com/vishvananda/netlink"
 )
@@ -333,7 +333,7 @@ func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
 		}
 
 		if isLocalSubnet {
-			// Check if forward interface has default route which has the same gateway ip with this rama subnet.
+			// Check if forward interface has default route which has the same gateway ip with this hybridnet subnet.
 			defaultRoute, err := containernetwork.GetDefaultRoute(family)
 			if err != nil && err != daemonutils.NotExist {
 				return fmt.Errorf("get default route failed: %v", err)

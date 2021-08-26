@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/alibaba/hybridnet/pkg/daemon/ipset"
 	extraliptables "github.com/coreos/go-iptables/iptables"
-	"github.com/oecp/rama/pkg/daemon/ipset"
 
 	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
 	"k8s.io/utils/exec"
@@ -35,15 +35,15 @@ const (
 
 	ChainPostRouting = "POSTROUTING"
 	ChainPreRouting  = "PREROUTING"
+	ChainForward     = "FORWARD"
 
-	ChainRamaPostRouting = "RAMA-POSTROUTING"
-	ChainRamaForward     = "RAMA-FORWARD"
-	ChainRamaPreRouting  = "RAMA-PREROUTING"
-	ChainForward         = "FORWARD"
+	ChainHybridnetPostRouting = "HYBRIDNET-POSTROUTING"
+	ChainHybridnetForward     = "HYBRIDNET-FORWARD"
+	ChainHybridnetPreRouting  = "HYBRIDNET-PREROUTING"
 
-	RamaOverlayNetSetName = "RAMA-OVERLAY-NET"
-	RamaAllIPSetName      = "RAMA-ALL"
-	RamaNodeIPSetName     = "RAMA-NODE-IP"
+	HybridnetOverlayNetSetName = "HYBRIDNET-OVERLAY-NET"
+	HybridnetAllIPSetName      = "HYBRIDNET-ALL"
+	HybridnetNodeIPSetName     = "HYBRIDNET-NODE-IP"
 
 	PodToNodeBackTrafficMarkString = "0x20"
 	PodToNodeBackTrafficMark       = 0x20
@@ -182,11 +182,11 @@ func (mgr *Manager) SyncRules() error {
 		return fmt.Errorf("failed to load ipset data: %v", err)
 	}
 
-	ipsetInterface.AddOrReplaceIPSet(generateIPSetNameByProtocol(RamaOverlayNetSetName, mgr.protocol),
+	ipsetInterface.AddOrReplaceIPSet(generateIPSetNameByProtocol(HybridnetOverlayNetSetName, mgr.protocol),
 		overlayIPNets, ipset.TypeHashNet, ipset.OptionTimeout, "0")
-	ipsetInterface.AddOrReplaceIPSet(generateIPSetNameByProtocol(RamaAllIPSetName, mgr.protocol),
+	ipsetInterface.AddOrReplaceIPSet(generateIPSetNameByProtocol(HybridnetAllIPSetName, mgr.protocol),
 		allIPNets, ipset.TypeHashNet, ipset.OptionTimeout, "0")
-	ipsetInterface.AddOrReplaceIPSet(generateIPSetNameByProtocol(RamaNodeIPSetName, mgr.protocol),
+	ipsetInterface.AddOrReplaceIPSet(generateIPSetNameByProtocol(HybridnetNodeIPSetName, mgr.protocol),
 		nodeIPs, ipset.TypeHashIP, ipset.OptionTimeout, "0")
 
 	if err := mgr.ensureBasicRuleAndChains(); err != nil {
@@ -206,10 +206,10 @@ func (mgr *Manager) SyncRules() error {
 	writeLine(filterChains, "*filter")
 	writeLine(mangleChains, "*mangle")
 
-	writeLine(natChains, utiliptables.MakeChainLine(ChainRamaPostRouting))
-	writeLine(filterChains, utiliptables.MakeChainLine(ChainRamaForward))
-	writeLine(mangleChains, utiliptables.MakeChainLine(ChainRamaPreRouting))
-	writeLine(mangleChains, utiliptables.MakeChainLine(ChainRamaPostRouting))
+	writeLine(natChains, utiliptables.MakeChainLine(ChainHybridnetPostRouting))
+	writeLine(filterChains, utiliptables.MakeChainLine(ChainHybridnetForward))
+	writeLine(mangleChains, utiliptables.MakeChainLine(ChainHybridnetPreRouting))
+	writeLine(mangleChains, utiliptables.MakeChainLine(ChainHybridnetPostRouting))
 
 	// Append rules.
 	writeLine(natRules, generateMasqueradeRuleSpec(mgr.overlayIfName, mgr.protocol)...)
@@ -237,52 +237,57 @@ func (mgr *Manager) SyncRules() error {
 
 	if err := mgr.executor.RestoreAll(iptablesData.Bytes(), utiliptables.NoFlushTables,
 		utiliptables.RestoreCounters); err != nil {
-		return fmt.Errorf("Failed to execute iptables-restore: " + err.Error() +
+		return fmt.Errorf("failed to execute iptables-restore: " + err.Error() +
 			"\n iptables rules are:\n " + iptablesData.String())
+	}
+
+	// TODO: update logic, need to be removed further
+	if err := mgr.cleanDeprecatedBasicRules(); err != nil {
+		return fmt.Errorf("failed to clean deprecated basic rules: %v", err)
 	}
 
 	return nil
 }
 
 func (mgr *Manager) ensureBasicRuleAndChains() error {
-	// ensure base chain and rule for RAMA-POSTROUTING in nat table
-	if _, err := mgr.executor.EnsureChain(TableNAT, ChainRamaPostRouting); err != nil {
-		return fmt.Errorf("ensule %v chain in %v table failed: %v", ChainRamaPostRouting, TableNAT, err)
+	// ensure base chain and rule for HYBRIDNET-POSTROUTING in nat table
+	if _, err := mgr.executor.EnsureChain(TableNAT, ChainHybridnetPostRouting); err != nil {
+		return fmt.Errorf("ensule %v chain in %v table failed: %v", ChainHybridnetPostRouting, TableNAT, err)
 	}
 
 	if _, err := mgr.executor.EnsureRule(utiliptables.Append, TableNAT, ChainPostRouting,
-		generateRamaPostRoutingBaseRuleSpec()...); err != nil {
-		return fmt.Errorf("ensure %v rule in %v table failed: %v", ChainRamaPostRouting, TableNAT, err)
+		generateHybridnetPostRoutingBaseRuleSpec()...); err != nil {
+		return fmt.Errorf("ensure %v rule in %v table failed: %v", ChainHybridnetPostRouting, TableNAT, err)
 	}
 
-	// ensure base chain and rule for RAMA-FORWARD in filter table
-	if _, err := mgr.executor.EnsureChain(TableFilter, ChainRamaForward); err != nil {
-		return fmt.Errorf("ensule %v chain in %v table failed: %v", ChainRamaForward, TableFilter, err)
+	// ensure base chain and rule for HYBRIDNET-FORWARD in filter table
+	if _, err := mgr.executor.EnsureChain(TableFilter, ChainHybridnetForward); err != nil {
+		return fmt.Errorf("ensule %v chain in %v table failed: %v", ChainHybridnetForward, TableFilter, err)
 	}
 
 	if _, err := mgr.executor.EnsureRule(utiliptables.Append, TableFilter, ChainForward,
-		generateRamaForwardBaseRuleSpec()...); err != nil {
-		return fmt.Errorf("ensure %v rule in %v table failed: %v", ChainRamaForward, TableFilter, err)
+		generateHybridnetForwardBaseRuleSpec()...); err != nil {
+		return fmt.Errorf("ensure %v rule in %v table failed: %v", ChainHybridnetForward, TableFilter, err)
 	}
 
-	// ensure base chain and rule for RAMA-PREROUTING in mangle table
-	if _, err := mgr.executor.EnsureChain(TableMangle, ChainRamaPreRouting); err != nil {
-		return fmt.Errorf("ensule %v chain in %v table failed: %v", ChainRamaPreRouting, TableMangle, err)
+	// ensure base chain and rule for HYBRIDNET-PREROUTING in mangle table
+	if _, err := mgr.executor.EnsureChain(TableMangle, ChainHybridnetPreRouting); err != nil {
+		return fmt.Errorf("ensule %v chain in %v table failed: %v", ChainHybridnetPreRouting, TableMangle, err)
 	}
 
 	if _, err := mgr.executor.EnsureRule(utiliptables.Append, TableMangle, ChainPreRouting,
-		generateRamaPreRoutingBaseRuleSpec()...); err != nil {
-		return fmt.Errorf("ensure %v rule in %v table failed: %v", ChainRamaPreRouting, TableMangle, err)
+		generateHybridnetPreRoutingBaseRuleSpec()...); err != nil {
+		return fmt.Errorf("ensure %v rule in %v table failed: %v", ChainHybridnetPreRouting, TableMangle, err)
 	}
 
-	// ensure base chain and rule for RAMA-POSTROUTING in mangle table
-	if _, err := mgr.executor.EnsureChain(TableMangle, ChainRamaPostRouting); err != nil {
-		return fmt.Errorf("ensule %v chain in %v table failed: %v", ChainRamaPostRouting, TableMangle, err)
+	// ensure base chain and rule for HYBRIDNET-POSTROUTING in mangle table
+	if _, err := mgr.executor.EnsureChain(TableMangle, ChainHybridnetPostRouting); err != nil {
+		return fmt.Errorf("ensule %v chain in %v table failed: %v", ChainHybridnetPostRouting, TableMangle, err)
 	}
 
 	if _, err := mgr.executor.EnsureRule(utiliptables.Append, TableMangle, ChainPostRouting,
-		generateRamaPostRoutingBaseRuleSpec()...); err != nil {
-		return fmt.Errorf("ensure %v rule in %v table failed: %v", ChainRamaPostRouting, TableMangle, err)
+		generateHybridnetPostRoutingBaseRuleSpec()...); err != nil {
+		return fmt.Errorf("ensure %v rule in %v table failed: %v", ChainHybridnetPostRouting, TableMangle, err)
 	}
 
 	return nil
@@ -295,45 +300,45 @@ func generateIPSetNameByProtocol(setBaseName string, protocol Protocol) string {
 	return setBaseName + "-V6"
 }
 
-func generateRamaPostRoutingBaseRuleSpec() []string {
-	return []string{"-m", "comment", "--comment", "rama postrouting rules", "-j", ChainRamaPostRouting}
+func generateHybridnetPostRoutingBaseRuleSpec() []string {
+	return []string{"-m", "comment", "--comment", "hybridnet postrouting rules", "-j", ChainHybridnetPostRouting}
 }
 
-func generateRamaForwardBaseRuleSpec() []string {
-	return []string{"-m", "comment", "--comment", "rama forward rules", "-j", ChainRamaForward}
+func generateHybridnetForwardBaseRuleSpec() []string {
+	return []string{"-m", "comment", "--comment", "hybridnet forward rules", "-j", ChainHybridnetForward}
 }
 
-func generateRamaPreRoutingBaseRuleSpec() []string {
-	return []string{"-m", "comment", "--comment", "rama prerouting rules", "-j", ChainRamaPreRouting}
+func generateHybridnetPreRoutingBaseRuleSpec() []string {
+	return []string{"-m", "comment", "--comment", "hybridnet prerouting rules", "-j", ChainHybridnetPreRouting}
 }
 
 func generateMasqueradeRuleSpec(vxlanIf string, protocol Protocol) []string {
-	return []string{"-A", ChainRamaPostRouting, "-m", "comment", "--comment", `"rama overlay nat-outgoing masquerade rule"`,
-		"!", "-o", vxlanIf, "-m", "set", "--match-set", generateIPSetNameByProtocol(RamaOverlayNetSetName, protocol),
+	return []string{"-A", ChainHybridnetPostRouting, "-m", "comment", "--comment", `"hybridnet overlay nat-outgoing masquerade rule"`,
+		"!", "-o", vxlanIf, "-m", "set", "--match-set", generateIPSetNameByProtocol(HybridnetOverlayNetSetName, protocol),
 		"src", "-j", "MASQUERADE"}
 }
 
 func generateVxlanFilterRuleSpec(vxlanIf string, protocol Protocol) []string {
-	return []string{"-A", ChainRamaForward, "-m", "comment", "--comment", `"rama overlay vxlan if egress filter rule"`,
-		"-o", vxlanIf, "-m", "set", "!", "--match-set", generateIPSetNameByProtocol(RamaAllIPSetName, protocol),
+	return []string{"-A", ChainHybridnetForward, "-m", "comment", "--comment", `"hybridnet overlay vxlan if egress filter rule"`,
+		"-o", vxlanIf, "-m", "set", "!", "--match-set", generateIPSetNameByProtocol(HybridnetAllIPSetName, protocol),
 		"dst", "-j", "REJECT", "--reject-with", rejectWithOption(protocol)}
 }
 
 func generateVxlanPodToNodeReplyMarkRuleSpec(protocol Protocol) []string {
-	return []string{"-A", ChainRamaPreRouting, "-m", "comment", "--comment", `"mark overlay pod -> node back traffic"`,
+	return []string{"-A", ChainHybridnetPreRouting, "-m", "comment", "--comment", `"mark overlay pod -> node back traffic"`,
 		"-m", "addrtype", "!", "--dst-type", "LOCAL",
-		"-m", "set", "--match-set", generateIPSetNameByProtocol(RamaOverlayNetSetName, protocol), "src",
-		"-m", "set", "--match-set", generateIPSetNameByProtocol(RamaNodeIPSetName, protocol), "dst",
+		"-m", "set", "--match-set", generateIPSetNameByProtocol(HybridnetOverlayNetSetName, protocol), "src",
+		"-m", "set", "--match-set", generateIPSetNameByProtocol(HybridnetNodeIPSetName, protocol), "dst",
 		"-m", "conntrack", "!", "--ctstate", "NEW,INVALID,DNAT,SNAT",
 		"-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s", PodToNodeBackTrafficMarkString, PodToNodeBackTrafficMarkString),
 	}
 }
 
 func generateVxlanPodToNodeReplyRemoveMarkRuleSpec(protocol Protocol) []string {
-	return []string{"-A", ChainRamaPostRouting, "-m", "comment", "--comment", `"remove overlay pod -> node back traffic mark"`,
+	return []string{"-A", ChainHybridnetPostRouting, "-m", "comment", "--comment", `"remove overlay pod -> node back traffic mark"`,
 		"-m", "addrtype", "!", "--dst-type", "LOCAL",
-		"-m", "set", "--match-set", generateIPSetNameByProtocol(RamaOverlayNetSetName, protocol), "src",
-		"-m", "set", "--match-set", generateIPSetNameByProtocol(RamaNodeIPSetName, protocol), "dst",
+		"-m", "set", "--match-set", generateIPSetNameByProtocol(HybridnetOverlayNetSetName, protocol), "src",
+		"-m", "set", "--match-set", generateIPSetNameByProtocol(HybridnetNodeIPSetName, protocol), "dst",
 		"-m", "conntrack", "!", "--ctstate", "NEW,INVALID,DNAT,SNAT",
 		"-j", "MARK", "--set-xmark", fmt.Sprintf("0x0/%s", PodToNodeBackTrafficMarkString),
 	}

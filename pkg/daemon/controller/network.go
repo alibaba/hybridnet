@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,20 +16,20 @@ limitations under the License.
 
 package controller
 
-import ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
+import networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 
 // reconcile subnet and node info on node if network info changed
 func (c *Controller) enqueueAddOrDeleteNetwork(obj interface{}) {
-	network := obj.(*ramav1.Network)
-	if ramav1.GetNetworkType(network) == ramav1.NetworkTypeOverlay {
+	network := obj.(*networkingv1.Network)
+	if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
 		c.nodeQueue.Add(ActionReconcileNode)
 	}
 	c.subnetQueue.Add(ActionReconcileSubnet)
 }
 
 func (c *Controller) enqueueUpdateNetwork(oldObj, newObj interface{}) {
-	oldNetwork := oldObj.(*ramav1.Network)
-	newNetwork := newObj.(*ramav1.Network)
+	oldNetwork := oldObj.(*networkingv1.Network)
+	newNetwork := newObj.(*networkingv1.Network)
 
 	if len(oldNetwork.Status.SubnetList) != len(newNetwork.Status.SubnetList) ||
 		len(oldNetwork.Status.NodeList) != len(newNetwork.Status.NodeList) {

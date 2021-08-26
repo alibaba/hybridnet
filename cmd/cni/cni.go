@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,9 +26,9 @@ import (
 
 	"github.com/vishvananda/netlink"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 
-	"github.com/oecp/rama/pkg/request"
+	"github.com/alibaba/hybridnet/pkg/request"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
@@ -44,7 +44,7 @@ func init() {
 }
 
 func main() {
-	skel.PluginMain(cmdAdd, cmdCheck, cmdDel, version.All, "rama cni")
+	skel.PluginMain(cmdAdd, cmdCheck, cmdDel, version.All, "hybridnet cni")
 }
 
 func cmdCheck(args *skel.CmdArgs) error {
@@ -99,7 +99,7 @@ func generateCNIResult(cniVersion string, cniResponse *request.PodResponse) (*cu
 		route := types.Route{}
 
 		switch address.Protocol {
-		case ramav1.IPv4:
+		case networkingv1.IPv4:
 			ip = current.IPConfig{
 				Version: "4",
 				Address: net.IPNet{IP: ipAddr.To4(), Mask: mask.Mask},
@@ -110,7 +110,7 @@ func generateCNIResult(cniVersion string, cniResponse *request.PodResponse) (*cu
 				Dst: net.IPNet{IP: net.ParseIP("0.0.0.0").To4(), Mask: net.CIDRMask(0, 32)},
 				GW:  net.ParseIP(address.Gateway).To4(),
 			}
-		case ramav1.IPv6:
+		case networkingv1.IPv6:
 			ip = current.IPConfig{
 				Version: "6",
 				Address: net.IPNet{IP: ipAddr.To16(), Mask: mask.Mask},

@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 
 	"k8s.io/klog"
 
-	"github.com/oecp/rama/pkg/controller/ipam"
+	"github.com/alibaba/hybridnet/pkg/controller/ipam"
 )
 
 type initFunc func(manager *Manager) error
@@ -35,12 +35,12 @@ var ipamController *ipam.Controller
 func initIPAMController(m *Manager) error {
 	ipamController = ipam.NewController(
 		m.KubeClient,
-		m.RamaClient,
+		m.HybridnetClient,
 		m.InformerFactory.Core().V1().Pods(),
 		m.InformerFactory.Core().V1().Nodes(),
-		m.RamaInformerFactory.Networking().V1().Networks(),
-		m.RamaInformerFactory.Networking().V1().Subnets(),
-		m.RamaInformerFactory.Networking().V1().IPInstances(),
+		m.HybridnetInformerFactory.Networking().V1().Networks(),
+		m.HybridnetInformerFactory.Networking().V1().Subnets(),
+		m.HybridnetInformerFactory.Networking().V1().IPInstances(),
 	)
 	return nil
 }

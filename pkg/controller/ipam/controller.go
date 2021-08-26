@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -34,14 +34,14 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
-	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/client/clientset/versioned"
-	informers "github.com/oecp/rama/pkg/client/informers/externalversions/networking/v1"
-	listers "github.com/oecp/rama/pkg/client/listers/networking/v1"
-	"github.com/oecp/rama/pkg/feature"
-	"github.com/oecp/rama/pkg/ipam"
-	"github.com/oecp/rama/pkg/ipam/allocator"
-	"github.com/oecp/rama/pkg/ipam/store"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
+	informers "github.com/alibaba/hybridnet/pkg/client/informers/externalversions/networking/v1"
+	listers "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/ipam"
+	"github.com/alibaba/hybridnet/pkg/ipam/allocator"
+	"github.com/alibaba/hybridnet/pkg/ipam/store"
 )
 
 const ControllerName = "ipam"

@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ package controller
 import (
 	"fmt"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/daemon/containernetwork"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog"
@@ -31,8 +31,8 @@ func (c *Controller) enqueueAddOrDeleteSubnet(obj interface{}) {
 }
 
 func (c *Controller) enqueueUpdateSubnet(oldObj, newObj interface{}) {
-	oldSubnet := oldObj.(*ramav1.Subnet)
-	newSubnet := newObj.(*ramav1.Subnet)
+	oldSubnet := oldObj.(*networkingv1.Subnet)
+	newSubnet := newObj.(*networkingv1.Subnet)
 
 	oldSubnetNetID := oldSubnet.Spec.NetID
 	newSubnetNetID := newSubnet.Spec.NetID
@@ -41,7 +41,7 @@ func (c *Controller) enqueueUpdateSubnet(oldObj, newObj interface{}) {
 		(oldSubnetNetID != nil && newSubnetNetID == nil) ||
 		(oldSubnetNetID != nil && newSubnetNetID != nil && *oldSubnetNetID != *newSubnetNetID) ||
 		oldSubnet.Spec.Network != newSubnet.Spec.Network ||
-		ramav1.IsSubnetAutoNatOutgoing(&oldSubnet.Spec) != ramav1.IsSubnetAutoNatOutgoing(&newSubnet.Spec) {
+		networkingv1.IsSubnetAutoNatOutgoing(&oldSubnet.Spec) != networkingv1.IsSubnetAutoNatOutgoing(&newSubnet.Spec) {
 		c.subnetQueue.Add(ActionReconcileSubnet)
 	}
 }
@@ -98,7 +98,7 @@ func (c *Controller) reconcileSubnet() error {
 			return fmt.Errorf("failed to get network for subnet %v", subnet.Name)
 		}
 
-		if ramav1.GetNetworkType(network) == ramav1.NetworkTypeUnderlay {
+		if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeUnderlay {
 			// check if this node belongs to the subnet
 			inSubnet := false
 			for _, n := range network.Status.NodeList {
@@ -131,19 +131,19 @@ func (c *Controller) reconcileSubnet() error {
 		var forwardNodeIfName string
 		var autoNatOutgoing, isOverlay bool
 
-		switch ramav1.GetNetworkType(network) {
-		case ramav1.NetworkTypeUnderlay:
+		switch networkingv1.GetNetworkType(network) {
+		case networkingv1.NetworkTypeUnderlay:
 			forwardNodeIfName, err = containernetwork.EnsureVlanIf(c.config.NodeVlanIfName, netID)
 			if err != nil {
 				return fmt.Errorf("ensure vlan forward node if failed: %v", err)
 			}
-		case ramav1.NetworkTypeOverlay:
+		case networkingv1.NetworkTypeOverlay:
 			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
 			if err != nil {
 				return fmt.Errorf("generate vxlan forward node if name failed: %v", err)
 			}
 			isOverlay = true
-			autoNatOutgoing = ramav1.IsSubnetAutoNatOutgoing(&subnet.Spec)
+			autoNatOutgoing = networkingv1.IsSubnetAutoNatOutgoing(&subnet.Spec)
 		}
 
 		// create policy route

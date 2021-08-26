@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright 2021 The Rama Authors.
+# Copyright 2021 The Hybridnet Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ CODEGEN_PKG=${GOPATH}/src/k8s.io/code-generator
 #                  k8s.io/kubernetes. The output-base is needed for the generators to output into the vendor dir
 #                  instead of the $GOPATH directly. For normal projects this can be dropped.
 bash "${CODEGEN_PKG}"/generate-groups.sh "deepcopy,client,informer,lister" \
-  github.com/oecp/rama/pkg/client github.com/oecp/rama/pkg/apis \
+  github.com/alibaba/hybridnet/pkg/client github.com/alibaba/hybridnet/pkg/apis \
   networking:v1 \
   --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \
   --go-header-file "${SCRIPT_ROOT}"/hack/custom-boilerplate.go.txt

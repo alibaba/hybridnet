@@ -1,4 +1,4 @@
-module github.com/oecp/rama
+module github.com/alibaba/hybridnet
 
 go 1.13
 

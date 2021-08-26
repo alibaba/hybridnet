@@ -30,11 +30,11 @@ if [[ -f "/proc/sys/net/ipv4/conf/all/arp_filter" ]];
     then echo -n 0 > /proc/sys/net/ipv4/conf/all/arp_filter;
 fi
 
-CNI_BIN_SRC=/rama/rama
-CNI_BIN_DST=/opt/cni/bin/rama
+CNI_BIN_SRC=/hybridnet/hybridnet
+CNI_BIN_DST=/opt/cni/bin/hybridnet
 
-CNI_CONF_SRC=/rama/00-rama.conflist
-CNI_CONF_DST=/etc/cni/net.d/00-rama.conflist
+CNI_CONF_SRC=/hybridnet/00-hybridnet.conflist
+CNI_CONF_DST=/etc/cni/net.d/00-hybridnet.conflist
 
 LOOPBACK_BIN_SRC=/cni-plugins/loopback
 LOOPBACK_BIN_DST=/opt/cni/bin/loopback

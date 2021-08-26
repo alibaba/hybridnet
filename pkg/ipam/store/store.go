@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -30,23 +30,23 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 
-	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/client/clientset/versioned"
-	"github.com/oecp/rama/pkg/constants"
-	"github.com/oecp/rama/pkg/ipam/strategy"
-	ipamtypes "github.com/oecp/rama/pkg/ipam/types"
-	"github.com/oecp/rama/pkg/utils/mac"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/utils/mac"
 )
 
 type Worker struct {
-	kubeClient kubernetes.Interface
-	ramaClient versioned.Interface
+	kubeClient      kubernetes.Interface
+	hybridnetClient versioned.Interface
 }
 
-func NewWorker(kubeClient kubernetes.Interface, ramaClient versioned.Interface) *Worker {
+func NewWorker(kubeClient kubernetes.Interface, hybridnetClient versioned.Interface) *Worker {
 	return &Worker{
-		kubeClient: kubeClient,
-		ramaClient: ramaClient,
+		kubeClient:      kubeClient,
+		hybridnetClient: hybridnetClient,
 	}
 }
 
@@ -106,7 +106,7 @@ func (w *Worker) IPRecycle(namespace string, ip *ipamtypes.IP) (err error) {
 func (w *Worker) IPUnBind(namespace, ip string) (err error) {
 	patchBody := `{"metadata":{"finalizers":null}}`
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err = w.ramaClient.NetworkingV1().IPInstances(namespace).Patch(context.TODO(), ip, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{})
+		_, err = w.hybridnetClient.NetworkingV1().IPInstances(namespace).Patch(context.TODO(), ip, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{})
 		return err
 	})
 }
@@ -119,7 +119,7 @@ func (w *Worker) SyncNetworkStatus(name, nodeList, subnetList string) (err error
 	)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err = w.ramaClient.NetworkingV1().Networks().Patch(context.TODO(), name, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
+		_, err = w.hybridnetClient.NetworkingV1().Networks().Patch(context.TODO(), name, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
 		return err
 	})
 }
@@ -134,7 +134,7 @@ func (w *Worker) SyncNetworkUsage(name string, usage *ipamtypes.Usage) (err erro
 	)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err = w.ramaClient.NetworkingV1().Networks().Patch(context.TODO(), name, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
+		_, err = w.hybridnetClient.NetworkingV1().Networks().Patch(context.TODO(), name, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
 		return err
 	})
 }
@@ -149,14 +149,14 @@ func (w *Worker) SyncSubnetUsage(name string, usage *ipamtypes.Usage) (err error
 	)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err = w.ramaClient.NetworkingV1().Subnets().Patch(context.TODO(), name, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
+		_, err = w.hybridnetClient.NetworkingV1().Subnets().Patch(context.TODO(), name, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
 		return err
 	})
 }
 
 func (w *Worker) updateIPStatus(ip *networkingv1.IPInstance, nodeName, podName, podNamespace, phase string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := w.ramaClient.NetworkingV1().IPInstances(ip.Namespace).Patch(context.TODO(),
+		_, err := w.hybridnetClient.NetworkingV1().IPInstances(ip.Namespace).Patch(context.TODO(),
 			ip.Name,
 			types.MergePatchType,
 			[]byte(fmt.Sprintf(
@@ -209,15 +209,15 @@ func (w *Worker) createIPWithMAC(pod *v1.Pod, ip *ipamtypes.IP, macAddr string) 
 		},
 	}
 
-	return w.ramaClient.NetworkingV1().IPInstances(pod.Namespace).Create(context.TODO(), ipInstance, metav1.CreateOptions{})
+	return w.hybridnetClient.NetworkingV1().IPInstances(pod.Namespace).Create(context.TODO(), ipInstance, metav1.CreateOptions{})
 }
 
 func (w *Worker) deleteIP(namespace, name string) error {
-	return w.ramaClient.NetworkingV1().IPInstances(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	return w.hybridnetClient.NetworkingV1().IPInstances(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
 }
 
 func (w *Worker) getIP(namespace string, ip *ipamtypes.IP) (*networkingv1.IPInstance, error) {
-	return w.ramaClient.NetworkingV1().IPInstances(namespace).Get(context.TODO(), toDNSLabelFormat(ip), metav1.GetOptions{})
+	return w.hybridnetClient.NetworkingV1().IPInstances(namespace).Get(context.TODO(), toDNSLabelFormat(ip), metav1.GetOptions{})
 }
 
 // patchIPtoPod will patch a specified IP annotation into pod
@@ -255,7 +255,7 @@ func (w *Worker) releaseIPFromPod(pod *v1.Pod) error {
 
 func (w *Worker) patchIPLabels(ip *networkingv1.IPInstance, podName, nodeName string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := w.ramaClient.NetworkingV1().IPInstances(ip.Namespace).Patch(context.TODO(),
+		_, err := w.hybridnetClient.NetworkingV1().IPInstances(ip.Namespace).Patch(context.TODO(),
 			ip.Name,
 			types.MergePatchType,
 			[]byte(fmt.Sprintf(

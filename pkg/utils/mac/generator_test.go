@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ func TestGenerateMAC(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		mac := GenerateMAC()
-		if !bytes.Equal(mac[:3], ramaOUI) {
+		if !bytes.Equal(mac[:3], hybridnetOUI) {
 			t.Errorf("bad mac %s", mac.String())
 			return
 		}
