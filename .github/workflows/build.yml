@@ -56,7 +56,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v3
         with:
-          images: ramanetworking/rama
+          images: hybridnetdev/hybridnet
           tags: |
             type=ref,event=branch
             type=ref,event=tag

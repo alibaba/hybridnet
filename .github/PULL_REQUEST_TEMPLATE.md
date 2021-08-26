@@ -1,5 +1,5 @@
 <!--  Thanks for submitting a pull request! Here are some tips for you:
-1. Please make sure you have read and understood the contributing guidelines: https://github.com/oecp/rama/blob/master/CONTRIBUTING.md
+1. Please make sure you have read and understood the contributing guidelines: https://github.com/alibaba/hybridnet/blob/main/CONTRIBUTING.md
 2. Please make sure the PR has a corresponding issue.
 -->
 
