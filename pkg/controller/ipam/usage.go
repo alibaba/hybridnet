@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -21,10 +21,10 @@ import (
 
 	"k8s.io/klog"
 
-	"github.com/oecp/rama/pkg/feature"
-	"github.com/oecp/rama/pkg/ipam"
-	"github.com/oecp/rama/pkg/ipam/types"
-	"github.com/oecp/rama/pkg/metrics"
+	"github.com/alibaba/hybridnet/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/ipam"
+	"github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/metrics"
 )
 
 type UsageSyncer struct {

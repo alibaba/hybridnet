@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 	"net"
 	"net/http"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 
 	"github.com/parnurzeal/gorequest"
 )
@@ -44,9 +44,9 @@ type IPAddress struct {
 	// ip with mask
 	IP string `json:"ip"`
 
-	Mac      string           `json:"mac"`
-	Gateway  string           `json:"gateway"`
-	Protocol ramav1.IPVersion `json:"protocol"`
+	Mac      string                 `json:"mac"`
+	Gateway  string                 `json:"gateway"`
+	Protocol networkingv1.IPVersion `json:"protocol"`
 }
 
 // PodResponse is the cnidaemon response format

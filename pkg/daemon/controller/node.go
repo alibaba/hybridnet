@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,10 +22,10 @@ import (
 	"net"
 	"strings"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/constants"
-	"github.com/oecp/rama/pkg/daemon/containernetwork"
-	"github.com/oecp/rama/pkg/daemon/vxlan"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+	"github.com/alibaba/hybridnet/pkg/daemon/vxlan"
 
 	"golang.org/x/sys/unix"
 
@@ -161,9 +161,9 @@ func (c *Controller) reconcileNodeInfo() error {
 		return fmt.Errorf("failed to list network %v", err)
 	}
 
-	var overlayNetwork *ramav1.Network
+	var overlayNetwork *networkingv1.Network
 	for _, network := range networkList {
-		if ramav1.GetNetworkType(network) == ramav1.NetworkTypeOverlay {
+		if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
 			overlayNetwork = network
 			break
 		}

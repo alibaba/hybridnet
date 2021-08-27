@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -24,8 +24,8 @@ import (
 	"k8s.io/klog"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
-	"github.com/oecp/rama/pkg/feature"
-	"github.com/oecp/rama/pkg/manager"
+	"github.com/alibaba/hybridnet/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/manager"
 )
 
 var (
@@ -40,7 +40,7 @@ func main() {
 	// parse flags
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
-	klog.Infof("Starting rama manager with git commit: %v", gitCommit)
+	klog.Infof("Starting hybridnet manager with git commit: %v", gitCommit)
 	klog.Infof("known features: %v", feature.KnownFeatures())
 
 	var (
@@ -65,10 +65,10 @@ func main() {
 
 	mgr, err = manager.NewManager()
 	if err != nil {
-		klog.Fatalf("fail to new RAMA manager : %v", err)
+		klog.Fatalf("fail to new hybridnet manager : %v", err)
 	}
 
 	if err = mgr.RunOrDie(ctx); err != nil {
-		klog.Fatalf("fail to run RAMA manager : %v", err)
+		klog.Fatalf("fail to run hybridnet manager : %v", err)
 	}
 }

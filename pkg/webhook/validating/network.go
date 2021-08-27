@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -22,13 +22,13 @@ import (
 	"net/http"
 	"reflect"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-var networkGVK = gvkConverter(ramav1.SchemeGroupVersion.WithKind("Network"))
+var networkGVK = gvkConverter(networkingv1.SchemeGroupVersion.WithKind("Network"))
 
 func init() {
 	createHandlers[networkGVK] = NetworkCreateValidation
@@ -37,25 +37,25 @@ func init() {
 }
 
 func NetworkCreateValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
-	network := &ramav1.Network{}
+	network := &networkingv1.Network{}
 	err := handler.Decoder.Decode(*req, network)
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	switch ramav1.GetNetworkType(network) {
-	case ramav1.NetworkTypeUnderlay:
+	switch networkingv1.GetNetworkType(network) {
+	case networkingv1.NetworkTypeUnderlay:
 		if network.Spec.NodeSelector == nil || len(network.Spec.NodeSelector) == 0 {
 			return admission.Denied("must have node selector")
 		}
-	case ramav1.NetworkTypeOverlay:
+	case networkingv1.NetworkTypeOverlay:
 		// check uniqueness
-		networks := &ramav1.NetworkList{}
+		networks := &networkingv1.NetworkList{}
 		if err = handler.Client.List(ctx, networks); err != nil {
 			return admission.Errored(http.StatusInternalServerError, err)
 		}
 		for i := range networks.Items {
-			if ramav1.GetNetworkType(&networks.Items[i]) == ramav1.NetworkTypeOverlay {
+			if networkingv1.GetNetworkType(&networks.Items[i]) == networkingv1.NetworkTypeOverlay {
 				return admission.Denied("must have one overlay network at most")
 			}
 		}
@@ -70,7 +70,7 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 			return admission.Denied("must assign net ID for overlay network")
 		}
 	default:
-		return admission.Denied(fmt.Sprintf("unknown network type %s", ramav1.GetNetworkType(network)))
+		return admission.Denied(fmt.Sprintf("unknown network type %s", networkingv1.GetNetworkType(network)))
 	}
 
 	return admission.Allowed("validation pass")
@@ -78,7 +78,7 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 
 func NetworkUpdateValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
 	var err error
-	oldN, newN := &ramav1.Network{}, &ramav1.Network{}
+	oldN, newN := &networkingv1.Network{}, &networkingv1.Network{}
 	if err = handler.Decoder.DecodeRaw(req.Object, newN); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
@@ -86,18 +86,18 @@ func NetworkUpdateValidation(ctx context.Context, req *admission.Request, handle
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	if ramav1.GetNetworkType(oldN) != ramav1.GetNetworkType(newN) {
+	if networkingv1.GetNetworkType(oldN) != networkingv1.GetNetworkType(newN) {
 		return admission.Denied("network type must not be changed")
 	}
 
-	switch ramav1.GetNetworkType(newN) {
-	case ramav1.NetworkTypeUnderlay:
-	case ramav1.NetworkTypeOverlay:
+	switch networkingv1.GetNetworkType(newN) {
+	case networkingv1.NetworkTypeUnderlay:
+	case networkingv1.NetworkTypeOverlay:
 		if newN.Spec.NodeSelector != nil && len(newN.Spec.NodeSelector) > 0 {
 			return admission.Denied("node selector must not be assigned for overlay network")
 		}
 	default:
-		return admission.Denied(fmt.Sprintf("unknown network type %s", ramav1.GetNetworkType(newN)))
+		return admission.Denied(fmt.Sprintf("unknown network type %s", networkingv1.GetNetworkType(newN)))
 	}
 
 	if !reflect.DeepEqual(oldN.Spec.NetID, newN.Spec.NetID) {
@@ -109,12 +109,12 @@ func NetworkUpdateValidation(ctx context.Context, req *admission.Request, handle
 
 func NetworkDeleteValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
 	var err error
-	network := &ramav1.Network{}
+	network := &networkingv1.Network{}
 	if err = handler.Client.Get(ctx, types.NamespacedName{Name: req.Name}, network); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	subnetList := &ramav1.SubnetList{}
+	subnetList := &networkingv1.SubnetList{}
 	if err = handler.Client.List(ctx, subnetList); err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}

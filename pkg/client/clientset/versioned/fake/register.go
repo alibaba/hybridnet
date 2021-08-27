@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ limitations under the License.
 package fake
 
 import (
-	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

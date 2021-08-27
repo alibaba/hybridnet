@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -23,9 +23,9 @@ import (
 	"reflect"
 	"strings"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/constants"
-	"github.com/oecp/rama/pkg/utils/transform"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/utils/transform"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -37,7 +37,7 @@ const (
 	MaxSubnetCapacity = 1 << 16
 )
 
-var subnetGVK = gvkConverter(ramav1.SchemeGroupVersion.WithKind("Subnet"))
+var subnetGVK = gvkConverter(networkingv1.SchemeGroupVersion.WithKind("Subnet"))
 
 func init() {
 	createHandlers[subnetGVK] = SubnetCreateValidation
@@ -46,7 +46,7 @@ func init() {
 }
 
 func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
-	subnet := &ramav1.Subnet{}
+	subnet := &networkingv1.Subnet{}
 	err := handler.Decoder.Decode(*req, subnet)
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
@@ -57,7 +57,7 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 		return admission.Denied("must have parent network")
 	}
 
-	network := &ramav1.Network{}
+	network := &networkingv1.Network{}
 	err = handler.Client.Get(ctx, types.NamespacedName{Name: subnet.Spec.Network}, network)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -67,8 +67,8 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 	}
 
 	// NetID validation
-	switch ramav1.GetNetworkType(network) {
-	case ramav1.NetworkTypeUnderlay:
+	switch networkingv1.GetNetworkType(network) {
+	case networkingv1.NetworkTypeUnderlay:
 		if subnet.Spec.NetID == nil {
 			if network.Spec.NetID == nil {
 				return admission.Denied("must have valid Net ID")
@@ -83,19 +83,19 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 			return admission.Denied("must not set autoNatOutgoing with underlay subnet")
 		}
 
-	case ramav1.NetworkTypeOverlay:
+	case networkingv1.NetworkTypeOverlay:
 		if subnet.Spec.NetID != nil {
 			return admission.Denied("must not assign net ID for overlay subnet")
 		}
 	}
 
 	// Address Range validation
-	if err = ramav1.ValidateAddressRange(&subnet.Spec.Range); err != nil {
+	if err = networkingv1.ValidateAddressRange(&subnet.Spec.Range); err != nil {
 		return admission.Denied(err.Error())
 	}
 
 	// Capacity validation
-	if capacity := ramav1.CalculateCapacity(&subnet.Spec.Range); capacity > MaxSubnetCapacity {
+	if capacity := networkingv1.CalculateCapacity(&subnet.Spec.Range); capacity > MaxSubnetCapacity {
 		return admission.Denied(fmt.Sprintf("subnet contains more than %d IPs", MaxSubnetCapacity))
 	}
 
@@ -104,7 +104,7 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 	if err = ipamSubnet.Canonicalize(); err != nil {
 		return admission.Denied(fmt.Sprintf("canonicalize subnet failed: %v", err))
 	}
-	subnetList := &ramav1.SubnetList{}
+	subnetList := &networkingv1.SubnetList{}
 	if err = handler.Client.List(ctx, subnetList); err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
@@ -121,7 +121,7 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 
 func SubnetUpdateValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
 	var err error
-	oldS, newS := &ramav1.Subnet{}, &ramav1.Subnet{}
+	oldS, newS := &networkingv1.Subnet{}, &networkingv1.Subnet{}
 	if err = handler.Decoder.DecodeRaw(req.Object, newS); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
@@ -134,15 +134,15 @@ func SubnetUpdateValidation(ctx context.Context, req *admission.Request, handler
 		return admission.Denied("must not change parent network")
 	}
 
-	network := &ramav1.Network{}
+	network := &networkingv1.Network{}
 	err = handler.Client.Get(ctx, types.NamespacedName{Name: newS.Spec.Network}, network)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
 	// NetID validation
-	switch ramav1.GetNetworkType(network) {
-	case ramav1.NetworkTypeUnderlay:
+	switch networkingv1.GetNetworkType(network) {
+	case networkingv1.NetworkTypeUnderlay:
 		if !reflect.DeepEqual(oldS.Spec.NetID, newS.Spec.NetID) {
 			return admission.Denied("must not change net ID")
 		}
@@ -151,14 +151,14 @@ func SubnetUpdateValidation(ctx context.Context, req *admission.Request, handler
 			return admission.Denied("must not set autoNatOutgoing with underlay subnet")
 		}
 
-	case ramav1.NetworkTypeOverlay:
+	case networkingv1.NetworkTypeOverlay:
 		if newS.Spec.NetID != nil {
 			return admission.Denied("must not assign net ID for overlay subnet")
 		}
 	}
 
 	// Address Range validation
-	err = ramav1.ValidateAddressRange(&newS.Spec.Range)
+	err = networkingv1.ValidateAddressRange(&newS.Spec.Range)
 	if err != nil {
 		return admission.Denied(err.Error())
 	}
@@ -180,12 +180,12 @@ func SubnetUpdateValidation(ctx context.Context, req *admission.Request, handler
 
 func SubnetDeleteValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
 	var err error
-	subnet := &ramav1.Subnet{}
+	subnet := &networkingv1.Subnet{}
 	if err = handler.Client.Get(ctx, types.NamespacedName{Name: req.Name}, subnet); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	ipList := &ramav1.IPInstanceList{}
+	ipList := &networkingv1.IPInstanceList{}
 	if err = handler.Client.List(ctx, ipList, client.MatchingLabels{constants.LabelSubnet: subnet.Name}); err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}

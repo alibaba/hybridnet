@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,9 +23,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/oecp/rama/pkg/daemon/config"
-	"github.com/oecp/rama/pkg/daemon/controller"
-	"github.com/oecp/rama/pkg/request"
+	"github.com/alibaba/hybridnet/pkg/daemon/config"
+	"github.com/alibaba/hybridnet/pkg/daemon/controller"
+	"github.com/alibaba/hybridnet/pkg/request"
 
 	"github.com/emicklei/go-restful"
 

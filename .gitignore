@@ -8,11 +8,6 @@
 *.dll
 *.so
 *.dylib
-dist/images/rama
-dist/images/rama-daemon
-dist/images/rama-manager
-dist/images/rama-webhook
-
 
 # Test binary, build with `go test -c`
 *.test

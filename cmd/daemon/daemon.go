@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,10 +19,10 @@ package main
 import (
 	_ "net/http/pprof"
 
-	ramainformer "github.com/oecp/rama/pkg/client/informers/externalversions"
-	daemonconfig "github.com/oecp/rama/pkg/daemon/config"
-	"github.com/oecp/rama/pkg/daemon/controller"
-	"github.com/oecp/rama/pkg/daemon/server"
+	hybridnetinformer "github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
+	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
+	"github.com/alibaba/hybridnet/pkg/daemon/controller"
+	"github.com/alibaba/hybridnet/pkg/daemon/server"
 
 	"k8s.io/client-go/informers"
 	"k8s.io/klog"
@@ -36,7 +36,7 @@ func main() {
 	klog.InitFlags(nil)
 	defer klog.Flush()
 
-	klog.Infof("Starting rama daemon with git commit: %v", gitCommit)
+	klog.Infof("Starting hybridnet daemon with git commit: %v", gitCommit)
 
 	config, err := daemonconfig.ParseFlags()
 	if err != nil {
@@ -44,15 +44,15 @@ func main() {
 	}
 
 	stopCh := controllerruntime.SetupSignalHandler()
-	ramaInformerFactory := ramainformer.NewSharedInformerFactory(config.RamaClient, 0)
+	hybridnetInformerFactory := hybridnetinformer.NewSharedInformerFactory(config.HybridnetClient, 0)
 	kubeInformerFactory := informers.NewSharedInformerFactory(config.KubeClient, 0)
 
-	ctl, err := controller.NewController(config, ramaInformerFactory, kubeInformerFactory)
+	ctl, err := controller.NewController(config, hybridnetInformerFactory, kubeInformerFactory)
 	if err != nil {
 		klog.Fatalf("create controller failed %v", err)
 	}
 
-	go ramaInformerFactory.Start(stopCh)
+	go hybridnetInformerFactory.Start(stopCh)
 	go kubeInformerFactory.Start(stopCh)
 
 	go func() {

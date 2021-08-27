@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/oecp/rama/pkg/apis/networking"
+	"github.com/alibaba/hybridnet/pkg/apis/networking"
 )
 
 // SchemeGroupVersion is group version used to register these objects

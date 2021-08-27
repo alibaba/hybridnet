@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,14 +23,14 @@ import (
 	"net/http"
 	"time"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	clientset "github.com/oecp/rama/pkg/client/clientset/versioned"
-	ramalister "github.com/oecp/rama/pkg/client/listers/networking/v1"
-	"github.com/oecp/rama/pkg/constants"
-	daemonconfig "github.com/oecp/rama/pkg/daemon/config"
-	"github.com/oecp/rama/pkg/daemon/containernetwork"
-	"github.com/oecp/rama/pkg/daemon/controller"
-	"github.com/oecp/rama/pkg/request"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	clientset "github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
+	networkinglister "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+	"github.com/alibaba/hybridnet/pkg/daemon/controller"
+	"github.com/alibaba/hybridnet/pkg/request"
 
 	"github.com/emicklei/go-restful"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,20 +41,20 @@ import (
 )
 
 type cniDaemonHandler struct {
-	config     *daemonconfig.Configuration
-	KubeClient kubernetes.Interface
-	RamaClient clientset.Interface
+	config          *daemonconfig.Configuration
+	KubeClient      kubernetes.Interface
+	HybridnetClient clientset.Interface
 
-	ipInstanceLister ramalister.IPInstanceLister
+	ipInstanceLister networkinglister.IPInstanceLister
 	ipInstanceSynced cache.InformerSynced
 
-	networkLister ramalister.NetworkLister
+	networkLister networkinglister.NetworkLister
 }
 
 func createCniDaemonHandler(stopCh <-chan struct{}, config *daemonconfig.Configuration, ctrlRef *controller.Controller) (*cniDaemonHandler, error) {
 	cdh := &cniDaemonHandler{
 		KubeClient:       config.KubeClient,
-		RamaClient:       config.RamaClient,
+		HybridnetClient:  config.HybridnetClient,
 		config:           config,
 		ipInstanceLister: ctrlRef.GetIPInstanceLister(),
 		networkLister:    ctrlRef.GetNetworkLister(),
@@ -81,11 +81,11 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 
 	var macAddr string
 	var netID *uint32
-	var affectedIPInstances []*ramav1.IPInstance
+	var affectedIPInstances []*networkingv1.IPInstance
 
-	allocatedIPs := map[ramav1.IPVersion]*containernetwork.IPInfo{
-		ramav1.IPv4: nil,
-		ramav1.IPv6: nil,
+	allocatedIPs := map[networkingv1.IPVersion]*containernetwork.IPInfo{
+		networkingv1.IPv4: nil,
+		networkingv1.IPv6: nil,
 	}
 
 	var returnIPAddress []request.IPAddress
@@ -165,36 +165,36 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 				return
 			}
 
-			ipVersion := ramav1.IPv4
+			ipVersion := networkingv1.IPv4
 			switch ipInstance.Spec.Address.Version {
-			case ramav1.IPv4:
-				if allocatedIPs[ramav1.IPv4] != nil {
+			case networkingv1.IPv4:
+				if allocatedIPs[networkingv1.IPv4] != nil {
 					errMsg := fmt.Errorf("only one ipv4 address for each pod are supported, %v/%v", podRequest.PodNamespace, podRequest.PodName)
 					klog.Error(errMsg)
 					_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
 					return
 				}
 
-				allocatedIPs[ramav1.IPv4] = &containernetwork.IPInfo{
+				allocatedIPs[networkingv1.IPv4] = &containernetwork.IPInfo{
 					Addr: containerIP,
 					Gw:   gatewayIP,
 					Cidr: cidrNet,
 				}
-			case ramav1.IPv6:
-				if allocatedIPs[ramav1.IPv6] != nil {
+			case networkingv1.IPv6:
+				if allocatedIPs[networkingv1.IPv6] != nil {
 					errMsg := fmt.Errorf("only one ipv6 address for each pod are supported, %v/%v", podRequest.PodNamespace, podRequest.PodName)
 					klog.Error(errMsg)
 					_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
 					return
 				}
 
-				allocatedIPs[ramav1.IPv6] = &containernetwork.IPInfo{
+				allocatedIPs[networkingv1.IPv6] = &containernetwork.IPInfo{
 					Addr: containerIP,
 					Gw:   gatewayIP,
 					Cidr: cidrNet,
 				}
 
-				ipVersion = ramav1.IPv6
+				ipVersion = networkingv1.IPv6
 			default:
 				errMsg := fmt.Errorf("unsupported ip version %v for pod %v/%v", ipInstance.Spec.Address.Version, podRequest.PodNamespace, podRequest.PodName)
 				klog.Error(errMsg)
@@ -243,7 +243,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 
 	klog.Infof("Create container, mac %s, net id %d", macAddr, *netID)
 	hostInterface, err := cdh.configureNic(podRequest.PodName, podRequest.PodNamespace, podRequest.NetNs, podRequest.ContainerID,
-		macAddr, netID, allocatedIPs, ramav1.GetNetworkType(network))
+		macAddr, netID, allocatedIPs, networkingv1.GetNetworkType(network))
 	if err != nil {
 		errMsg := fmt.Errorf("configure nic failed: %v", err)
 		klog.Error(errMsg)
@@ -262,7 +262,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		}
 
 		newIPInstance.Status.SandboxID = podRequest.ContainerID
-		_, err = cdh.RamaClient.NetworkingV1().IPInstances(newIPInstance.Namespace).UpdateStatus(context.TODO(), newIPInstance, metav1.UpdateOptions{})
+		_, err = cdh.HybridnetClient.NetworkingV1().IPInstances(newIPInstance.Namespace).UpdateStatus(context.TODO(), newIPInstance, metav1.UpdateOptions{})
 		if err != nil {
 			errMsg := fmt.Errorf("failed to update IPInstance crd for %s, %v", newIPInstance.Name, err)
 			klog.Error(errMsg)

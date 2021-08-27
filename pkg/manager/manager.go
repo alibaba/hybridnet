@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -22,8 +22,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/oecp/rama/pkg/client/clientset/versioned"
-	"github.com/oecp/rama/pkg/client/informers/externalversions"
+	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
+	"github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,12 +42,12 @@ import (
 )
 
 const (
-	Name      = "rama-manager"
+	Name      = "hybridnet-manager"
 	Namespace = "kube-system"
 
 	LeaderElectionUserAgent = "leader-election"
-	RamaUserAgent           = "rama"
-	recorderUserAgent       = "rama-recorder"
+	HybridnetUserAgent      = "hybridnet"
+	recorderUserAgent       = "hybridnet-recorder"
 
 	DefaultLeaseDuration = 15 * time.Second
 	DefaultRenewDeadline = 10 * time.Second
@@ -58,11 +58,11 @@ type Manager struct {
 	KubeConfig *rest.Config
 
 	KubeClient           kubernetes.Interface
-	RamaClient           versioned.Interface
+	HybridnetClient      versioned.Interface
 	LeaderElectionClient kubernetes.Interface
 
-	InformerFactory     informers.SharedInformerFactory
-	RamaInformerFactory externalversions.SharedInformerFactory
+	InformerFactory          informers.SharedInformerFactory
+	HybridnetInformerFactory externalversions.SharedInformerFactory
 
 	recorder record.EventRecorder
 
@@ -76,13 +76,13 @@ func NewManager() (*Manager, error) {
 	}
 
 	kubeClient := kubernetes.NewForConfigOrDie(config)
-	ramaClient := versioned.NewForConfigOrDie(rest.AddUserAgent(config, RamaUserAgent))
+	hybridnetClient := versioned.NewForConfigOrDie(rest.AddUserAgent(config, HybridnetUserAgent))
 
 	// build shared informer factory
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
 
-	// rama shared informer factory
-	ramaInformerFactory := externalversions.NewSharedInformerFactory(ramaClient, 0)
+	// hybridnet shared informer factory
+	hybridnetInformerFactory := externalversions.NewSharedInformerFactory(hybridnetClient, 0)
 
 	// build leader election client set
 	leaderElectionClient := kubernetes.NewForConfigOrDie(rest.AddUserAgent(config, LeaderElectionUserAgent))
@@ -96,13 +96,13 @@ func NewManager() (*Manager, error) {
 	eventRecorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: Name})
 
 	m := &Manager{
-		KubeConfig:           config,
-		KubeClient:           kubeClient,
-		RamaClient:           ramaClient,
-		LeaderElectionClient: leaderElectionClient,
-		InformerFactory:      informerFactory,
-		RamaInformerFactory:  ramaInformerFactory,
-		recorder:             eventRecorder,
+		KubeConfig:               config,
+		KubeClient:               kubeClient,
+		HybridnetClient:          hybridnetClient,
+		LeaderElectionClient:     leaderElectionClient,
+		InformerFactory:          informerFactory,
+		HybridnetInformerFactory: hybridnetInformerFactory,
+		recorder:                 eventRecorder,
 	}
 
 	err = initControllers(m)
@@ -164,10 +164,10 @@ func (m *Manager) Run(ctx context.Context) {
 	// informer factory must be started after controller initializations
 	klog.Info("Starting shared informer factory")
 	go m.InformerFactory.Start(m.StopEverything)
-	klog.Info("Starting rama shared informer factory")
-	go m.RamaInformerFactory.Start(m.StopEverything)
+	klog.Info("Starting hybridnet shared informer factory")
+	go m.HybridnetInformerFactory.Start(m.StopEverything)
 
-	klog.Info("Started rama manager")
+	klog.Info("Started hybridnet manager")
 	<-m.StopEverything
-	klog.Info("Shutting down rama manager")
+	klog.Info("Shutting down hybridnet manager")
 }

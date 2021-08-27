@@ -1,10 +1,10 @@
 FROM golang:1.13.8 as builder
 
-COPY . /go/src/github.com/oecp/rama
+COPY . /go/src/github.com/alibaba/hybridnet
 
 ENV ARCH=arm64
 
-WORKDIR /go/src/github.com/oecp/rama
+WORKDIR /go/src/github.com/alibaba/hybridnet
 
 RUN export GOCACHE=/tmp && \
     export GO111MODULE=on && \
@@ -12,13 +12,13 @@ RUN export GOCACHE=/tmp && \
     export CGO_ENABLED=0 && \
     export GOOS=linux && \
     export COMMIT_ID=`git rev-parse --short HEAD 2>/dev/null` && \
-    go build -o dist/images/rama -ldflags "-w -s" -v ./cmd/cni && \
-    go build -ldflags "-w -s -X \"main.gitCommit=`echo $COMMIT_ID`\" " -o dist/images/rama-daemon -v ./cmd/daemon && \
-    go build -ldflags "-X \"main.gitCommit=`git rev-parse --short HEAD 2>/dev/null`\" " -o dist/images/rama-manager -v ./cmd/manager && \
-    go build -o dist/images/rama-webhook -v ./cmd/webhook && \
+    go build -o dist/images/hybridnet -ldflags "-w -s" -v ./cmd/cni && \
+    go build -ldflags "-w -s -X \"main.gitCommit=`echo $COMMIT_ID`\" " -o dist/images/hybridnet-daemon -v ./cmd/daemon && \
+    go build -ldflags "-X \"main.gitCommit=`git rev-parse --short HEAD 2>/dev/null`\" " -o dist/images/hybridnet-manager -v ./cmd/manager && \
+    go build -o dist/images/hybridnet-webhook -v ./cmd/webhook && \
     echo $COMMIT_ID > ./COMMIT_ID
 
-RUN cd /go/src/github.com/oecp/rama/dist/secrets && \
+RUN cd /go/src/github.com/alibaba/hybridnet/dist/secrets && \
     sh generate-tls-certificates.sh
 
 FROM arm64v8/alpine:3.14
@@ -48,17 +48,17 @@ RUN mkdir -p cni-plugins/ && \
     curl -SL https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-linux-arm64-${CNI_VERSION}.tgz \
     | tar -xz -C cni-plugins/
 
-COPY dist/images/start-daemon.sh /rama/start-daemon.sh
-COPY dist/images/install-cni.sh /rama/install-cni.sh
-COPY dist/images/00-rama.conflist /rama/00-rama.conflist
+COPY dist/images/start-daemon.sh /hybridnet/start-daemon.sh
+COPY dist/images/install-cni.sh /hybridnet/install-cni.sh
+COPY dist/images/00-hybridnet.conflist /hybridnet/00-hybridnet.conflist
 
-COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama /rama/rama
-COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama-daemon /rama/rama-daemon
-COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama-manager /rama/rama-manager
-COPY --from=builder /go/src/github.com/oecp/rama/dist/images/rama-webhook /rama/rama-webhook
-COPY --from=builder /go/src/github.com/oecp/rama/COMMIT_ID /rama/COMMIT_ID
+COPY --from=builder /go/src/github.com/alibaba/hybridnet/dist/images/hybridnet /hybridnet/hybridnet
+COPY --from=builder /go/src/github.com/alibaba/hybridnet/dist/images/hybridnet-daemon /hybridnet/hybridnet-daemon
+COPY --from=builder /go/src/github.com/alibaba/hybridnet/dist/images/hybridnet-manager /hybridnet/hybridnet-manager
+COPY --from=builder /go/src/github.com/alibaba/hybridnet/dist/images/hybridnet-webhook /hybridnet/hybridnet-webhook
+COPY --from=builder /go/src/github.com/alibaba/hybridnet/COMMIT_ID /hybridnet/COMMIT_ID
 
 RUN mkdir -p /tmp/k8s-webhook-server/serving-certs
 
-COPY --from=builder /go/src/github.com/oecp/rama/dist/secrets/tls.crt /tmp/k8s-webhook-server/serving-certs/tls.crt
-COPY --from=builder /go/src/github.com/oecp/rama/dist/secrets/tls.key /tmp/k8s-webhook-server/serving-certs/tls.key
+COPY --from=builder /go/src/github.com/alibaba/hybridnet/dist/secrets/tls.crt /tmp/k8s-webhook-server/serving-certs/tls.crt
+COPY --from=builder /go/src/github.com/alibaba/hybridnet/dist/secrets/tls.key /tmp/k8s-webhook-server/serving-certs/tls.key

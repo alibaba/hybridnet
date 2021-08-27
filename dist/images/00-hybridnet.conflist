@@ -1,10 +1,10 @@
 {
-    "name":"rama",
+    "name":"hybridnet",
     "cniVersion":"0.3.1",
     "plugins":[
         {
-            "type":"rama",
-            "server_socket":"/run/cni/rama.sock"
+            "type":"hybridnet",
+            "server_socket":"/run/cni/hybridnet.sock"
         },
         {
             "type": "bandwidth",

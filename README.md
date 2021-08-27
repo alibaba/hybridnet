@@ -1,21 +1,21 @@
-# Rama
+# Hybridnet
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/oecp/rama)](https://goreportcard.com/report/github.com/oecp/rama)
-[![Github All Releases](https://img.shields.io/docker/pulls/ramanetworking/rama.svg)](https://hub.docker.com/r/ramanetworking/rama/tags)
-[![Version](https://img.shields.io/github/v/release/oecp/rama)](https://github.com/oecp/rama/releases)
-[![codecov](https://codecov.io/gh/oecp/rama/branch/main/graphs/badge.svg)](https://codecov.io/gh/oecp/rama)
-[![License](https://img.shields.io/github/license/oecp/rama)](https://www.apache.org/licenses/LICENSE-2.0.html)
-![workflow check](https://github.com/oecp/rama/actions/workflows/check.yml/badge.svg)
-![workflow build](https://github.com/oecp/rama/actions/workflows/build.yml/badge.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/alibaba/hybridnet)](https://goreportcard.com/report/github.com/alibaba/hybridnet)
+[![Github All Releases](https://img.shields.io/docker/pulls/hybridnetdev/hybridnet.svg)](https://hub.docker.com/r/hybridnetdev/hybridnet/tags)
+[![Version](https://img.shields.io/github/v/release/alibaba/hybridnet)](https://github.com/alibaba/hybridnet/releases)
+[![codecov](https://codecov.io/gh/alibaba/hybridnet/branch/main/graphs/badge.svg)](https://codecov.io/gh/alibaba/hybridnet)
+[![License](https://img.shields.io/github/license/alibaba/hybridnet)](https://www.apache.org/licenses/LICENSE-2.0.html)
+![workflow check](https://github.com/alibaba/hybridnet/actions/workflows/check.yml/badge.svg)
+![workflow build](https://github.com/alibaba/hybridnet/actions/workflows/build.yml/badge.svg)
 
-## What is Rama?
+## What is Hybridnet?
 
-Rama is an open source container networking solution, integrated with Kubernetes and used officially by following well-known PaaS platforms,
+Hybridnet is an open source container networking solution, integrated with Kubernetes and used officially by following well-known PaaS platforms,
 
-- OECP of Alibaba Cloud
+- AECP of Alibaba Cloud
 - SOFAStack of Ant Financial Co.
 
-Rama focus on large-scale, user-friendly and heterogeneous infrastructure, now hundreds of clusters are running on rama all over world.
+Hybridnet focus on large-scale, user-friendly and heterogeneous infrastructure, now hundreds of clusters are running on hybridnet all over world.
 
 ## Features
 
@@ -28,14 +28,14 @@ Rama focus on large-scale, user-friendly and heterogeneous infrastructure, now h
 
 ## Contributing
 
-Rama welcome contributions, including bug reports, feature requests and documentation improvements.
+Hybridnet welcome contributions, including bug reports, feature requests and documentation improvements.
 If you want to contribute, please start with [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Contact
 
-For any questions about rama, please reach us via:
+For any questions about hybridnet, please reach us via:
 
-- Slack: #general on the [rama slack](rama-qh63190.slack.com)
+- Slack: #general on the [hybridnet slack](hybridnetworkspace.slack.com)
 - DingTalk: Group No.35109308
 - E-mail: private or security issues should be reported via e-mail addresses listed in the [MAINTAINERS](MAINTAINERS) file
 

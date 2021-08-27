@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,9 +22,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/oecp/rama/pkg/daemon/containernetwork"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 
-	daemonutils "github.com/oecp/rama/pkg/daemon/utils"
+	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 
 	"github.com/vishvananda/netlink"
 )

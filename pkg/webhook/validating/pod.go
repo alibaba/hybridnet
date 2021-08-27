@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -22,11 +22,11 @@ import (
 	"net/http"
 	"strings"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/constants"
-	"github.com/oecp/rama/pkg/feature"
-	ipamtypes "github.com/oecp/rama/pkg/ipam/types"
-	"github.com/oecp/rama/pkg/utils"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/feature"
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -54,7 +54,7 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 		networkType      = ipamtypes.ParseNetworkTypeFromString(utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType]))
 	)
 	if len(specifiedNetwork) > 0 {
-		network := &ramav1.Network{}
+		network := &networkingv1.Network{}
 		if err = handler.Cache.Get(ctx, types.NamespacedName{Name: specifiedNetwork}, network); err != nil {
 			if errors.IsNotFound(err) {
 				return admission.Denied(fmt.Sprintf("specified network %s not found", specifiedNetwork))
@@ -63,12 +63,12 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 		}
 
 		// check network type
-		if !stringEqualCaseInsensitive(string(ramav1.GetNetworkType(network)), string(networkType)) {
-			return admission.Errored(http.StatusInternalServerError, fmt.Errorf("specified network type mismatch %s %s", networkType, ramav1.GetNetworkType(network)))
+		if !stringEqualCaseInsensitive(string(networkingv1.GetNetworkType(network)), string(networkType)) {
+			return admission.Errored(http.StatusInternalServerError, fmt.Errorf("specified network type mismatch %s %s", networkType, networkingv1.GetNetworkType(network)))
 
 		}
 
-		ipList := &ramav1.IPInstanceList{}
+		ipList := &networkingv1.IPInstanceList{}
 		if err = handler.Client.List(
 			ctx,
 			ipList,
@@ -99,7 +99,7 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 		if len(specifiedNetwork) == 0 {
 			return admission.Denied("subnet and network must be specified at the same time")
 		}
-		subnet := &ramav1.Subnet{}
+		subnet := &networkingv1.Subnet{}
 		if err = handler.Cache.Get(ctx, types.NamespacedName{Name: specifiedSubnet}, subnet); err != nil {
 			if errors.IsNotFound(err) {
 				return admission.Denied(fmt.Sprintf("specified subnet %s not found", specifiedSubnet))
@@ -130,13 +130,13 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 
 	// Overlay network capacity validation
 	if feature.DualStackEnabled() && networkType == ipamtypes.Overlay {
-		networkList := &ramav1.NetworkList{}
+		networkList := &networkingv1.NetworkList{}
 		if err = handler.Client.List(ctx, networkList); err != nil {
 			return admission.Errored(http.StatusInternalServerError, err)
 		}
 		for i := range networkList.Items {
 			network := &networkList.Items[i]
-			if network.Spec.Type == ramav1.NetworkTypeOverlay {
+			if network.Spec.Type == networkingv1.NetworkTypeOverlay {
 				switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
 				case ipamtypes.IPv4Only:
 					if network.Status.Statistics.Available <= 0 {

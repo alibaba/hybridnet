@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ limitations under the License.
 package fake
 
 import (
-	v1 "github.com/oecp/rama/pkg/client/clientset/versioned/typed/networking/v1"
+	v1 "github.com/alibaba/hybridnet/pkg/client/clientset/versioned/typed/networking/v1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
 )

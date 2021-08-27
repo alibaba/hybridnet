@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,9 +20,9 @@ import (
 	"fmt"
 	"net"
 
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/containernetworking/plugins/pkg/ns"
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/daemon/containernetwork"
 	"github.com/vishvananda/netlink"
 
 	"k8s.io/klog"
@@ -30,17 +30,17 @@ import (
 
 // ipAddr is a CIDR notation IP address and prefix length
 func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, containerID, mac string,
-	netID *uint32, allocatedIPs map[ramav1.IPVersion]*containernetwork.IPInfo, networkType ramav1.NetworkType) (string, error) {
+	netID *uint32, allocatedIPs map[networkingv1.IPVersion]*containernetwork.IPInfo, networkType networkingv1.NetworkType) (string, error) {
 
 	var err error
 	var nodeIfName string
 	var mtu int
 
 	switch networkType {
-	case ramav1.NetworkTypeUnderlay:
+	case networkingv1.NetworkTypeUnderlay:
 		mtu = cdh.config.VlanMTU
 		nodeIfName = cdh.config.NodeVlanIfName
-	case ramav1.NetworkTypeOverlay:
+	case networkingv1.NetworkTypeOverlay:
 		mtu = cdh.config.VxlanMTU
 		nodeIfName = cdh.config.NodeVxlanIfName
 	}

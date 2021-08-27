@@ -1,33 +1,33 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: rama-daemon
+  name: hybridnet-daemon
   namespace: kube-system
   annotations:
     kubernetes.io/description: |
-      This daemon set launches the rama cni daemon.
+      This daemon set launches the hybridnet cni daemon.
 spec:
   selector:
     matchLabels:
-      app: rama-daemon
+      app: hybridnet-daemon
   template:
     metadata:
       labels:
-        app: rama-daemon
+        app: hybridnet-daemon
     spec:
       tolerations:
         - operator: Exists
         - key: node-role.kubernetes.io/master
           effect: NoSchedule
       priorityClassName: system-cluster-critical
-      serviceAccountName: rama
+      serviceAccountName: hybridnet
       hostNetwork: true
       hostPID: true
       initContainers:
         - name: install-cni
-          image: "ramanetworking/rama:latest"
+          image: "hybridnetdev/hybridnet:latest"
           imagePullPolicy: IfNotPresent
-          command: ["/rama/install-cni.sh"]
+          command: ["/hybridnet/install-cni.sh"]
           securityContext:
             runAsUser: 0
             privileged: true
@@ -38,11 +38,11 @@ spec:
               name: cni-bin
       containers:
         - name: cni-daemon
-          image: "ramanetworking/rama:latest"
+          image: "hybridnetdev/hybridnet:latest"
           imagePullPolicy: IfNotPresent
           command:
             - sh
-            - /rama/start-daemon.sh
+            - /hybridnet/start-daemon.sh
 #          args:
 #            - --prefer-vlan-interfaces=enp0s8
           securityContext:
@@ -124,21 +124,21 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rama-manager
+  name: hybridnet-manager
   namespace: kube-system
   annotations:
-    kubernetes.io/description: "rama manager"
+    kubernetes.io/description: "hybridnet manager"
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: rama-manager
+      app: hybridnet-manager
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        app: rama-manager
+        app: hybridnet-manager
     spec:
       tolerations:
         - operator: Exists
@@ -148,17 +148,17 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  app: rama-manager
+                  app: hybridnet-manager
               topologyKey: kubernetes.io/hostname
       priorityClassName: system-cluster-critical
-      serviceAccountName: rama
+      serviceAccountName: hybridnet
       hostNetwork: true
       containers:
-        - name: rama-manager
-          image: "ramanetworking/rama:latest"
+        - name: hybridnet-manager
+          image: "hybridnetdev/hybridnet:latest"
           imagePullPolicy: IfNotPresent
           command:
-            - /rama/rama-manager
+            - /hybridnet/hybridnet-manager
           env:
             - name: DEFAULT_NETWORK_TYPE
               value: Overlay
@@ -170,22 +170,22 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rama-webhook
+  name: hybridnet-webhook
   namespace: kube-system
   annotations:
-    kubernetes.io/description: "rama webhook"
+    kubernetes.io/description: "hybridnet webhook"
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: rama-webhook
+      app: hybridnet-webhook
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        app: rama-webhook
-        webhook.rama.io/ignore: "true"
+        app: hybridnet-webhook
+        webhook.hybridnet.io/ignore: "true"
     spec:
       tolerations:
         - operator: Exists
@@ -193,14 +193,14 @@ spec:
       nodeSelector:
         node-role.kubernetes.io/master: ""
       priorityClassName: system-cluster-critical
-      serviceAccountName: rama
+      serviceAccountName: hybridnet
       hostNetwork: true
       containers:
-        - name: rama-webhook
-          image: "ramanetworking/rama:latest"
+        - name: hybridnet-webhook
+          image: "hybridnetdev/hybridnet:latest"
           imagePullPolicy: IfNotPresent
           command:
-            - /rama/rama-webhook
+            - /hybridnet/hybridnet-webhook
           args:
             - --port=9898
           ports:
@@ -212,7 +212,7 @@ spec:
 kind: Service
 apiVersion: v1
 metadata:
-  name: rama-webhook
+  name: hybridnet-webhook
   namespace: kube-system
 spec:
   ports:
@@ -222,7 +222,7 @@ spec:
       targetPort: webhook-port
   type: ClusterIP
   selector:
-    app: rama-webhook
+    app: hybridnet-webhook
   sessionAffinity: None
 
 ---
@@ -230,22 +230,22 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: rama-validating-webhook
+  name: hybridnet-validating-webhook
 webhooks:
   - admissionReviewVersions: ["v1beta1", "v1"]
     clientConfig:
-      caBundle: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNtakNDQVlJQ0NRRDZBUjVVNHoySUV6QU5CZ2txaGtpRzl3MEJBUXNGQURBUE1RMHdDd1lEVlFRRERBUnkKWVcxaE1CNFhEVEl4TURZeE56QTNNakF6TTFvWERUTXhNRFl4TlRBM01qQXpNMW93RHpFTk1Bc0dBMVVFQXd3RQpjbUZ0WVRDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTjR0RXhkeVQwU25lYSs0CkRjdmVnWldDOGFieE1DSTVRVld1QmVqbmJZU1Z0MEN4YzA2eGY1QmE2UExudWpxR0dKOGpqNGd1SE12SmN4TDIKTGZDVExwUVIxWTVJcDR6Z3l1QkVqTlFOTEFkRlZDQXlvS2ZCa1JkdjYyM1lnbmFxczh2WjI4YjJGci9JS0hOago4ODVzTkE1M1p2aEFXMi94WUhsbnBIS2FvVUdESnIrekNvMzRGbW9XYkxpTFRvQ296eDBGZFAvMGgvMTU2TlowCnovTW5rTmNtQTh1RkZ5OXE2NkJkT0dTaTVha3lLOWsvQWFZWW1CYXh4VysxVVc0SVAvRVdKYkloTzJNc2pFVXUKQm8vK2lBSm9sTmdUcDJLeDJhOTlLM2hYOUVwdkVMVVNJTWswZDhmczQrT2gzd1FWUGloWkk1d1R6dk5NVnltWgpkNGJVVjVzQ0F3RUFBVEFOQmdrcWhraUc5dzBCQVFzRkFBT0NBUUVBWXNrQXVvV0N0aUFNczY5SE5WWU42TXpWClZwbXR4b0JrZFo1QXkwMmVKK0NtUFdiSE9NZmVZdC9tell5UGR4TDFDdlJjQm5PcHZ1b0dBV3FaVXVmMzJkZXYKaC9uR0IzNVNFbDVsWVVRc2FUbkJSQ3JmSzh3TUZNRVJDVmEyOFRmQkdZa0VCazdZbnJzVGFXVHlDbnVNUnM4cgpEWW80YzBBbXFub2txUnptUWZiUHhSRVJuWE54QjJ2WlBjTkVFTlNrZVpZaVZQNlFSWFA2UG5KR3UrUmhBSVBiCmxoa3dtZVJnQVg5eGNUekYyM2JGbHpRSWVseDVHY0NQaVdZbDdob3NZY2pjWmZEVGUvOWlWdDE0KytvYlFVdjIKNFZ6Zk96eGk3ZEFqNFVBeUxBVytYQVVLWW5DNlZnMUpYZW1HcmZ2MjhxcUpJYlNwejNTUEloRWpzcVhsQVE9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+      caBundle: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNwRENDQVl3Q0NRQy9aTnM5bm9oY25UQU5CZ2txaGtpRzl3MEJBUXNGQURBVU1SSXdFQVlEVlFRRERBbG8KZVdKeWFXUnVaWFF3SGhjTk1qRXdPREkyTVRBeU16UTRXaGNOTXpFd09ESTBNVEF5TXpRNFdqQVVNUkl3RUFZRApWUVFEREFsb2VXSnlhV1J1WlhRd2dnRWlNQTBHQ1NxR1NJYjNEUUVCQVFVQUE0SUJEd0F3Z2dFS0FvSUJBUUN3CmxlMFVWbXRiSkFYRmpodlFXdU8yNzBYRGNibU1sQmhrWTJldlZzWTNpNmVmRXdrYWllMmhCWGdLZFRncDVDSVcKOUFEa3JIY2p0aFFpL1AwTk5DRWpRK055TytKY0lVbUpQWE5XaWVRaG1hV0NzNlFzcWNOWk0zNUhsWTk2ekVVdgp1N3VQOGVOY1hmRXMyeWJ2RFFsRzVUT2pXTi8zNEFIQ1pRSmxpUkVtMUtUSm4zUko5SXNDbXlSYUhKNUF2ODVPClhralJqV0xkVm4wNlJNS3lUeDYxUjRQWTE0RTZYelRlWFk2T2pkT2ZtOWVtYXZTMUJLTGFOMDlBQWovdkoyejIKYzlTZkZMd0tJVkowR01TYXUwS2NNNlNCbUc2UGR5eE5PWmhBRExTOVZYUlMzN1NYeC9WRmQ5TFJMRk1wd3ljNQpZcVJENU1uK2tYNDh1VFU5N2RmTEFnTUJBQUV3RFFZSktvWklodmNOQVFFTEJRQURnZ0VCQUFSWmtBMENUZTRzCldUaU1WR0NOOEQwTjZtc2ZjYURRRjRUVDZNSEJUcjdOcklUMXZsMFlreHVGNXl4ajBDQ2E0bXBQRWNGNmJPcUcKdlQxcnZrZmdoakl2QnRFTVlUUEZ1dXNRZ2JmWU5zWVNkVjkzSVBYVkRTbkZITjdNRlBFMTZBd0xOQXBjUmpYKwpWV1FrNk1MU1RUcFQ2V3dWSUpHemsrZDhxakdYQlgyeE41YngwRDlpeU1oYzVjdnJkNDJHT1RFNko3UG0vTk5uCmdvZ2twYnRPaWRwMGJaVG1XQUkzbnUzNCtzRXQ2T2dzbFpweEt1OGlJanhnQlJrOHZDYXNBa0tMdDFFdXdOVUQKd1hBUGI5Wkl3clNEVFR5Nlg3cUZDSXdRMW9ZNVFFMW8xcUVrMTZROWk2VHNTUU5mbmIxQUxTNjJNcmp1dnZGUgplY21QMHpHSzd4WT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo="
       service:
-        name: rama-webhook
+        name: hybridnet-webhook
         namespace: kube-system
         port: 443
         path: "/validate"
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: rama-v1.validating.rama
+    name: hybridnet-v1.validating.hybridnet
     objectSelector:
       matchExpressions:
-        - key: webhook.rama.io/ignore
+        - key: webhook.hybridnet.io/ignore
           operator: NotIn
           values: ["TRUE", "true"]
     rules:
@@ -257,18 +257,18 @@ webhooks:
     timeoutSeconds: 10
   - admissionReviewVersions: ["v1beta1", "v1"]
     clientConfig:
-      caBundle: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNtakNDQVlJQ0NRRDZBUjVVNHoySUV6QU5CZ2txaGtpRzl3MEJBUXNGQURBUE1RMHdDd1lEVlFRRERBUnkKWVcxaE1CNFhEVEl4TURZeE56QTNNakF6TTFvWERUTXhNRFl4TlRBM01qQXpNMW93RHpFTk1Bc0dBMVVFQXd3RQpjbUZ0WVRDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTjR0RXhkeVQwU25lYSs0CkRjdmVnWldDOGFieE1DSTVRVld1QmVqbmJZU1Z0MEN4YzA2eGY1QmE2UExudWpxR0dKOGpqNGd1SE12SmN4TDIKTGZDVExwUVIxWTVJcDR6Z3l1QkVqTlFOTEFkRlZDQXlvS2ZCa1JkdjYyM1lnbmFxczh2WjI4YjJGci9JS0hOago4ODVzTkE1M1p2aEFXMi94WUhsbnBIS2FvVUdESnIrekNvMzRGbW9XYkxpTFRvQ296eDBGZFAvMGgvMTU2TlowCnovTW5rTmNtQTh1RkZ5OXE2NkJkT0dTaTVha3lLOWsvQWFZWW1CYXh4VysxVVc0SVAvRVdKYkloTzJNc2pFVXUKQm8vK2lBSm9sTmdUcDJLeDJhOTlLM2hYOUVwdkVMVVNJTWswZDhmczQrT2gzd1FWUGloWkk1d1R6dk5NVnltWgpkNGJVVjVzQ0F3RUFBVEFOQmdrcWhraUc5dzBCQVFzRkFBT0NBUUVBWXNrQXVvV0N0aUFNczY5SE5WWU42TXpWClZwbXR4b0JrZFo1QXkwMmVKK0NtUFdiSE9NZmVZdC9tell5UGR4TDFDdlJjQm5PcHZ1b0dBV3FaVXVmMzJkZXYKaC9uR0IzNVNFbDVsWVVRc2FUbkJSQ3JmSzh3TUZNRVJDVmEyOFRmQkdZa0VCazdZbnJzVGFXVHlDbnVNUnM4cgpEWW80YzBBbXFub2txUnptUWZiUHhSRVJuWE54QjJ2WlBjTkVFTlNrZVpZaVZQNlFSWFA2UG5KR3UrUmhBSVBiCmxoa3dtZVJnQVg5eGNUekYyM2JGbHpRSWVseDVHY0NQaVdZbDdob3NZY2pjWmZEVGUvOWlWdDE0KytvYlFVdjIKNFZ6Zk96eGk3ZEFqNFVBeUxBVytYQVVLWW5DNlZnMUpYZW1HcmZ2MjhxcUpJYlNwejNTUEloRWpzcVhsQVE9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+      caBundle: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNwRENDQVl3Q0NRQy9aTnM5bm9oY25UQU5CZ2txaGtpRzl3MEJBUXNGQURBVU1SSXdFQVlEVlFRRERBbG8KZVdKeWFXUnVaWFF3SGhjTk1qRXdPREkyTVRBeU16UTRXaGNOTXpFd09ESTBNVEF5TXpRNFdqQVVNUkl3RUFZRApWUVFEREFsb2VXSnlhV1J1WlhRd2dnRWlNQTBHQ1NxR1NJYjNEUUVCQVFVQUE0SUJEd0F3Z2dFS0FvSUJBUUN3CmxlMFVWbXRiSkFYRmpodlFXdU8yNzBYRGNibU1sQmhrWTJldlZzWTNpNmVmRXdrYWllMmhCWGdLZFRncDVDSVcKOUFEa3JIY2p0aFFpL1AwTk5DRWpRK055TytKY0lVbUpQWE5XaWVRaG1hV0NzNlFzcWNOWk0zNUhsWTk2ekVVdgp1N3VQOGVOY1hmRXMyeWJ2RFFsRzVUT2pXTi8zNEFIQ1pRSmxpUkVtMUtUSm4zUko5SXNDbXlSYUhKNUF2ODVPClhralJqV0xkVm4wNlJNS3lUeDYxUjRQWTE0RTZYelRlWFk2T2pkT2ZtOWVtYXZTMUJLTGFOMDlBQWovdkoyejIKYzlTZkZMd0tJVkowR01TYXUwS2NNNlNCbUc2UGR5eE5PWmhBRExTOVZYUlMzN1NYeC9WRmQ5TFJMRk1wd3ljNQpZcVJENU1uK2tYNDh1VFU5N2RmTEFnTUJBQUV3RFFZSktvWklodmNOQVFFTEJRQURnZ0VCQUFSWmtBMENUZTRzCldUaU1WR0NOOEQwTjZtc2ZjYURRRjRUVDZNSEJUcjdOcklUMXZsMFlreHVGNXl4ajBDQ2E0bXBQRWNGNmJPcUcKdlQxcnZrZmdoakl2QnRFTVlUUEZ1dXNRZ2JmWU5zWVNkVjkzSVBYVkRTbkZITjdNRlBFMTZBd0xOQXBjUmpYKwpWV1FrNk1MU1RUcFQ2V3dWSUpHemsrZDhxakdYQlgyeE41YngwRDlpeU1oYzVjdnJkNDJHT1RFNko3UG0vTk5uCmdvZ2twYnRPaWRwMGJaVG1XQUkzbnUzNCtzRXQ2T2dzbFpweEt1OGlJanhnQlJrOHZDYXNBa0tMdDFFdXdOVUQKd1hBUGI5Wkl3clNEVFR5Nlg3cUZDSXdRMW9ZNVFFMW8xcUVrMTZROWk2VHNTUU5mbmIxQUxTNjJNcmp1dnZGUgplY21QMHpHSzd4WT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo="
       service:
-        name: rama-webhook
+        name: hybridnet-webhook
         namespace: kube-system
         port: 443
         path: "/validate"
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: core-v1.validating.rama
+    name: core-v1.validating.hybridnet
     objectSelector:
       matchExpressions:
-        - key: webhook.rama.io/ignore
+        - key: webhook.hybridnet.io/ignore
           operator: NotIn
           values: ["TRUE", "true"]
     rules:
@@ -284,22 +284,22 @@ webhooks:
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: rama-mutating-webhook
+  name: hybridnet-mutating-webhook
 webhooks:
   - admissionReviewVersions: ["v1beta1", "v1"]
     clientConfig:
-      caBundle: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNtakNDQVlJQ0NRRDZBUjVVNHoySUV6QU5CZ2txaGtpRzl3MEJBUXNGQURBUE1RMHdDd1lEVlFRRERBUnkKWVcxaE1CNFhEVEl4TURZeE56QTNNakF6TTFvWERUTXhNRFl4TlRBM01qQXpNMW93RHpFTk1Bc0dBMVVFQXd3RQpjbUZ0WVRDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTjR0RXhkeVQwU25lYSs0CkRjdmVnWldDOGFieE1DSTVRVld1QmVqbmJZU1Z0MEN4YzA2eGY1QmE2UExudWpxR0dKOGpqNGd1SE12SmN4TDIKTGZDVExwUVIxWTVJcDR6Z3l1QkVqTlFOTEFkRlZDQXlvS2ZCa1JkdjYyM1lnbmFxczh2WjI4YjJGci9JS0hOago4ODVzTkE1M1p2aEFXMi94WUhsbnBIS2FvVUdESnIrekNvMzRGbW9XYkxpTFRvQ296eDBGZFAvMGgvMTU2TlowCnovTW5rTmNtQTh1RkZ5OXE2NkJkT0dTaTVha3lLOWsvQWFZWW1CYXh4VysxVVc0SVAvRVdKYkloTzJNc2pFVXUKQm8vK2lBSm9sTmdUcDJLeDJhOTlLM2hYOUVwdkVMVVNJTWswZDhmczQrT2gzd1FWUGloWkk1d1R6dk5NVnltWgpkNGJVVjVzQ0F3RUFBVEFOQmdrcWhraUc5dzBCQVFzRkFBT0NBUUVBWXNrQXVvV0N0aUFNczY5SE5WWU42TXpWClZwbXR4b0JrZFo1QXkwMmVKK0NtUFdiSE9NZmVZdC9tell5UGR4TDFDdlJjQm5PcHZ1b0dBV3FaVXVmMzJkZXYKaC9uR0IzNVNFbDVsWVVRc2FUbkJSQ3JmSzh3TUZNRVJDVmEyOFRmQkdZa0VCazdZbnJzVGFXVHlDbnVNUnM4cgpEWW80YzBBbXFub2txUnptUWZiUHhSRVJuWE54QjJ2WlBjTkVFTlNrZVpZaVZQNlFSWFA2UG5KR3UrUmhBSVBiCmxoa3dtZVJnQVg5eGNUekYyM2JGbHpRSWVseDVHY0NQaVdZbDdob3NZY2pjWmZEVGUvOWlWdDE0KytvYlFVdjIKNFZ6Zk96eGk3ZEFqNFVBeUxBVytYQVVLWW5DNlZnMUpYZW1HcmZ2MjhxcUpJYlNwejNTUEloRWpzcVhsQVE9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+      caBundle: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNwRENDQVl3Q0NRQy9aTnM5bm9oY25UQU5CZ2txaGtpRzl3MEJBUXNGQURBVU1SSXdFQVlEVlFRRERBbG8KZVdKeWFXUnVaWFF3SGhjTk1qRXdPREkyTVRBeU16UTRXaGNOTXpFd09ESTBNVEF5TXpRNFdqQVVNUkl3RUFZRApWUVFEREFsb2VXSnlhV1J1WlhRd2dnRWlNQTBHQ1NxR1NJYjNEUUVCQVFVQUE0SUJEd0F3Z2dFS0FvSUJBUUN3CmxlMFVWbXRiSkFYRmpodlFXdU8yNzBYRGNibU1sQmhrWTJldlZzWTNpNmVmRXdrYWllMmhCWGdLZFRncDVDSVcKOUFEa3JIY2p0aFFpL1AwTk5DRWpRK055TytKY0lVbUpQWE5XaWVRaG1hV0NzNlFzcWNOWk0zNUhsWTk2ekVVdgp1N3VQOGVOY1hmRXMyeWJ2RFFsRzVUT2pXTi8zNEFIQ1pRSmxpUkVtMUtUSm4zUko5SXNDbXlSYUhKNUF2ODVPClhralJqV0xkVm4wNlJNS3lUeDYxUjRQWTE0RTZYelRlWFk2T2pkT2ZtOWVtYXZTMUJLTGFOMDlBQWovdkoyejIKYzlTZkZMd0tJVkowR01TYXUwS2NNNlNCbUc2UGR5eE5PWmhBRExTOVZYUlMzN1NYeC9WRmQ5TFJMRk1wd3ljNQpZcVJENU1uK2tYNDh1VFU5N2RmTEFnTUJBQUV3RFFZSktvWklodmNOQVFFTEJRQURnZ0VCQUFSWmtBMENUZTRzCldUaU1WR0NOOEQwTjZtc2ZjYURRRjRUVDZNSEJUcjdOcklUMXZsMFlreHVGNXl4ajBDQ2E0bXBQRWNGNmJPcUcKdlQxcnZrZmdoakl2QnRFTVlUUEZ1dXNRZ2JmWU5zWVNkVjkzSVBYVkRTbkZITjdNRlBFMTZBd0xOQXBjUmpYKwpWV1FrNk1MU1RUcFQ2V3dWSUpHemsrZDhxakdYQlgyeE41YngwRDlpeU1oYzVjdnJkNDJHT1RFNko3UG0vTk5uCmdvZ2twYnRPaWRwMGJaVG1XQUkzbnUzNCtzRXQ2T2dzbFpweEt1OGlJanhnQlJrOHZDYXNBa0tMdDFFdXdOVUQKd1hBUGI5Wkl3clNEVFR5Nlg3cUZDSXdRMW9ZNVFFMW8xcUVrMTZROWk2VHNTUU5mbmIxQUxTNjJNcmp1dnZGUgplY21QMHpHSzd4WT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo="
       service:
-        name: rama-webhook
+        name: hybridnet-webhook
         namespace: kube-system
         port: 443
         path: "/mutate"
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: core-v1.mutating.rama
+    name: core-v1.mutating.hybridnet
     objectSelector:
       matchExpressions:
-        - key: webhook.rama.io/ignore
+        - key: webhook.hybridnet.io/ignore
           operator: NotIn
           values: ["TRUE", "true"]
     reinvocationPolicy: Never

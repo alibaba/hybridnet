@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,34 +22,34 @@ import (
 
 	"github.com/vishvananda/netlink"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/daemon/iptables"
-	"github.com/oecp/rama/pkg/daemon/neigh"
-	"github.com/oecp/rama/pkg/daemon/route"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/daemon/iptables"
+	"github.com/alibaba/hybridnet/pkg/daemon/neigh"
+	"github.com/alibaba/hybridnet/pkg/daemon/route"
 )
 
-func (c *Controller) getRouterManager(ipVersion ramav1.IPVersion) *route.Manager {
-	if ipVersion == ramav1.IPv6 {
+func (c *Controller) getRouterManager(ipVersion networkingv1.IPVersion) *route.Manager {
+	if ipVersion == networkingv1.IPv6 {
 		return c.routeV6Manager
 	}
 	return c.routeV4Manager
 }
 
-func (c *Controller) getNeighManager(ipVersion ramav1.IPVersion) *neigh.Manager {
-	if ipVersion == ramav1.IPv6 {
+func (c *Controller) getNeighManager(ipVersion networkingv1.IPVersion) *neigh.Manager {
+	if ipVersion == networkingv1.IPv6 {
 		return c.neighV6Manager
 	}
 	return c.neighV4Manager
 }
 
-func (c *Controller) getIPtablesManager(ipVersion ramav1.IPVersion) *iptables.Manager {
-	if ipVersion == ramav1.IPv6 {
+func (c *Controller) getIPtablesManager(ipVersion networkingv1.IPVersion) *iptables.Manager {
+	if ipVersion == networkingv1.IPv6 {
 		return c.iptablesV6Manager
 	}
 	return c.iptablesV4Manager
 }
 
-func (c *Controller) getIPInstanceByAddress(address net.IP) (*ramav1.IPInstance, error) {
+func (c *Controller) getIPInstanceByAddress(address net.IP) (*networkingv1.IPInstance, error) {
 	ipInstanceList, err := c.ipInstanceIndexer.ByIndex(ByInstanceIPIndexer, address.String())
 	if err != nil {
 		return nil, fmt.Errorf("get ip instance by ip %v indexer failed: %v", address.String(), err)
@@ -60,7 +60,7 @@ func (c *Controller) getIPInstanceByAddress(address net.IP) (*ramav1.IPInstance,
 	}
 
 	if len(ipInstanceList) == 1 {
-		instance, ok := ipInstanceList[0].(*ramav1.IPInstance)
+		instance, ok := ipInstanceList[0].(*networkingv1.IPInstance)
 		if !ok {
 			return nil, fmt.Errorf("transform obj to ipinstance failed")
 		}
@@ -82,7 +82,7 @@ func initErrorMessageWrapper(prefix string) func(string, ...interface{}) string 
 	}
 }
 
-func parseSubnetSpecRangeMeta(addressRange *ramav1.AddressRange) (cidr *net.IPNet, gateway, start, end net.IP,
+func parseSubnetSpecRangeMeta(addressRange *networkingv1.AddressRange) (cidr *net.IPNet, gateway, start, end net.IP,
 	excludeIPs, reservedIPs []net.IP, err error) {
 
 	if addressRange == nil {

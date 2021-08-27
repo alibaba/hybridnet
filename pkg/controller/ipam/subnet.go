@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -21,9 +21,9 @@ import (
 
 	"k8s.io/apimachinery/pkg/labels"
 
-	v1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	ipamtypes "github.com/oecp/rama/pkg/ipam/types"
-	"github.com/oecp/rama/pkg/utils/transform"
+	v1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/utils/transform"
 )
 
 func (c *Controller) filterSubnet(obj interface{}) bool {

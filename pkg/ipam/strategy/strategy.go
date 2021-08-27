@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -28,9 +28,9 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog"
 
-	ramav1 "github.com/oecp/rama/pkg/client/listers/networking/v1"
-	"github.com/oecp/rama/pkg/ipam/types"
-	"github.com/oecp/rama/pkg/utils/transform"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/utils/transform"
 )
 
 var (
@@ -92,7 +92,7 @@ func GetKnownOwnReference(pod *v1.Pod) *metav1.OwnerReference {
 	return nil
 }
 
-func GetIPByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) (string, error) {
+func GetIPByPod(ipLister networkingv1.IPInstanceLister, pod *v1.Pod) (string, error) {
 	ips, err := ipLister.IPInstances(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return "", err
@@ -109,7 +109,7 @@ func GetIPByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) (string, error) {
 	return "", nil
 }
 
-func GetIPsByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) ([]string, error) {
+func GetIPsByPod(ipLister networkingv1.IPInstanceLister, pod *v1.Pod) ([]string, error) {
 	ips, err := ipLister.IPInstances(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func GetIPsByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) ([]string, error
 	return append(v4, v6...), nil
 }
 
-func GetAllocatedIPsByPod(ipLister ramav1.IPInstanceLister, pod *v1.Pod) ([]*types.IP, error) {
+func GetAllocatedIPsByPod(ipLister networkingv1.IPInstanceLister, pod *v1.Pod) ([]*types.IP, error) {
 	ips, err := ipLister.IPInstances(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return nil, err

@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,10 +21,10 @@ import (
 	"context"
 	time "time"
 
-	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	versioned "github.com/oecp/rama/pkg/client/clientset/versioned"
-	internalinterfaces "github.com/oecp/rama/pkg/client/informers/externalversions/internalinterfaces"
-	v1 "github.com/oecp/rama/pkg/client/listers/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	versioned "github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
+	internalinterfaces "github.com/alibaba/hybridnet/pkg/client/informers/externalversions/internalinterfaces"
+	v1 "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"

@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -29,8 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 
-	"github.com/oecp/rama/pkg/constants"
-	"github.com/oecp/rama/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/feature"
 )
 
 func (c *Controller) filterNode(obj interface{}) bool {
@@ -171,7 +171,7 @@ func (c *Controller) updateNodeNetworkAttachment(node *v1.Node) error {
 		Type:               v1.NodeNetworkUnavailable,
 		Status:             v1.ConditionTrue,
 		Reason:             "RamaNetworkDetached",
-		Message:            "Node has no related rama network",
+		Message:            "Node has no related hybridnet network",
 		LastTransitionTime: metav1.Now(),
 	})
 }

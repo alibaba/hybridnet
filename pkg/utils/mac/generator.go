@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ func init() {
 // fix the two LSb of MSB to 10 and use any values for other bits. This will avoid any conflicts
 // with public OUIs.
 // We use 02:58:00 for CNI official OUI here.
-var ramaOUI = []byte{0x02, 0x12, 0x34}
+var hybridnetOUI = []byte{0x02, 0x12, 0x34}
 
 // GenerateMAC will generate MAC addresses with fixed first 24 bits (CNI OUI), and the last 24 bits
 // will be random, so there are at most 16777216(2^24) different addresses.
@@ -44,7 +44,7 @@ var ramaOUI = []byte{0x02, 0x12, 0x34}
 // as MAC address generator.
 func GenerateMAC() net.HardwareAddr {
 	hw := make(net.HardwareAddr, 6)
-	copy(hw[:3], ramaOUI)
+	copy(hw[:3], hybridnetOUI)
 	_, _ = rand.Read(hw[3:])
 	return hw
 }

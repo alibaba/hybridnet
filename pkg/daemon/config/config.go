@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,10 +24,10 @@ import (
 	"strings"
 	"time"
 
-	clientset "github.com/oecp/rama/pkg/client/clientset/versioned"
-	"github.com/oecp/rama/pkg/daemon/containernetwork"
-	daemonutils "github.com/oecp/rama/pkg/daemon/utils"
-	"github.com/oecp/rama/pkg/utils"
+	clientset "github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
+	"github.com/alibaba/hybridnet/pkg/utils"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	UserAgent           = "rama-daemon"
+	UserAgent           = "hybridnet-daemon"
 	DefaultBindPort     = 11021
 	DefaultVxlanUDPPort = 8472
 
@@ -86,8 +86,8 @@ type Configuration struct {
 	// Use fixed table num to mark "overlay mark table rule"
 	OverlayMarkTableNum int
 
-	KubeClient kubernetes.Interface
-	RamaClient clientset.Interface
+	KubeClient      kubernetes.Interface
+	HybridnetClient clientset.Interface
 
 	NeighGCThresh1 int
 	NeighGCThresh2 int
@@ -100,7 +100,7 @@ func ParseFlags() (*Configuration, error) {
 		argPreferInterfaces           = pflag.String("prefer-interfaces", "", "[deprecated]The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
 		argPreferVlanInterfaces       = pflag.String("prefer-vlan-interfaces", "", "The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
 		argPreferVxlanInterfaces      = pflag.String("prefer-vxlan-interfaces", "", "The preferred vxlan interfaces used to inter-host pod communication, default: the default route interface")
-		argBindSocket                 = pflag.String("bind-socket", "/var/run/rama.sock", "The socket daemon bind to.")
+		argBindSocket                 = pflag.String("bind-socket", "/var/run/hybridnet.sock", "The socket daemon bind to.")
 		argKubeConfigFile             = pflag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information. If not set use the inCluster token.")
 		argBindPort                   = pflag.Int("healthy-server-port", DefaultBindPort, "The port which daemon server bind")
 		argLocalDirectTableNum        = pflag.Int("local-direct-table", DefaultLocalDirectTableNum, "The number of local direct routing table")
@@ -247,9 +247,9 @@ func (config *Configuration) initKubeClient() error {
 	cfg.QPS = 10
 	cfg.Burst = 20
 
-	config.RamaClient, err = clientset.NewForConfig(rest.AddUserAgent(cfg, UserAgent))
+	config.HybridnetClient, err = clientset.NewForConfig(rest.AddUserAgent(cfg, UserAgent))
 	if err != nil {
-		klog.Errorf("init rama client failed %v", err)
+		klog.Errorf("init hybridnet client failed %v", err)
 		return err
 	}
 

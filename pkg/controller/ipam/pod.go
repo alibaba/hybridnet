@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -23,12 +23,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/oecp/rama/pkg/constants"
-	"github.com/oecp/rama/pkg/feature"
-	"github.com/oecp/rama/pkg/ipam/strategy"
-	"github.com/oecp/rama/pkg/ipam/types"
-	"github.com/oecp/rama/pkg/metrics"
-	"github.com/oecp/rama/pkg/utils"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
+	"github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/metrics"
+	"github.com/alibaba/hybridnet/pkg/utils"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"

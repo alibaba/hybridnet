@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ limitations under the License.
 package networking
 
 import (
-	internalinterfaces "github.com/oecp/rama/pkg/client/informers/externalversions/internalinterfaces"
-	v1 "github.com/oecp/rama/pkg/client/informers/externalversions/networking/v1"
+	internalinterfaces "github.com/alibaba/hybridnet/pkg/client/informers/externalversions/internalinterfaces"
+	v1 "github.com/alibaba/hybridnet/pkg/client/informers/externalversions/networking/v1"
 )
 
 // Interface provides access to each of this group's versions.

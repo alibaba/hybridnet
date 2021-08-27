@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,21 +25,21 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/oecp/rama/pkg/daemon/addr"
+	"github.com/alibaba/hybridnet/pkg/daemon/addr"
 
 	"github.com/vishvananda/netns"
 
-	"github.com/oecp/rama/pkg/daemon/iptables"
+	"github.com/alibaba/hybridnet/pkg/daemon/iptables"
 
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	hybridnetinformer "github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
+	networkinglister "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+	"github.com/alibaba/hybridnet/pkg/daemon/neigh"
+	"github.com/alibaba/hybridnet/pkg/daemon/route"
 	"github.com/heptiolabs/healthcheck"
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	ramainformer "github.com/oecp/rama/pkg/client/informers/externalversions"
-	ramalister "github.com/oecp/rama/pkg/client/listers/networking/v1"
-	"github.com/oecp/rama/pkg/constants"
-	daemonconfig "github.com/oecp/rama/pkg/daemon/config"
-	"github.com/oecp/rama/pkg/daemon/containernetwork"
-	"github.com/oecp/rama/pkg/daemon/neigh"
-	"github.com/oecp/rama/pkg/daemon/route"
 	"github.com/vishvananda/netlink"
 
 	"golang.org/x/sys/unix"
@@ -64,16 +64,16 @@ const (
 
 // Controller is a set of kubernetes controllers
 type Controller struct {
-	subnetLister ramalister.SubnetLister
+	subnetLister networkinglister.SubnetLister
 	subnetSynced cache.InformerSynced
 	subnetQueue  workqueue.RateLimitingInterface
 
-	ipInstanceLister  ramalister.IPInstanceLister
+	ipInstanceLister  networkinglister.IPInstanceLister
 	ipInstanceSynced  cache.InformerSynced
 	ipInstanceQueue   workqueue.RateLimitingInterface
 	ipInstanceIndexer cache.Indexer
 
-	networkLister ramalister.NetworkLister
+	networkLister networkinglister.NetworkLister
 	networkSynced cache.InformerSynced
 
 	nodeLister corev1.NodeLister
@@ -102,12 +102,12 @@ type Controller struct {
 
 // NewController returns a Controller to watch kubernetes CRD object events
 func NewController(config *daemonconfig.Configuration,
-	ramaInformerFactory ramainformer.SharedInformerFactory,
+	hybridnetInformerFactory hybridnetinformer.SharedInformerFactory,
 	kubeInformerFactory informers.SharedInformerFactory) (*Controller, error) {
 
-	subnetInformer := ramaInformerFactory.Networking().V1().Subnets()
-	networkInformer := ramaInformerFactory.Networking().V1().Networks()
-	ipInstanceInformer := ramaInformerFactory.Networking().V1().IPInstances()
+	subnetInformer := hybridnetInformerFactory.Networking().V1().Subnets()
+	networkInformer := hybridnetInformerFactory.Networking().V1().Networks()
+	ipInstanceInformer := hybridnetInformerFactory.Networking().V1().IPInstances()
 	nodeInformer := kubeInformerFactory.Core().V1().Nodes()
 
 	routeV4Manager, err := route.CreateRouteManager(config.LocalDirectTableNum,
@@ -249,11 +249,11 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
-func (c *Controller) GetIPInstanceLister() ramalister.IPInstanceLister {
+func (c *Controller) GetIPInstanceLister() networkinglister.IPInstanceLister {
 	return c.ipInstanceLister
 }
 
-func (c *Controller) GetNetworkLister() ramalister.NetworkLister {
+func (c *Controller) GetNetworkLister() networkinglister.NetworkLister {
 	return c.networkLister
 }
 
@@ -431,7 +431,7 @@ func (c *Controller) iptablesSyncLoop() {
 
 		var overlayExist bool
 		for _, network := range networkList {
-			if ramav1.GetNetworkType(network) == ramav1.NetworkTypeOverlay {
+			if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
 				netID := network.Spec.NetID
 
 				overlayIfName, err := containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
@@ -496,7 +496,7 @@ func (c *Controller) iptablesSyncLoop() {
 				}
 
 				iptablesManager := c.getIPtablesManager(subnet.Spec.Range.Version)
-				iptablesManager.RecordSubnet(cidr, ramav1.GetNetworkType(network) == ramav1.NetworkTypeOverlay)
+				iptablesManager.RecordSubnet(cidr, networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay)
 			}
 
 			if err := c.iptablesV4Manager.SyncRules(); err != nil {
@@ -547,7 +547,7 @@ func isNeighResolving(state int) bool {
 }
 
 func indexByInstanceIP(obj interface{}) ([]string, error) {
-	instance, ok := obj.(*ramav1.IPInstance)
+	instance, ok := obj.(*networkingv1.IPInstance)
 	if ok {
 		podIP, _, err := net.ParseCIDR(instance.Spec.Address.IP)
 		if err != nil {

@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -30,10 +30,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/feature"
-	"github.com/oecp/rama/pkg/webhook/mutating"
-	"github.com/oecp/rama/pkg/webhook/validating"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/webhook/mutating"
+	"github.com/alibaba/hybridnet/pkg/webhook/validating"
 )
 
 var (
@@ -45,7 +45,7 @@ var (
 func init() {
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
-	_ = ramav1.AddToScheme(scheme)
+	_ = networkingv1.AddToScheme(scheme)
 	_ = admissionv1beta1.AddToScheme(scheme)
 	_ = admissionv1.AddToScheme(scheme)
 

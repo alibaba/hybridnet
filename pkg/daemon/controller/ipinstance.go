@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Rama Authors.
+Copyright 2021 The Hybridnet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,10 +24,10 @@ import (
 	"strings"
 	"time"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/constants"
-	"github.com/oecp/rama/pkg/daemon/containernetwork"
-	daemonutils "github.com/oecp/rama/pkg/daemon/utils"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/containernetworking/plugins/pkg/ns"
@@ -42,8 +42,8 @@ func (c *Controller) enqueueAddOrDeleteIPInstance(obj interface{}) {
 }
 
 func (c *Controller) enqueueUpdateIPInstance(oldObj, newObj interface{}) {
-	oldIPInstance := oldObj.(*ramav1.IPInstance)
-	newIPInstance := newObj.(*ramav1.IPInstance)
+	oldIPInstance := oldObj.(*networkingv1.IPInstance)
+	newIPInstance := newObj.(*networkingv1.IPInstance)
 
 	if oldIPInstance.Status.NodeName != newIPInstance.Status.NodeName {
 		c.ipInstanceQueue.Add(ActionReconcileIPInstance)
@@ -100,7 +100,7 @@ func (c *Controller) reconcileIPInfo() error {
 	var overlayExist bool
 	var overlayForwardNodeIfName string
 	for _, network := range networkList {
-		if ramav1.GetNetworkType(network) == ramav1.NetworkTypeOverlay {
+		if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
 			netID := network.Spec.NetID
 			overlayForwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
 			if err != nil {
@@ -149,18 +149,18 @@ func (c *Controller) reconcileIPInfo() error {
 		}
 
 		var forwardNodeIfName string
-		switch ramav1.GetNetworkType(network) {
-		case ramav1.NetworkTypeUnderlay:
+		switch networkingv1.GetNetworkType(network) {
+		case networkingv1.NetworkTypeUnderlay:
 			forwardNodeIfName, err = containernetwork.GenerateVlanNetIfName(c.config.NodeVlanIfName, netID)
 			if err != nil {
 				return fmt.Errorf("generate vlan forward node interface name failed: %v", err)
 			}
 
-			if ipInstance.Spec.Address.Version == ramav1.IPv4 {
+			if ipInstance.Spec.Address.Version == networkingv1.IPv4 {
 				c.addrV4Manager.TryAddPodInfo(forwardNodeIfName, subnetCidr, podIP)
 			}
 
-		case ramav1.NetworkTypeOverlay:
+		case networkingv1.NetworkTypeOverlay:
 			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
 			if err != nil {
 				return fmt.Errorf("generate vxlan forward node interface name failed: %v", err)
@@ -223,7 +223,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 	klog.Infof("load exist netns: %v", netnsPaths)
 
 	var hostLinkIndex int
-	allocatedIPs := map[ramav1.IPVersion]*containernetwork.IPInfo{}
+	allocatedIPs := map[networkingv1.IPVersion]*containernetwork.IPInfo{}
 
 	for _, netns := range netnsPaths {
 		nsHandler, err := ns.GetNS(netns)
@@ -244,7 +244,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 
 			var v4GatewayIP net.IP
 			if len(v4Addrs) == 0 {
-				allocatedIPs[ramav1.IPv4] = nil
+				allocatedIPs[networkingv1.IPv4] = nil
 			} else {
 				defaultRoute, err := containernetwork.GetDefaultRoute(netlink.FAMILY_V4)
 				if err != nil {
@@ -254,7 +254,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 			}
 
 			for _, addr := range v4Addrs {
-				allocatedIPs[ramav1.IPv4] = &containernetwork.IPInfo{
+				allocatedIPs[networkingv1.IPv4] = &containernetwork.IPInfo{
 					Addr: addr.IP,
 					Gw:   v4GatewayIP,
 				}
@@ -267,7 +267,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 
 			var v6GatewayIP net.IP
 			if len(v6Addrs) == 0 {
-				allocatedIPs[ramav1.IPv6] = nil
+				allocatedIPs[networkingv1.IPv6] = nil
 			} else {
 				defaultRoute, err := containernetwork.GetDefaultRoute(netlink.FAMILY_V6)
 				if err != nil {
@@ -277,7 +277,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 			}
 
 			for _, addr := range v6Addrs {
-				allocatedIPs[ramav1.IPv6] = &containernetwork.IPInfo{
+				allocatedIPs[networkingv1.IPv6] = &containernetwork.IPInfo{
 					Addr: addr.IP,
 					Gw:   v6GatewayIP,
 				}

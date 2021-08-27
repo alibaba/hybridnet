@@ -1,5 +1,5 @@
 /*
-  Copyright 2021 The Rama Authors.
+  Copyright 2021 The Hybridnet Authors.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 package allocator
 
 import (
-	"github.com/oecp/rama/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/ipam/types"
 )
 
 type NetworkGetter func(network string) (*types.Network, error)
