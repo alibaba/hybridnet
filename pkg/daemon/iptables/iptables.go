@@ -72,6 +72,8 @@ type Manager struct {
 	protocol Protocol
 
 	c chan struct{}
+
+	upgradeWorkDone bool
 }
 
 func (mgr *Manager) lock() {
@@ -242,8 +244,11 @@ func (mgr *Manager) SyncRules() error {
 	}
 
 	// TODO: update logic, need to be removed further
-	if err := mgr.cleanDeprecatedBasicRules(); err != nil {
-		return fmt.Errorf("failed to clean deprecated basic rules: %v", err)
+	if !mgr.upgradeWorkDone {
+		if err := mgr.cleanDeprecatedBasicRuleAndChains(); err != nil {
+			return fmt.Errorf("failed to clean deprecated basic rules: %v", err)
+		}
+		mgr.upgradeWorkDone = true
 	}
 
 	return nil
