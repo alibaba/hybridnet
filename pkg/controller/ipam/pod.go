@@ -375,7 +375,15 @@ func (c *Controller) release(pod *v1.Pod, allocatedIPs []*types.IP) (err error) 
 	return nil
 }
 
+// selectNetwork will pick the hit network by pod, taking the priority as below
+// 1. explicitly specify network in pod annotations/labels
+// 2. parse network type from pod and select a corresponding network bind on node
 func (c *Controller) selectNetwork(pod *v1.Pod) (string, error) {
+	var specifiedNetwork string
+	if specifiedNetwork = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedNetwork], pod.Labels[constants.LabelSpecifiedNetwork]); len(specifiedNetwork) > 0 {
+		return specifiedNetwork, nil
+	}
+
 	var networkType = types.ParseNetworkTypeFromString(utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType]))
 	switch networkType {
 	case types.Underlay:
