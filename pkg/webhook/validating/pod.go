@@ -50,8 +50,9 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 
 	// Specified Network Validation
 	var (
-		specifiedNetwork = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedNetwork], pod.Labels[constants.LabelSpecifiedNetwork])
-		networkType      = ipamtypes.ParseNetworkTypeFromString(utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType]))
+		specifiedNetwork   = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedNetwork], pod.Labels[constants.LabelSpecifiedNetwork])
+		networkTypeFromPod = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType])
+		networkType        = ipamtypes.ParseNetworkTypeFromString(networkTypeFromPod)
 	)
 	if len(specifiedNetwork) > 0 {
 		network := &networkingv1.Network{}
@@ -62,10 +63,14 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 			return admission.Errored(http.StatusInternalServerError, err)
 		}
 
-		// check network type
-		if !stringEqualCaseInsensitive(string(networkingv1.GetNetworkType(network)), string(networkType)) {
-			return admission.Errored(http.StatusInternalServerError, fmt.Errorf("specified network type mismatch %s %s", networkType, networkingv1.GetNetworkType(network)))
-
+		// check network type, if network type is explicitly specified on pod, use it for comparison directly,
+		// or else mutate network type inherit from specified network
+		if len(networkTypeFromPod) > 0 {
+			if !stringEqualCaseInsensitive(string(networkingv1.GetNetworkType(network)), string(networkType)) {
+				return admission.Errored(http.StatusInternalServerError, fmt.Errorf("specified network type mismatch %s %s", networkType, networkingv1.GetNetworkType(network)))
+			}
+		} else {
+			networkType = ipamtypes.ParseNetworkTypeFromString(string(networkingv1.GetNetworkType(network)))
 		}
 
 		ipList := &networkingv1.IPInstanceList{}

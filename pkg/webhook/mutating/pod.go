@@ -111,12 +111,20 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		}
 	}
 
-	var networkType = ipamtypes.ParseNetworkTypeFromString(utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType]))
+	var networkTypeFromPod = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType])
+	var networkType = ipamtypes.ParseNetworkTypeFromString(networkTypeFromPod)
 	if len(networkName) > 0 {
 		network := &networkingv1.Network{}
 		if err = handler.Client.Get(ctx, types.NamespacedName{Name: networkName}, network); err != nil {
 			return admission.Errored(http.StatusInternalServerError, err)
 		}
+
+		// specified network takes higher priority than network type defaulting, if no network type specified
+		// from pod, then network type should inherit from network type of specified network from pod
+		if len(networkTypeFromPod) == 0 {
+			networkType = ipamtypes.ParseNetworkTypeFromString(string(networkingv1.GetNetworkType(network)))
+		}
+
 		switch networkType {
 		case ipamtypes.Underlay:
 			klog.Infof("[mutating] patch pod %s/%s with selector of network %s", req.Namespace, req.Name, networkName)
