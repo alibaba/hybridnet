@@ -1,6 +1,6 @@
 FROM golang:1.13.8 as builder
 
-ENV ARCH=arm64
+ENV ARCH=amd64
 
 WORKDIR /go/src/github.com/oecp/rama
 
