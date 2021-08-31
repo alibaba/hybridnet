@@ -276,9 +276,7 @@ func (c *Controller) handleLocalNetworkDeviceEvent() error {
 		for {
 			update := <-linkCh
 			if (update.IfInfomsg.Flags&unix.IFF_UP != 0) &&
-				!strings.HasSuffix(update.Link.Attrs().Name, containernetwork.ContainerHostLinkSuffix) &&
-				!strings.HasSuffix(update.Link.Attrs().Name, containernetwork.ContainerInitLinkSuffix) &&
-				!strings.HasPrefix(update.Link.Attrs().Name, "veth") {
+				!containernetwork.CheckIfContainerNetworkLink(update.Link.Attrs().Name) {
 
 				// Create event to flush routes and neigh caches.
 				c.subnetQueue.Add(ActionReconcileSubnet)

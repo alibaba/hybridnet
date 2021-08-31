@@ -19,7 +19,6 @@ package addr
 import (
 	"fmt"
 	"net"
-	"strings"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
@@ -81,10 +80,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 
 	for _, link := range linkList {
 		// ignore container network virtual interfaces
-		if strings.HasSuffix(link.Attrs().Name, containernetwork.ContainerHostLinkSuffix) ||
-			strings.HasSuffix(link.Attrs().Name, containernetwork.ContainerInitLinkSuffix) ||
-			strings.HasPrefix(link.Attrs().Name, "veth") {
-
+		if containernetwork.CheckIfContainerNetworkLink(link.Attrs().Name) {
 			continue
 		}
 

@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+
 	"github.com/alibaba/hybridnet/pkg/daemon/ipset"
 	extraliptables "github.com/coreos/go-iptables/iptables"
 
@@ -214,6 +216,7 @@ func (mgr *Manager) SyncRules() error {
 	writeLine(mangleChains, utiliptables.MakeChainLine(ChainHybridnetPostRouting))
 
 	// Append rules.
+	writeLine(natRules, generateSkipMasqueradeRuleSpec()...)
 	writeLine(natRules, generateMasqueradeRuleSpec(mgr.overlayIfName, mgr.protocol)...)
 	writeLine(filterRules, generateVxlanFilterRuleSpec(mgr.overlayIfName, mgr.protocol)...)
 	writeLine(mangleRules, generateVxlanPodToNodeReplyMarkRuleSpec(mgr.protocol)...)
@@ -321,6 +324,11 @@ func generateMasqueradeRuleSpec(vxlanIf string, protocol Protocol) []string {
 	return []string{"-A", ChainHybridnetPostRouting, "-m", "comment", "--comment", `"hybridnet overlay nat-outgoing masquerade rule"`,
 		"!", "-o", vxlanIf, "-m", "set", "--match-set", generateIPSetNameByProtocol(HybridnetOverlayNetSetName, protocol),
 		"src", "-j", "MASQUERADE"}
+}
+
+func generateSkipMasqueradeRuleSpec() []string {
+	return []string{"-A", ChainHybridnetPostRouting, "-m", "comment", "--comment", `"skip masquerade if traffic is to local pod"`,
+		"-o", containernetwork.ContainerHostLinkPrefix + "+", "-j", "RETURN"}
 }
 
 func generateVxlanFilterRuleSpec(vxlanIf string, protocol Protocol) []string {
