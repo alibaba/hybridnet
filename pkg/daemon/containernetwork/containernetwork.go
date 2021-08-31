@@ -360,7 +360,16 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 }
 
 func GenerateContainerVethPair(containerID string) (string, string) {
-	return fmt.Sprintf("%s%s", containerID[0:12], ContainerHostLinkSuffix), fmt.Sprintf("%s%s", containerID[0:12], ContainerInitLinkSuffix)
+	return fmt.Sprintf("%s%s", ContainerHostLinkPrefix, containerID[0:12]), fmt.Sprintf("%s%s", containerID[0:12], ContainerInitLinkSuffix)
+}
+
+func CheckIfContainerNetworkLink(linkName string) bool {
+	// TODO: "_h" suffix is deprecated, need to be removed further
+	return strings.HasSuffix(linkName, "_h") ||
+		strings.HasPrefix(linkName, ContainerHostLinkPrefix) ||
+		strings.HasSuffix(linkName, ContainerInitLinkSuffix) ||
+		strings.HasPrefix(linkName, "veth") ||
+		strings.HasPrefix(linkName, "docker")
 }
 
 func ensureRpFilterConfigs(containerHostIf string) error {
@@ -382,7 +391,7 @@ func ensureRpFilterConfigs(containerHostIf string) error {
 	}
 
 	for _, existIf := range existInterfaces {
-		if strings.HasSuffix(existIf.Name, ContainerHostLinkSuffix) || strings.HasSuffix(existIf.Name, ContainerInitLinkSuffix) {
+		if CheckIfContainerNetworkLink(existIf.Name) {
 			continue
 		}
 

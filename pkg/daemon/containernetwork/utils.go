@@ -216,10 +216,8 @@ func ListLocalAddressExceptLink(exceptLinkName string) ([]netlink.Addr, error) {
 	}
 
 	for _, link := range linkList {
-		if link.Attrs().Name != exceptLinkName &&
-			!strings.HasSuffix(link.Attrs().Name, ContainerHostLinkSuffix) &&
-			!strings.HasPrefix(link.Attrs().Name, "docker") &&
-			!strings.HasPrefix(link.Attrs().Name, "veth") {
+		linkName := link.Attrs().Name
+		if linkName != exceptLinkName && !CheckIfContainerNetworkLink(linkName) {
 
 			linkAddrList, err := ListAllAddress(link)
 			if err != nil {

@@ -20,7 +20,7 @@ const (
 	DockerNetnsDir     = "/var/run/docker/netns"
 	ContainerdNetnsDir = "/var/run/netns/"
 
-	ContainerHostLinkSuffix = "_h"
+	ContainerHostLinkPrefix = "h_"
 	ContainerHostLinkMac    = "ee:ee:ee:ee:ee:ee"
 	ContainerInitLinkSuffix = "_c"
 	VxlanLinkInfix          = ".vxlan"

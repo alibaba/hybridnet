@@ -301,7 +301,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 		}
 
 		// this container doesn't belong to k8s
-		if !strings.HasSuffix(hostLink.Attrs().Name, containernetwork.ContainerHostLinkSuffix) {
+		if !strings.HasSuffix(hostLink.Attrs().Name, "_h") {
 			continue
 		}
 
