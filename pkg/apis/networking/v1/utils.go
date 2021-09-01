@@ -149,6 +149,14 @@ func GetNetworkType(networkObj *Network) NetworkType {
 	return networkObj.Spec.Type
 }
 
+func GetRemoteSubnetType(remoteSubnetObj *RemoteSubnet) NetworkType {
+	if remoteSubnetObj == nil || len(remoteSubnetObj.Spec.Type) == 0 {
+		return NetworkTypeUnderlay
+	}
+
+	return remoteSubnetObj.Spec.Type
+}
+
 func lastIP(subnet *net.IPNet) net.IP {
 	var end net.IP
 	for i := 0; i < len(subnet.IP); i++ {
