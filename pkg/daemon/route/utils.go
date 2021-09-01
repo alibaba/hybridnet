@@ -214,7 +214,7 @@ func clearRouteTable(table int, family int) error {
 
 func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
 	gateway net.IP, autoNatOutgoing, isOverlay bool, family int, underlaySubnetInfoMap SubnetInfoMap,
-	underlayExcludeIPBlockMap map[string]*net.IPNet) error {
+	localUnderlayExcludeIPBlockMap, remoteUnderlayExcludeIPBlockMap map[string]*net.IPNet) error {
 
 	var table int
 	var err error
@@ -303,7 +303,7 @@ func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
 			}
 
 			// For overlay pod to access underlay excluded ip addresses, should not be forced to pass through vxlan device.
-			if err := ensureExcludedIPBlockRoutes(underlayExcludeIPBlockMap, table, family); err != nil {
+			if err := ensureExcludedIPBlockRoutes(localUnderlayExcludeIPBlockMap, remoteUnderlayExcludeIPBlockMap, table, family); err != nil {
 				return fmt.Errorf("ensure exclude all ip block routes failed: %v", err)
 			}
 		}
@@ -448,7 +448,7 @@ func defaultRouteDstByFamily(family int) *net.IPNet {
 	}
 }
 
-func ensureExcludedIPBlockRoutes(excludeIPBlockMap map[string]*net.IPNet, table, family int) error {
+func ensureExcludedIPBlockRoutes(localExcludeIPBlockMap, remoteExcludeIPBlockMap map[string]*net.IPNet, table, family int) error {
 	excludedRouteList, err := netlink.RouteListFiltered(family, &netlink.Route{
 		Table: table,
 		Type:  unix.RTN_THROW,
@@ -459,14 +459,27 @@ func ensureExcludedIPBlockRoutes(excludeIPBlockMap map[string]*net.IPNet, table,
 	}
 
 	for _, route := range excludedRouteList {
-		if _, exist := excludeIPBlockMap[route.Dst.String()]; !exist {
+		_, lExists := localExcludeIPBlockMap[route.Dst.String()]
+		_, rExists := remoteExcludeIPBlockMap[route.Dst.String()]
+
+		if !lExists && !rExists {
 			if err := netlink.RouteDel(&route); err != nil {
 				return fmt.Errorf("delete excluded route %v failed: %v", route, err)
 			}
 		}
 	}
 
-	for _, cidr := range excludeIPBlockMap {
+	for _, cidr := range localExcludeIPBlockMap {
+		if err := netlink.RouteReplace(&netlink.Route{
+			Dst:   cidr,
+			Table: table,
+			Type:  unix.RTN_THROW,
+		}); err != nil {
+			return fmt.Errorf("add excluded route for block %v failed: %v", cidr.String(), err)
+		}
+	}
+
+	for _, cidr := range remoteExcludeIPBlockMap {
 		if err := netlink.RouteReplace(&netlink.Route{
 			Dst:   cidr,
 			Table: table,

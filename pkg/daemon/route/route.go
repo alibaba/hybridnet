@@ -20,10 +20,9 @@ import (
 	"fmt"
 	"net"
 
-	daemonutils "github.com/oecp/rama/pkg/daemon/utils"
-
+	"github.com/gogf/gf/container/gset"
 	"github.com/oecp/rama/pkg/daemon/iptables"
-
+	daemonutils "github.com/oecp/rama/pkg/daemon/utils"
 	"github.com/vishvananda/netlink"
 )
 
@@ -66,9 +65,16 @@ type Manager struct {
 
 	family int
 
-	overlaySubnetInfoMap  SubnetInfoMap
-	underlaySubnetInfoMap SubnetInfoMap
-	totalSubnetInfoMap    SubnetInfoMap
+	localOverlaySubnetInfoMap  SubnetInfoMap
+	localUnderlaySubnetInfoMap SubnetInfoMap
+	localTotalSubnetInfoMap    SubnetInfoMap
+	localCidr                  *gset.StrSet
+
+	// add cluster-mesh remote subnet info
+	remoteOverlaySubnetInfoMap  SubnetInfoMap
+	remoteUnderlaySubnetInfoMap SubnetInfoMap
+	remoteSubnetTracker         *daemonutils.SubnetCidrTracker
+	remoteCidr                  *gset.StrSet
 }
 
 func CreateRouteManager(localDirectTableNum, toOverlaySubnetTableNum, overlayMarkTableNum, family int) (*Manager, error) {
@@ -157,28 +163,35 @@ func CreateRouteManager(localDirectTableNum, toOverlaySubnetTableNum, overlayMar
 	}
 
 	return &Manager{
-		localDirectTableNum:     localDirectTableNum,
-		toOverlaySubnetTableNum: toOverlaySubnetTableNum,
-		overlayMarkTableNum:     overlayMarkTableNum,
-		family:                  family,
-		totalSubnetInfoMap:      SubnetInfoMap{},
-		overlaySubnetInfoMap:    SubnetInfoMap{},
-		underlaySubnetInfoMap:   SubnetInfoMap{},
+		localDirectTableNum:         localDirectTableNum,
+		toOverlaySubnetTableNum:     toOverlaySubnetTableNum,
+		overlayMarkTableNum:         overlayMarkTableNum,
+		family:                      family,
+		localTotalSubnetInfoMap:     SubnetInfoMap{},
+		localOverlaySubnetInfoMap:   SubnetInfoMap{},
+		localUnderlaySubnetInfoMap:  SubnetInfoMap{},
+		localCidr:                   gset.NewStrSet(),
+		remoteOverlaySubnetInfoMap:  SubnetInfoMap{},
+		remoteUnderlaySubnetInfoMap: SubnetInfoMap{},
+		remoteSubnetTracker:         daemonutils.NewSubnetCidrTracker(),
+		remoteCidr:                  gset.NewStrSet(),
 	}, nil
 }
 
 func (m *Manager) ResetInfos() {
-	m.totalSubnetInfoMap = SubnetInfoMap{}
-	m.underlaySubnetInfoMap = SubnetInfoMap{}
-	m.overlaySubnetInfoMap = SubnetInfoMap{}
+	m.localTotalSubnetInfoMap = SubnetInfoMap{}
+	m.localUnderlaySubnetInfoMap = SubnetInfoMap{}
+	m.localOverlaySubnetInfoMap = SubnetInfoMap{}
+	m.localCidr.Clear()
 }
 
 func (m *Manager) AddSubnetInfo(cidr *net.IPNet, gateway, start, end net.IP, excludeIPs []net.IP,
 	forwardNodeIfName string, autoNatOutgoing, isOverlay bool) {
 
 	cidrString := cidr.String()
-	if _, exist := m.totalSubnetInfoMap[cidrString]; !exist {
-		m.totalSubnetInfoMap[cidrString] = &SubnetInfo{
+
+	if _, exist := m.localTotalSubnetInfoMap[cidrString]; !exist {
+		m.localTotalSubnetInfoMap[cidrString] = &SubnetInfo{
 			cidr:              cidr,
 			forwardNodeIfName: forwardNodeIfName,
 			gateway:           gateway,
@@ -188,7 +201,7 @@ func (m *Manager) AddSubnetInfo(cidr *net.IPNet, gateway, start, end net.IP, exc
 		}
 	}
 
-	subnetInfo := m.totalSubnetInfoMap[cidrString]
+	subnetInfo := m.localTotalSubnetInfoMap[cidrString]
 
 	if len(excludeIPs) != 0 {
 		subnetInfo.excludeIPs = append(subnetInfo.excludeIPs, excludeIPs...)
@@ -211,13 +224,21 @@ func (m *Manager) AddSubnetInfo(cidr *net.IPNet, gateway, start, end net.IP, exc
 	if isOverlay {
 		// overlay interface should always be the same one
 		m.overlayIfName = forwardNodeIfName
-		m.overlaySubnetInfoMap[cidrString] = subnetInfo
+		m.localOverlaySubnetInfoMap[cidrString] = subnetInfo
 	} else {
-		m.underlaySubnetInfoMap[cidrString] = subnetInfo
+		m.localUnderlaySubnetInfoMap[cidrString] = subnetInfo
 	}
+
+	m.localCidr.Add(cidrString)
 }
 
 func (m *Manager) SyncRoutes() error {
+	// check out remote subnet configurations
+	_, rcErr := m.configureRemote()
+	if rcErr != nil {
+		return fmt.Errorf("route manager detects illegal remote subnet config: %v", rcErr)
+	}
+
 	// Ensure basic rules.
 	if err := appendHighestUnusedPriorityRuleIfNotExist(nil, m.localDirectTableNum, m.family, 0, 0); err != nil {
 		return fmt.Errorf("append local pod direct rule failed: %v", err)
@@ -233,18 +254,26 @@ func (m *Manager) SyncRoutes() error {
 	}
 
 	// Find excluded ip ranges.
-	underlayExcludeIPBlockMap, err := findExcludeIPBlockMap(m.underlaySubnetInfoMap)
+	localUnderlayExcludeIPBlockMap, err := findExcludeIPBlockMap(m.localUnderlaySubnetInfoMap)
 	if err != nil {
 		return fmt.Errorf("find exclude ip blocks for underlay subnet failed: %v", err)
 	}
+	remoteUnderlayExcludeIPBlockMap, err := findExcludeIPBlockMap(m.remoteUnderlaySubnetInfoMap)
+	if err != nil {
+		return fmt.Errorf("find exclude ip blocks for remote underlay subnet failed: %v", err)
+	}
 
-	overlayExcludeIPBlockMap, err := findExcludeIPBlockMap(m.overlaySubnetInfoMap)
+	localOverlayExcludeIPBlockMap, err := findExcludeIPBlockMap(m.localOverlaySubnetInfoMap)
+	if err != nil {
+		return fmt.Errorf("find exclude ip blocks for overlay subnet failed: %v", err)
+	}
+	remoteOverlayExcludeIPBlockMap, err := findExcludeIPBlockMap(m.remoteOverlaySubnetInfoMap)
 	if err != nil {
 		return fmt.Errorf("find exclude ip blocks for overlay subnet failed: %v", err)
 	}
 
 	// Sync to overlay pod subnet routes
-	if err := m.ensureToOverlaySubnetRoutes(overlayExcludeIPBlockMap); err != nil {
+	if err := m.ensureToOverlaySubnetRoutes(localOverlayExcludeIPBlockMap, remoteOverlayExcludeIPBlockMap); err != nil {
 		return fmt.Errorf("ensure to overlay pod subnet routes failed: %v", err)
 	}
 
@@ -267,7 +296,7 @@ func (m *Manager) SyncRoutes() error {
 
 		if isFromPodSubnetRule {
 			// Delete subnet rules which are not supposed to exist.
-			if _, exist := m.totalSubnetInfoMap[rule.Src.String()]; !exist {
+			if _, exist := m.localTotalSubnetInfoMap[rule.Src.String()]; !exist {
 				rule.Family = m.family
 				if err := netlink.RuleDel(&rule); err != nil {
 					return fmt.Errorf("del subnet policy rule error: %v", err)
@@ -280,20 +309,36 @@ func (m *Manager) SyncRoutes() error {
 		}
 	}
 
-	for _, info := range m.overlaySubnetInfoMap {
+	var underlaySubnetInfoMap SubnetInfoMap
+
+	if len(m.remoteUnderlaySubnetInfoMap) == 0 {
+		// ignore remote underlay subnets
+		underlaySubnetInfoMap = m.localUnderlaySubnetInfoMap
+	} else {
+		// consider both local and remote underlay subnets
+		underlaySubnetInfoMap = make(map[string]*SubnetInfo, len(m.remoteUnderlaySubnetInfoMap)+len(m.localUnderlaySubnetInfoMap))
+		for cidr, info := range m.localUnderlaySubnetInfoMap {
+			underlaySubnetInfoMap[cidr] = info
+		}
+		for cidr, info := range m.remoteUnderlaySubnetInfoMap {
+			underlaySubnetInfoMap[cidr] = info
+		}
+	}
+
+	for _, info := range m.localOverlaySubnetInfoMap {
 		// Append overlay from pod subnet rules which don't exist and adapter subnet configuration
 		if err := ensureFromPodSubnetRuleAndRoutes(info.forwardNodeIfName, info.cidr,
 			info.gateway, info.autoNatOutgoing, true, m.family,
-			m.underlaySubnetInfoMap, underlayExcludeIPBlockMap); err != nil {
+			underlaySubnetInfoMap, localUnderlayExcludeIPBlockMap, remoteUnderlayExcludeIPBlockMap); err != nil {
 			return fmt.Errorf("add subnet %v rule and routes failed: %v", info.cidr, err)
 		}
 	}
 
-	for _, info := range m.underlaySubnetInfoMap {
+	for _, info := range m.localUnderlaySubnetInfoMap {
 		// Append underlay from pod subnet rules which don't exist and adapter subnet configuration
 		if err := ensureFromPodSubnetRuleAndRoutes(info.forwardNodeIfName, info.cidr,
 			info.gateway, info.autoNatOutgoing, false, m.family,
-			nil, nil); err != nil {
+			nil, nil, nil); err != nil {
 			return fmt.Errorf("add subnet %v rule and routes failed: %v", info.cidr, err)
 		}
 	}
@@ -301,7 +346,7 @@ func (m *Manager) SyncRoutes() error {
 	return nil
 }
 
-func (m *Manager) ensureToOverlaySubnetRoutes(excludeIPBlockMap map[string]*net.IPNet) error {
+func (m *Manager) ensureToOverlaySubnetRoutes(localExcludeIPBlockMap, remoteExcludeIPBlockMap map[string]*net.IPNet) error {
 	// Sync to overlay pod subnet routes
 	toOverlaySubnetRoutes, err := listRoutesByTable(m.toOverlaySubnetTableNum, m.family)
 	if err != nil {
@@ -309,22 +354,30 @@ func (m *Manager) ensureToOverlaySubnetRoutes(excludeIPBlockMap map[string]*net.
 	}
 
 	existOverlaySubnetRouteMap := map[string]bool{}
+	existRemoteOverlaySubnetRouteMap := map[string]bool{}
+
 	for _, route := range toOverlaySubnetRoutes {
 		// skip exclude routes
 		if isExcludeRoute(&route) {
 			continue
 		}
 
-		if _, exist := m.overlaySubnetInfoMap[route.Dst.String()]; !exist {
+		_, lExist := m.localOverlaySubnetInfoMap[route.Dst.String()]
+		_, rExist := m.remoteOverlaySubnetInfoMap[route.Dst.String()]
+
+		switch {
+		case lExist:
+			existOverlaySubnetRouteMap[route.Dst.String()] = true
+		case rExist:
+			existRemoteOverlaySubnetRouteMap[route.Dst.String()] = true
+		default:
 			if err := netlink.RouteDel(&route); err != nil {
 				return fmt.Errorf("delete route %v failed: %v", route.String(), err)
 			}
-		} else {
-			existOverlaySubnetRouteMap[route.Dst.String()] = true
 		}
 	}
 
-	for _, info := range m.overlaySubnetInfoMap {
+	for _, info := range m.localOverlaySubnetInfoMap {
 		if _, exist := existOverlaySubnetRouteMap[info.cidr.String()]; !exist {
 			overlayLink, err := netlink.LinkByName(info.forwardNodeIfName)
 			if err != nil {
@@ -342,8 +395,27 @@ func (m *Manager) ensureToOverlaySubnetRoutes(excludeIPBlockMap map[string]*net.
 		}
 	}
 
+	// add route for remote overlay subnets
+	for _, info := range m.remoteOverlaySubnetInfoMap {
+		if _, exist := existRemoteOverlaySubnetRouteMap[info.cidr.String()]; !exist {
+			overlayLink, err := netlink.LinkByName(m.overlayIfName)
+			if err != nil {
+				return fmt.Errorf("get overlay link %v failed: %v", m.overlayIfName, err)
+			}
+
+			if err := netlink.RouteReplace(&netlink.Route{
+				Dst:       info.cidr,
+				LinkIndex: overlayLink.Attrs().Index,
+				Table:     m.toOverlaySubnetTableNum,
+				Scope:     netlink.SCOPE_UNIVERSE,
+			}); err != nil {
+				return fmt.Errorf("add to remote overlay pod subnet route for %v failed: %v", info.cidr.String(), err)
+			}
+		}
+	}
+
 	// For the traffic of accessing overlay excluded ip addresses, should not be forced to pass through vxlan device.
-	if err := ensureExcludedIPBlockRoutes(excludeIPBlockMap, m.toOverlaySubnetTableNum, m.family); err != nil {
+	if err := ensureExcludedIPBlockRoutes(localExcludeIPBlockMap, remoteExcludeIPBlockMap, m.toOverlaySubnetTableNum, m.family); err != nil {
 		return fmt.Errorf("ensure exclude ip block routes failed: %v", err)
 	}
 	return nil
