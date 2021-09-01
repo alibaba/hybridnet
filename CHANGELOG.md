@@ -33,3 +33,13 @@ All notable changes to this project will be documented in this file.
 ## v0.1.2
 ### Improvements
 - Clear stale neigh entries for overlay network
+
+## v0.2.0
+### New features
+- Change project name to "hybridnet", which is completely forward-compatible
+
+### Improvements
+- Network type will be auto selected while pod has a specified network
+
+### Fixed Issues
+- Fix wrong masquerading for remote pod to access local pod (update daemon image and rebuild pod will take effect)
