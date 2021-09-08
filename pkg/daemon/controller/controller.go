@@ -487,10 +487,6 @@ func (c *Controller) iptablesSyncLoop() {
 			}
 		}
 
-		// update remote subnet
-		c.iptablesV4Manager.ResetRemote()
-		c.iptablesV6Manager.ResetRemote()
-
 		remoteSubnetList, err := c.remoteSubnetLister.List(labels.Everything())
 		if err != nil {
 			return fmt.Errorf("list remote network failed: %v", err)

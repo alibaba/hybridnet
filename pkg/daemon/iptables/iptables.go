@@ -145,6 +145,12 @@ func (mgr *Manager) Reset() {
 	mgr.nodeIPList = []net.IP{}
 	mgr.localCidr.Clear()
 	mgr.overlayIfName = ""
+
+	mgr.remoteOverlaySubnet = []*net.IPNet{}
+	mgr.remoteUnderlaySubnet = []*net.IPNet{}
+	mgr.remoteNodeIPList = []net.IP{}
+	mgr.remoteSubnetTracker.Refresh()
+	mgr.remoteCidr.Clear()
 }
 
 func (mgr *Manager) RecordNodeIP(nodeIP net.IP) {

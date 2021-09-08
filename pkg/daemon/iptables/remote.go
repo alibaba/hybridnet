@@ -5,14 +5,6 @@ import (
 	"net"
 )
 
-func (mgr *Manager) ResetRemote() {
-	mgr.remoteOverlaySubnet = []*net.IPNet{}
-	mgr.remoteUnderlaySubnet = []*net.IPNet{}
-	mgr.remoteNodeIPList = []net.IP{}
-	mgr.remoteSubnetTracker.Refresh()
-	mgr.remoteCidr.Clear()
-}
-
 func (mgr *Manager) RecordRemoteNodeIP(nodeIP net.IP) {
 	mgr.remoteNodeIPList = append(mgr.remoteNodeIPList, nodeIP)
 }
