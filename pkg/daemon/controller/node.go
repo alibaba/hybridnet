@@ -26,6 +26,7 @@ import (
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
 	"github.com/oecp/rama/pkg/daemon/containernetwork"
+	daemonfeature "github.com/oecp/rama/pkg/daemon/feature"
 	"github.com/oecp/rama/pkg/daemon/vxlan"
 
 	"golang.org/x/sys/unix"
@@ -264,11 +265,6 @@ func (c *Controller) reconcileNodeInfo() error {
 		return fmt.Errorf("list node failed: %v", err)
 	}
 
-	remoteVtepList, err := c.remoteVtepLister.List(labels.Everything())
-	if err != nil {
-		return fmt.Errorf("list remote vtep failed: %v", err)
-	}
-
 	vxlanDev, err := vxlan.NewVxlanDevice(vxlanLinkName, int(*overlayNetID),
 		c.config.NodeVxlanIfName, vtepIP, c.config.VxlanUDPPort, c.config.VxlanBaseReachableTime, true)
 	if err != nil {
@@ -316,10 +312,6 @@ func (c *Controller) reconcileNodeInfo() error {
 		return fmt.Errorf("update node ip cache failed: %v", err)
 	}
 
-	if err := c.remoteVtepCache.UpdateRemoteVtepIPs(remoteVtepList); err != nil {
-		return fmt.Errorf("update remote vtep ip cache failed: %v", err)
-	}
-
 	for _, node := range nodeList {
 		if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
 			node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
@@ -341,18 +333,29 @@ func (c *Controller) reconcileNodeInfo() error {
 		vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
 	}
 
-	for _, remoteVtep := range remoteVtepList {
-		vtepMac, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
+	if daemonfeature.MultiClusterEnabled() {
+		remoteVtepList, err := c.remoteVtepLister.List(labels.Everything())
 		if err != nil {
-			return fmt.Errorf("parse node vtep mac string %v failed: %v", remoteVtep.Spec.VtepMAC, err)
+			return fmt.Errorf("list remote vtep failed: %v", err)
 		}
 
-		vtepIP := net.ParseIP(remoteVtep.Spec.VtepIP)
-		if vtepIP == nil {
-			return fmt.Errorf("parse node vtep ip string %v failed", remoteVtep.Spec.VtepIP)
+		if err := c.remoteVtepCache.UpdateRemoteVtepIPs(remoteVtepList); err != nil {
+			return fmt.Errorf("update remote vtep ip cache failed: %v", err)
 		}
 
-		vxlanDev.RecordRemoteVtepInfo(vtepMac, vtepIP)
+		for _, remoteVtep := range remoteVtepList {
+			vtepMac, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
+			if err != nil {
+				return fmt.Errorf("parse node vtep mac string %v failed: %v", remoteVtep.Spec.VtepMAC, err)
+			}
+
+			vtepIP := net.ParseIP(remoteVtep.Spec.VtepIP)
+			if vtepIP == nil {
+				return fmt.Errorf("parse node vtep ip string %v failed", remoteVtep.Spec.VtepIP)
+			}
+
+			vxlanDev.RecordRemoteVtepInfo(vtepMac, vtepIP)
+		}
 	}
 
 	if err := vxlanDev.SyncVtepInfo(); err != nil {

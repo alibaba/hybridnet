@@ -22,6 +22,7 @@ import (
 	ramainformer "github.com/oecp/rama/pkg/client/informers/externalversions"
 	daemonconfig "github.com/oecp/rama/pkg/daemon/config"
 	"github.com/oecp/rama/pkg/daemon/controller"
+	daemonfeature "github.com/oecp/rama/pkg/daemon/feature"
 	"github.com/oecp/rama/pkg/daemon/server"
 
 	"k8s.io/client-go/informers"
@@ -37,6 +38,7 @@ func main() {
 	defer klog.Flush()
 
 	klog.Infof("Starting rama daemon with git commit: %v", gitCommit)
+	klog.Infof("known features: %v", daemonfeature.KnownFeatures())
 
 	config, err := daemonconfig.ParseFlags()
 	if err != nil {
