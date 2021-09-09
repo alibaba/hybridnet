@@ -20,12 +20,11 @@ import (
 	"context"
 	"flag"
 
+	"github.com/oecp/rama/pkg/feature"
+	"github.com/oecp/rama/pkg/manager"
 	"github.com/spf13/pflag"
 	"k8s.io/klog"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-
-	"github.com/oecp/rama/pkg/feature"
-	"github.com/oecp/rama/pkg/manager"
 )
 
 var (
