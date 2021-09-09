@@ -6,7 +6,7 @@ import (
 	daemonutils "github.com/oecp/rama/pkg/daemon/utils"
 )
 
-func (m *Manager) AddRemoteSubnetInfo(cluster string, cidr *net.IPNet, gateway, start, end net.IP, excludeIPs []net.IP, isOverlay bool) error {
+func (m *Manager) AddRemoteSubnetInfo(cidr *net.IPNet, gateway, start, end net.IP, excludeIPs []net.IP, isOverlay bool) error {
 	cidrString := cidr.String()
 
 	var subnetInfo *SubnetInfo

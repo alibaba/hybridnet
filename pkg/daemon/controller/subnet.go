@@ -172,7 +172,7 @@ func (c *Controller) reconcileSubnet() error {
 			var isOverlay = ramav1.GetRemoteSubnetType(remoteSubnet) == ramav1.NetworkTypeOverlay
 
 			routeManager := c.getRouterManager(remoteSubnet.Spec.Range.Version)
-			err = routeManager.AddRemoteSubnetInfo(remoteSubnet.Spec.ClusterName, subnetCidr, gatewayIP, startIP, endIP, excludeIPs, isOverlay)
+			err = routeManager.AddRemoteSubnetInfo(subnetCidr, gatewayIP, startIP, endIP, excludeIPs, isOverlay)
 
 			if err != nil {
 				return fmt.Errorf("failed to add remote subnet info: %v", err)

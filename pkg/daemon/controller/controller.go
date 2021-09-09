@@ -585,7 +585,7 @@ func (c *Controller) iptablesSyncLoop() {
 					}
 
 					if err = c.getIPtablesManager(remoteSubnet.Spec.Range.Version).
-						RecordRemoteSubnet(remoteSubnet.Spec.ClusterName, cidr, ramav1.GetRemoteSubnetType(remoteSubnet) == ramav1.NetworkTypeOverlay); err != nil {
+						RecordRemoteSubnet(cidr, ramav1.GetRemoteSubnetType(remoteSubnet) == ramav1.NetworkTypeOverlay); err != nil {
 						return fmt.Errorf("cannot record remote subnet: %v", err)
 					}
 				}
