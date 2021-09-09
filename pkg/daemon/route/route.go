@@ -333,12 +333,9 @@ func (m *Manager) ensureToOverlaySubnetRoutes(excludeIPBlockMap map[string]*net.
 			continue
 		}
 
-		_, lExist := m.localOverlaySubnetInfoMap[route.Dst.String()]
-		_, rExist := m.remoteOverlaySubnetInfoMap[route.Dst.String()]
-
-		if lExist {
+		if _, exist := m.localOverlaySubnetInfoMap[route.Dst.String()]; exist {
 			existOverlaySubnetRouteMap[route.Dst.String()] = true
-		} else if rExist {
+		} else if _, exist := m.remoteOverlaySubnetInfoMap[route.Dst.String()]; exist {
 			existRemoteOverlaySubnetRouteMap[route.Dst.String()] = true
 		} else if err := netlink.RouteDel(&route); err != nil {
 			return fmt.Errorf("delete route %v failed: %v", route.String(), err)
