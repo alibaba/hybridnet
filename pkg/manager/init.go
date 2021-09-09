@@ -21,6 +21,7 @@ import (
 
 	"github.com/oecp/rama/pkg/controller/ipam"
 	"github.com/oecp/rama/pkg/controller/remotecluster"
+	"github.com/oecp/rama/pkg/feature"
 	"k8s.io/klog"
 )
 
@@ -49,6 +50,9 @@ func initIPAMController(m *Manager) error {
 var rcController *remotecluster.Controller
 
 func initRemoteClusterController(m *Manager) error {
+	if !feature.MultiClusterEnabled() {
+		return nil
+	}
 	rcController = remotecluster.NewController(
 		m.KubeClient,
 		m.RamaClient,

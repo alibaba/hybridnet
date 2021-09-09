@@ -3,7 +3,6 @@ package rcmanager
 import (
 	"context"
 	"fmt"
-	"net"
 
 	"github.com/gogf/gf/container/gset"
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
@@ -23,10 +22,10 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		return nil
 	}
 	vtepName := utils.GenRemoteVtepName(m.ClusterName, nodeName)
-	node, err := m.nodeLister.Get(nodeName)
+	node, err := m.NodeLister.Get(nodeName)
 	if err != nil {
 		if k8serror.IsNotFound(err) {
-			err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), vtepName, metav1.DeleteOptions{})
+			err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), vtepName, metav1.DeleteOptions{})
 			if k8serror.IsNotFound(err) {
 				return nil
 			}
@@ -41,7 +40,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 	}
 	newVtep := false
 
-	remoteVtep, err := m.remoteVtepLister.Get(vtepName)
+	remoteVtep, err := m.RemoteVtepLister.Get(vtepName)
 	if err != nil {
 		if !k8serror.IsNotFound(err) {
 			return err
@@ -54,17 +53,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 
 	remoteVtep.Spec.VtepIP = vtepIP
 	remoteVtep.Spec.VtepMAC = vtepMac
-	desired := func() []string {
-		ipList := make([]string, 0)
-		for _, v := range instances {
-			if v.Status.Phase == networkingv1.IPPhaseReserved {
-				continue
-			}
-			ip, _, _ := net.ParseCIDR(v.Spec.Address.IP)
-			ipList = append(ipList, ip.String())
-		}
-		return ipList
-	}()
+	desired := utils.PickUsingIPList(instances)
 	actual := remoteVtep.Spec.EndpointIPList
 	desiredSet := gset.NewFrom(desired)
 	actualSet := gset.NewFrom(actual)
@@ -79,56 +68,33 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		return ipList
 	}()
 	vtepChanged := vtepIP != "" && vtepMac != "" && (vtepIP != remoteVtep.Spec.VtepIP || vtepMac != remoteVtep.Spec.VtepMAC)
-	ipListChanged := remove.Size() == 0 || add.Size() == 0
+	ipListChanged := remove.Size() != 0 || add.Size() != 0
 	if !newVtep && !ipListChanged && !vtepChanged {
 		return nil
 	}
 
 	if newVtep {
-		remoteVtep, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{})
+		remoteVtep, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
 	} else {
-		remoteVtep, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), remoteVtep, metav1.UpdateOptions{})
+		remoteVtep, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), remoteVtep, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
 	}
 	remoteVtep.Status.LastModifyTime = curTime
-	_, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
+	_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
 	return err
 }
 
-func (m *Manager) nodeToIPInstance(nodeName string) ([]*networkingv1.IPInstance, error) {
-	podIP, err := m.IPIndexer.ByIndex(ByNodeNameIndexer, nodeName)
-	if err != nil {
-		klog.Warningf("[nodeToPodIP] can't use ipinstance indexer. indexername=%v, nodename=%v, err=%v", ByNodeNameIndexer, nodeName, err)
-		return nil, err
-	}
-	ans := make([]*networkingv1.IPInstance, 0)
-	for _, v := range podIP {
-		if instance, ok := v.(*networkingv1.IPInstance); ok {
-			ans = append(ans, instance)
-		}
-	}
-	return ans, nil
-}
-
 func (m *Manager) nodeToIPList(nodeName string) ([]string, error) {
-	instances, err := m.nodeToIPInstance(nodeName)
+	instances, err := m.IPLister.List(labels.SelectorFromSet(labels.Set{constants.LabelNode: nodeName}))
 	if err != nil {
 		return nil, err
 	}
-	ipList := make([]string, 0)
-	for _, instance := range instances {
-		if instance.Status.Phase != networkingv1.IPPhaseUsing {
-			continue
-		}
-		ip, _, _ := net.ParseCIDR(instance.Spec.Address.IP)
-		ipList = append(ipList, ip.String())
-	}
-	return ipList, nil
+	return utils.PickUsingIPList(instances), nil
 }
 
 func (m *Manager) RunIPInstanceWorker() {

@@ -21,6 +21,7 @@ import (
 
 	"github.com/oecp/rama/pkg/controller/ipam"
 	"github.com/oecp/rama/pkg/controller/remotecluster"
+	"github.com/oecp/rama/pkg/feature"
 	"github.com/pkg/errors"
 	"k8s.io/klog"
 )
@@ -48,6 +49,9 @@ func runIPAMController(m *Manager) error {
 }
 
 func runRemoteClusterController(m *Manager) error {
+	if !feature.MultiClusterEnabled() {
+		return nil
+	}
 	if rcController == nil {
 		return errors.New("remote cluster Controller is not initialized")
 	}

@@ -43,7 +43,7 @@ type Controller struct {
 	UUID                      types.UID
 	OverlayNetID              *uint32
 	overlayNetIDMU            sync.RWMutex
-	rcMgrCache                Cache
+	rcMgrCache                *Cache
 	kubeClient                kubeclientset.Interface
 	ramaClient                versioned.Interface
 	RamaInformerFactory       externalversions.SharedInformerFactory
@@ -85,9 +85,7 @@ func NewController(
 	}
 
 	c := &Controller{
-		rcMgrCache: Cache{
-			rcMgrMap: make(map[string]*rcmanager.Manager),
-		},
+		rcMgrCache:                NewCache(),
 		UUID:                      uuid,
 		kubeClient:                kubeClient,
 		ramaClient:                ramaClient,
@@ -146,8 +144,8 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 
 func (c *Controller) closeRemoteClusterManager() {
 	// no need to lock
-	for _, wrapper := range c.rcMgrCache.rcMgrMap {
-		close(wrapper.StopCh)
+	for _, mgr := range c.rcMgrCache.rcMgrMap {
+		mgr.Close()
 	}
 }
 
@@ -155,9 +153,10 @@ func (c *Controller) runOverlayNetIDWorker() {
 	c.overlayNetIDMU.Lock()
 	defer c.overlayNetIDMU.Unlock()
 
-	networks, err := c.localClusterNetworkLister.List(labels.NewSelector())
+	networks, err := c.localClusterNetworkLister.List(labels.Everything())
 	if err != nil {
 		klog.Warningf("Can't list local cluster network. err=%v", err)
+		return
 	}
 	for _, network := range networks {
 		if network.Spec.Type == networkingv1.NetworkTypeOverlay {
@@ -171,7 +170,7 @@ func (c *Controller) runOverlayNetIDWorker() {
 // health checking and resync cache. remote cluster is managed by admin, it can be
 // treated as desired states
 func (c *Controller) updateRemoteClusterStatus() {
-	remoteClusters, err := c.remoteClusterLister.List(labels.NewSelector())
+	remoteClusters, err := c.remoteClusterLister.List(labels.Everything())
 	if err != nil {
 		klog.Errorf("Can't list remote cluster. err=%v", err)
 		return
@@ -192,7 +191,6 @@ func (c *Controller) updateRemoteClusterStatus() {
 		go c.updateSingleRCStatus(manager, r, &wg)
 	}
 	wg.Wait()
-	klog.Infof("Update Remote Cluster Status Finished. len=%v", cnt)
 }
 
 func (c *Controller) updateSingleRCStatus(manager *rcmanager.Manager, rc *networkingv1.RemoteCluster, wg *sync.WaitGroup) {

@@ -22,11 +22,11 @@ const ReconcileNode = "ReconcileNode"
 // Full update. Update remote vtep expect status
 func (m *Manager) reconcileNode() error {
 	klog.Infof("[RemoteCluster] Starting reconcile node from cluster %v", m.ClusterName)
-	nodes, err := m.nodeLister.List(labels.NewSelector())
+	nodes, err := m.NodeLister.List(labels.Everything())
 	if err != nil {
 		return err
 	}
-	vteps, err := m.remoteVtepLister.List(utils.SelectorClusterName(m.ClusterName))
+	vteps, err := m.RemoteVtepLister.List(utils.SelectorClusterName(m.ClusterName))
 	if err != nil {
 		return err
 	}
@@ -40,13 +40,13 @@ func (m *Manager) reconcileNode() error {
 	go func() {
 		defer wg.Done()
 		for _, v := range add {
-			vtep, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), v, metav1.CreateOptions{})
+			vtep, err := m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), v, metav1.CreateOptions{})
 			if err != nil {
 				klog.Warningf("Can't create remote vtep in local cluster. err=%v. remote vtep name=%v", err, v.Name)
 				continue
 			}
 			vtep.Status.LastModifyTime = cur
-			_, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
+			_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
 			if err != nil {
 				runtimeutil.HandleError(err)
 			}
@@ -57,12 +57,12 @@ func (m *Manager) reconcileNode() error {
 		defer wg.Done()
 		for _, v := range update {
 			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				vtep, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), v, metav1.UpdateOptions{})
+				vtep, err := m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), v, metav1.UpdateOptions{})
 				if err != nil {
 					return err
 				}
 				vtep.Status.LastModifyTime = cur
-				_, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
+				_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
 				return err
 			})
 			if err != nil {
@@ -74,7 +74,7 @@ func (m *Manager) reconcileNode() error {
 	go func() {
 		defer wg.Done()
 		for _, v := range remove {
-			_ = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), v, metav1.DeleteOptions{})
+			_ = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), v, metav1.DeleteOptions{})
 			if err != nil && !k8serror.IsNotFound(err) {
 				klog.Warningf("Can't delete remote vtep in local cluster. remote vtep name=%v", v)
 			}
@@ -131,28 +131,28 @@ func (m *Manager) diffNodeAndVtep(nodes []*apiv1.Node, vteps []*networkingv1.Rem
 }
 
 func (m *Manager) processNextNode() bool {
-	obj, shutdown := m.nodeQueue.Get()
+	obj, shutdown := m.NodeQueue.Get()
 	if shutdown {
 		return false
 	}
 
 	err := func(obj interface{}) error {
-		defer m.nodeQueue.Done(obj)
+		defer m.NodeQueue.Done(obj)
 		var (
 			key string
 			ok  bool
 		)
 		if key, ok = obj.(string); !ok {
-			m.nodeQueue.Forget(obj)
+			m.NodeQueue.Forget(obj)
 			return nil
 		}
 		if err := m.reconcileNode(); err != nil {
 			// TODO: use retry handler to
 			// Put the item back on the workqueue to handle any transient errors
-			m.nodeQueue.AddRateLimited(key)
+			m.NodeQueue.AddRateLimited(key)
 			return fmt.Errorf("[RemoteCluster-Node] fail to sync '%s' for cluster=%v: %v, requeuing", key, m.ClusterName, err)
 		}
-		m.nodeQueue.Forget(obj)
+		m.NodeQueue.Forget(obj)
 		klog.Infof("[RemoteCluster-Node] succeed to sync '%s', cluster=%v", key, m.ClusterName)
 		return nil
 	}(obj)
@@ -174,15 +174,12 @@ func (m *Manager) filterNode(obj interface{}) bool {
 	if !m.GetIsReady() {
 		return false
 	}
-	// todo debug
-	klog.Infof("[RemoteCluster-Node]debug. node=%v", utils.ToJSONString(obj))
 	_, ok := obj.(*apiv1.Node)
 	return ok
 }
 
-func (m *Manager) addOrDelNode(obj interface{}) {
-	node, _ := obj.(*apiv1.Node)
-	m.EnqueueNode(node.Name)
+func (m *Manager) addOrDelNode(_ interface{}) {
+	m.EnqueueNode(ReconcileNode)
 }
 
 func (m *Manager) updateNode(oldObj, newObj interface{}) {
@@ -198,9 +195,9 @@ func (m *Manager) updateNode(oldObj, newObj interface{}) {
 		newNodeAnnotations[constants.AnnotationNodeVtepMac] == oldNodeAnnotations[constants.AnnotationNodeVtepMac] {
 		return
 	}
-	m.EnqueueNode(newNode.Name)
+	m.EnqueueNode(ReconcileNode)
 }
 
 func (m *Manager) EnqueueNode(nodeName string) {
-	m.nodeQueue.Add(nodeName)
+	m.NodeQueue.Add(nodeName)
 }

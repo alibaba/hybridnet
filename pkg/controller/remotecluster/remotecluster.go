@@ -15,7 +15,7 @@ func (c *Controller) reconcileRemoteCluster(clusterName string) error {
 	remoteCluster, err := c.remoteClusterLister.Get(clusterName)
 	if err != nil {
 		if k8serror.IsNotFound(err) {
-			c.delRemoteCluster(clusterName)
+			c.delRCMgr(clusterName)
 			return nil
 		}
 		return err
@@ -49,11 +49,6 @@ func (c *Controller) updateRemoteCluster(oldObj, newObj interface{}) {
 
 func (c *Controller) enqueueRemoteCluster(clusterName string) {
 	c.remoteClusterQueue.Add(clusterName)
-}
-
-func (c *Controller) delRemoteCluster(clusterName string) {
-	klog.Infof("deleting cluster=%v.", clusterName)
-	c.rcMgrCache.Del(clusterName)
 }
 
 func (c *Controller) runRemoteClusterWorker() {

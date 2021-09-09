@@ -46,3 +46,15 @@ func Intersect(cidr1 string, ipVersion1 networkingv1.IPVersion,
 
 	return net1.Contains(net2.IP) || net2.Contains(net1.IP)
 }
+
+func PickUsingIPList(instances []*networkingv1.IPInstance) []string {
+	ipList := make([]string, 0)
+	for _, v := range instances {
+		if v == nil || v.Status.Phase != networkingv1.IPPhaseUsing {
+			continue
+		}
+		ip, _, _ := net.ParseCIDR(v.Spec.Address.IP)
+		ipList = append(ipList, ip.String())
+	}
+	return ipList
+}

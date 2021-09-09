@@ -23,7 +23,7 @@ var (
 )
 
 func init() {
-	DefaultChecker = append(DefaultChecker, HealChecker, BidirectionalConnChecker, OverlayNetIDChecker)
+	DefaultChecker = append(DefaultChecker, HealthChecker, BidirectionalConnChecker, OverlayNetIDChecker)
 
 	ConditionAllReady[utils.TypeHealthCheck] = true
 	ConditionAllReady[utils.TypeBidirectionalConn] = true
@@ -66,7 +66,7 @@ func meetCondition(conditions []networkingv1.ClusterCondition) bool {
 	return cnt == len(ConditionAllReady)
 }
 
-func HealChecker(c *Controller, ramaClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error) {
+func HealthChecker(c *Controller, ramaClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error) {
 	conditions := make([]networkingv1.ClusterCondition, 0)
 
 	body, err := ramaClient.Discovery().RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()

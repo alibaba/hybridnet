@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	r                = regexp.MustCompile(`^(https?://)[\w-]+(\.[\w-]+)+:\d{1,5}$`)
 	validateLock     sync.Mutex
+	validEndpoint    = regexp.MustCompile(`^(https?://)[\w-]+(\.[\w-]+)+:\d{1,5}$`)
 	remoteClusterGVK = gvkConverter(ramav1.SchemeGroupVersion.WithKind("RemoteCluster"))
 )
 
@@ -58,7 +58,7 @@ func validate(rc *ramav1.RemoteCluster) admission.Response {
 	if connConfig.Endpoint == "" || connConfig.CABundle == nil || connConfig.ClientKey == nil || connConfig.ClientCert == nil {
 		return admission.Denied("empty connection config, please check.")
 	}
-	if !r.Match([]byte(connConfig.Endpoint)) {
+	if !validEndpoint.Match([]byte(connConfig.Endpoint)) {
 		return admission.Denied("endpoint format: https://server:address, please check")
 	}
 
@@ -72,7 +72,7 @@ func validate(rc *ramav1.RemoteCluster) admission.Response {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
-	rcs, err := RCLister.List(labels.NewSelector())
+	rcs, err := RCLister.List(labels.Everything())
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}

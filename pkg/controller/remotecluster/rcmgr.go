@@ -3,7 +3,6 @@ package remotecluster
 import (
 	"context"
 	"fmt"
-	"time"
 
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/rcmanager"
@@ -12,46 +11,31 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 )
 
 func (c *Controller) startRemoteClusterMgr(clusterName string) error {
-	klog.Infof("[debug] processNextRemoteClusterMgr name=%v", clusterName)
+	klog.Infof("processNextRemoteClusterMgr name=%v", clusterName)
 	rcManager, exists := c.rcMgrCache.Get(clusterName)
 	if !exists {
 		klog.Errorf("Can't find rcManager. clusterName=%v", clusterName)
 		return errors.Errorf("Can't find rcManager. clusterName=%v", clusterName)
 	}
-	klog.Infof("Start single remote cluster manager. clusterName=%v", clusterName)
-
-	managerCh := rcManager.StopCh
-	go func() {
-		if ok := cache.WaitForCacheSync(managerCh, rcManager.NodeSynced, rcManager.SubnetSynced, rcManager.IPSynced); !ok {
-			klog.Errorf("failed to wait for remote cluster caches to sync. clusterName=%v", clusterName)
-			return
-		}
-		go wait.Until(rcManager.RunNodeWorker, 1*time.Second, managerCh)
-		go wait.Until(rcManager.RunSubnetWorker, 1*time.Second, managerCh)
-		go wait.Until(rcManager.RunIPInstanceWorker, 1*time.Second, managerCh)
-	}()
-	go rcManager.KubeInformerFactory.Start(managerCh)
-	go rcManager.RamaInformerFactory.Start(managerCh)
+	rcManager.Run()
 	return nil
 }
 
 // use remove+add instead of update
 func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 	// lock in function range to avoid renewing cluster manager when newing one
-	c.rcMgrCache.mu.Lock()
-	defer c.rcMgrCache.mu.Unlock()
+	c.rcMgrCache.RWMutex.Lock()
+	defer c.rcMgrCache.RWMutex.Unlock()
 	klog.Infof("[addOrUpdateRCMgr] cluster=%v", rc.Name)
 
 	clusterName := rc.Name
-	if k, exists := c.rcMgrCache.rcMgrMap[clusterName]; exists {
+	if mgr, exists := c.rcMgrCache.rcMgrMap[clusterName]; exists {
 		klog.Infof("Delete cluster %v from cache", clusterName)
-		close(k.StopCh)
+		mgr.Close()
 		delete(c.rcMgrCache.rcMgrMap, clusterName)
 	}
 
@@ -79,6 +63,11 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 	c.rcMgrCache.rcMgrMap[clusterName] = rcMgr
 	c.rcMgrQueue.Add(clusterName)
 	return nil
+}
+
+func (c *Controller) delRCMgr(clusterName string) {
+	klog.Infof("deleting cluster=%v.", clusterName)
+	c.rcMgrCache.Del(clusterName)
 }
 
 func (c *Controller) processRCManagerQueue() {
