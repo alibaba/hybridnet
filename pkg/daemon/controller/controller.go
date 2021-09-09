@@ -55,13 +55,12 @@ import (
 )
 
 const (
-	ActionReconcileSubnet       = "ReconcileSubnet"
-	ActionReconcileIPInstance   = "ReconcileIPInstance"
-	ActionReconcileNode         = "ReconcileNode"
-	ActionReconcileRemoteSubnet = "ReconcileRemoteSubnet"
+	ActionReconcileSubnet     = "ReconcileSubnet"
+	ActionReconcileIPInstance = "ReconcileIPInstance"
+	ActionReconcileNode       = "ReconcileNode"
 
-	ByInstanceIPIndexer     = "instanceIP"
-	ByEndpointIPListIndexer = "endpointIP"
+	ByInstanceIPIndexer = "instanceIP"
+	ByEndpointIPIndexer = "endpointIP"
 )
 
 // Controller is a set of kubernetes controllers
@@ -85,7 +84,6 @@ type Controller struct {
 	// cluster-mesh related crd: RemoteSubnet
 	remoteSubnetLister ramalister.RemoteSubnetLister
 	remoteSubnetSynced cache.InformerSynced
-	remoteSubnetQueue  workqueue.RateLimitingInterface
 
 	// cluster-mesh related crd: RemoteVtep
 	remoteVtepLister  ramalister.RemoteVtepLister
@@ -233,14 +231,13 @@ func NewController(config *daemonconfig.Configuration,
 		remoteVtepInformer := ramaInformerFactory.Networking().V1().RemoteVteps()
 
 		if err := remoteVtepInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{
-			ByEndpointIPListIndexer: indexByEndpointIPList,
+			ByEndpointIPIndexer: indexByEndpointIP,
 		}); err != nil {
 			return nil, fmt.Errorf("add indexer to remote vtep informer failed: %v", err)
 		}
 
 		controller.remoteSubnetLister = remoteSubnetInformer.Lister()
 		controller.remoteSubnetSynced = remoteSubnetInformer.Informer().HasSynced
-		controller.remoteSubnetQueue = workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "RemoteSubnet")
 
 		controller.remoteVtepLister = remoteVtepInformer.Lister()
 		controller.remoteVtepSynced = remoteVtepInformer.Informer().HasSynced
@@ -271,16 +268,14 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	defer c.ipInstanceQueue.ShutDown()
 	defer c.nodeQueue.ShutDown()
 
-	if !daemonfeature.MultiClusterEnabled() {
-		if ok := cache.WaitForCacheSync(stopCh, c.subnetSynced, c.ipInstanceSynced, c.networkSynced, c.nodeSynced); !ok {
-			return fmt.Errorf("failed to wait for caches to sync")
-		}
-	} else {
-		defer c.remoteSubnetQueue.ShutDown()
-		if ok := cache.WaitForCacheSync(stopCh, c.subnetSynced, c.ipInstanceSynced, c.networkSynced, c.nodeSynced, c.remoteSubnetSynced, c.remoteVtepSynced); !ok {
-			return fmt.Errorf("failed to wait for caches to sync")
-		}
-		go wait.Until(c.runRemoteSubnetWorker, time.Second, stopCh)
+	synced := []cache.InformerSynced{c.subnetSynced, c.ipInstanceSynced, c.networkSynced, c.nodeSynced}
+
+	if daemonfeature.MultiClusterEnabled() {
+		synced = append(synced, c.remoteSubnetSynced, c.remoteVtepSynced)
+	}
+
+	if ok := cache.WaitForCacheSync(stopCh, synced...); !ok {
+		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
 	go wait.Until(c.runSubnetWorker, time.Second, stopCh)
@@ -496,11 +491,6 @@ func (c *Controller) iptablesSyncLoop() {
 			}
 		}
 
-		// no local and remote overlay subnets
-		if !overlayExist && !daemonfeature.MultiClusterEnabled() {
-			return nil
-		}
-
 		// add local subnets
 		if overlayExist {
 			// Record node ips.
@@ -662,12 +652,12 @@ func indexByInstanceIP(obj interface{}) ([]string, error) {
 	return []string{}, nil
 }
 
-var indexByEndpointIPList cache.IndexFunc = func(obj interface{}) ([]string, error) {
+var indexByEndpointIP cache.IndexFunc = func(obj interface{}) ([]string, error) {
 	vtep, ok := obj.(*ramav1.RemoteVtep)
 	if ok {
-		podIPs := vtep.Spec.EndpointIPList
-		if len(podIPs) > 0 {
-			return podIPs, nil
+		endpointIPs := vtep.Spec.EndpointIPList
+		if len(endpointIPs) > 0 {
+			return endpointIPs, nil
 		}
 	}
 	return []string{}, nil

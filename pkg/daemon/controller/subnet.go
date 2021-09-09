@@ -21,6 +21,7 @@ import (
 
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/daemon/containernetwork"
+	daemonfeature "github.com/oecp/rama/pkg/daemon/feature"
 
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog"
@@ -150,6 +151,33 @@ func (c *Controller) reconcileSubnet() error {
 		routeManager := c.getRouterManager(subnet.Spec.Range.Version)
 		routeManager.AddSubnetInfo(subnetCidr, gatewayIP, startIP, endIP, excludeIPs,
 			forwardNodeIfName, autoNatOutgoing, isOverlay)
+	}
+
+	if daemonfeature.MultiClusterEnabled() {
+		klog.Info("Reconciling remote subnet information")
+
+		remoteSubnetList, err := c.remoteSubnetLister.List(labels.Everything())
+		if err != nil {
+			return fmt.Errorf("failed to list remote subnet %v", err)
+		}
+
+		for _, remoteSubnet := range remoteSubnetList {
+			subnetCidr, gatewayIP, startIP, endIP, excludeIPs,
+				_, err := parseSubnetSpecRangeMeta(&remoteSubnet.Spec.Range)
+
+			if err != nil {
+				return fmt.Errorf("parse subnet %v spec range meta failed: %v", remoteSubnet.Name, err)
+			}
+
+			var isOverlay = ramav1.GetRemoteSubnetType(remoteSubnet) == ramav1.NetworkTypeOverlay
+
+			routeManager := c.getRouterManager(remoteSubnet.Spec.Range.Version)
+			err = routeManager.AddRemoteSubnetInfo(remoteSubnet.Spec.ClusterName, subnetCidr, gatewayIP, startIP, endIP, excludeIPs, isOverlay)
+
+			if err != nil {
+				return fmt.Errorf("failed to add remote subnet info: %v", err)
+			}
+		}
 	}
 
 	if err := c.routeV4Manager.SyncRoutes(); err != nil {

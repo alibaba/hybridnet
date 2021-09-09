@@ -79,7 +79,7 @@ func (c *Controller) getIPInstanceByAddress(address net.IP) (*ramav1.IPInstance,
 
 func (c *Controller) getRemoteVtepByEndpointAddress(address net.IP) (*ramav1.RemoteVtep, error) {
 	// try to find remote pod ip
-	remoteVtepList, err := c.remoteVtepIndexer.ByIndex(ByEndpointIPListIndexer, address.String())
+	remoteVtepList, err := c.remoteVtepIndexer.ByIndex(ByEndpointIPIndexer, address.String())
 	if err != nil {
 		return nil, fmt.Errorf("get remote vtep by ip %v indexer failed: %v", address.String(), err)
 	}
