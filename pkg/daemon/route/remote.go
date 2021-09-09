@@ -1,25 +1,13 @@
 package route
 
 import (
-	"fmt"
 	"net"
 
 	daemonutils "github.com/oecp/rama/pkg/daemon/utils"
 )
 
-func (m *Manager) ResetRemoteInfos() {
-	m.remoteOverlaySubnetInfoMap = SubnetInfoMap{}
-	m.remoteUnderlaySubnetInfoMap = SubnetInfoMap{}
-	m.remoteSubnetTracker.Refresh()
-	m.remoteCidr.Clear()
-}
-
 func (m *Manager) AddRemoteSubnetInfo(cluster string, cidr *net.IPNet, gateway, start, end net.IP, excludeIPs []net.IP, isOverlay bool) error {
 	cidrString := cidr.String()
-
-	if err := m.remoteSubnetTracker.Track(cidrString, cluster); err != nil {
-		return err
-	}
 
 	var subnetInfo *SubnetInfo
 	if isOverlay {
@@ -64,22 +52,5 @@ func (m *Manager) AddRemoteSubnetInfo(cluster string, cidr *net.IPNet, gateway, 
 		}
 	}
 
-	m.remoteCidr.Add(cidrString)
 	return nil
-}
-
-func (m *Manager) configureRemote() (bool, error) {
-	if len(m.remoteOverlaySubnetInfoMap) == 0 && len(m.remoteUnderlaySubnetInfoMap) == 0 {
-		return false, nil
-	}
-
-	if err := m.remoteSubnetTracker.Conflict(); err != nil {
-		return false, err
-	}
-
-	if conflict := m.remoteCidr.Intersect(m.localCidr); conflict.Size() > 0 {
-		return false, fmt.Errorf("local cluster and remote clusters have a conflict in subnet config [%s]", conflict)
-	}
-
-	return true, nil
 }

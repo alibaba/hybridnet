@@ -1,7 +1,6 @@
 package iptables
 
 import (
-	"fmt"
 	"net"
 )
 
@@ -10,32 +9,10 @@ func (mgr *Manager) RecordRemoteNodeIP(nodeIP net.IP) {
 }
 
 func (mgr *Manager) RecordRemoteSubnet(cluster string, subnetCidr *net.IPNet, isOverlay bool) error {
-	if err := mgr.remoteSubnetTracker.Track(subnetCidr.String(), cluster); err != nil {
-		return err
-	}
-
 	if isOverlay {
 		mgr.remoteOverlaySubnet = append(mgr.remoteOverlaySubnet, subnetCidr)
 	} else {
 		mgr.remoteUnderlaySubnet = append(mgr.remoteUnderlaySubnet, subnetCidr)
 	}
-
-	mgr.remoteCidr.Add(subnetCidr.String())
 	return nil
-}
-
-func (mgr *Manager) configureRemote() (bool, error) {
-	if len(mgr.remoteOverlaySubnet) == 0 && len(mgr.remoteUnderlaySubnet) == 0 {
-		return false, nil
-	}
-
-	if err := mgr.remoteSubnetTracker.Conflict(); err != nil {
-		return false, err
-	}
-
-	if conflict := mgr.remoteCidr.Intersect(mgr.localCidr); conflict.Size() > 0 {
-		return false, fmt.Errorf("local cluster and remote clusters have a conflict in subnet config [%s]", conflict)
-	}
-
-	return true, nil
 }

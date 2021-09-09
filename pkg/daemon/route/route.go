@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/gogf/gf/container/gset"
 	"github.com/oecp/rama/pkg/daemon/iptables"
 	daemonutils "github.com/oecp/rama/pkg/daemon/utils"
 	"github.com/vishvananda/netlink"
@@ -68,13 +67,10 @@ type Manager struct {
 	localOverlaySubnetInfoMap  SubnetInfoMap
 	localUnderlaySubnetInfoMap SubnetInfoMap
 	localTotalSubnetInfoMap    SubnetInfoMap
-	localCidr                  *gset.StrSet
 
 	// add cluster-mesh remote subnet info
 	remoteOverlaySubnetInfoMap  SubnetInfoMap
 	remoteUnderlaySubnetInfoMap SubnetInfoMap
-	remoteSubnetTracker         *daemonutils.SubnetCidrTracker
-	remoteCidr                  *gset.StrSet
 }
 
 func CreateRouteManager(localDirectTableNum, toOverlaySubnetTableNum, overlayMarkTableNum, family int) (*Manager, error) {
@@ -170,11 +166,8 @@ func CreateRouteManager(localDirectTableNum, toOverlaySubnetTableNum, overlayMar
 		localTotalSubnetInfoMap:     SubnetInfoMap{},
 		localOverlaySubnetInfoMap:   SubnetInfoMap{},
 		localUnderlaySubnetInfoMap:  SubnetInfoMap{},
-		localCidr:                   gset.NewStrSet(),
 		remoteOverlaySubnetInfoMap:  SubnetInfoMap{},
 		remoteUnderlaySubnetInfoMap: SubnetInfoMap{},
-		remoteSubnetTracker:         daemonutils.NewSubnetCidrTracker(),
-		remoteCidr:                  gset.NewStrSet(),
 	}, nil
 }
 
@@ -182,7 +175,8 @@ func (m *Manager) ResetInfos() {
 	m.localTotalSubnetInfoMap = SubnetInfoMap{}
 	m.localUnderlaySubnetInfoMap = SubnetInfoMap{}
 	m.localOverlaySubnetInfoMap = SubnetInfoMap{}
-	m.localCidr.Clear()
+	m.remoteOverlaySubnetInfoMap = SubnetInfoMap{}
+	m.remoteUnderlaySubnetInfoMap = SubnetInfoMap{}
 }
 
 func (m *Manager) AddSubnetInfo(cidr *net.IPNet, gateway, start, end net.IP, excludeIPs []net.IP,
@@ -228,17 +222,9 @@ func (m *Manager) AddSubnetInfo(cidr *net.IPNet, gateway, start, end net.IP, exc
 	} else {
 		m.localUnderlaySubnetInfoMap[cidrString] = subnetInfo
 	}
-
-	m.localCidr.Add(cidrString)
 }
 
 func (m *Manager) SyncRoutes() error {
-	// check out remote subnet configurations
-	_, rcErr := m.configureRemote()
-	if rcErr != nil {
-		return fmt.Errorf("route manager detects illegal remote subnet config: %v", rcErr)
-	}
-
 	// Ensure basic rules.
 	if err := appendHighestUnusedPriorityRuleIfNotExist(nil, m.localDirectTableNum, m.family, 0, 0); err != nil {
 		return fmt.Errorf("append local pod direct rule failed: %v", err)
