@@ -105,8 +105,7 @@ type Controller struct {
 	iptablesSyncCh     chan struct{}
 	iptablesSyncTicker *time.Ticker
 
-	nodeIPCache     *NodeIPCache
-	remoteVtepCache *RemoteVtepCache
+	nodeIPCache *NodeIPCache
 
 	upgradeWorkDone bool
 }
@@ -192,8 +191,7 @@ func NewController(config *daemonconfig.Configuration,
 		iptablesSyncCh:     make(chan struct{}, 1),
 		iptablesSyncTicker: time.NewTicker(config.IptablesCheckDuration),
 
-		nodeIPCache:     NewNodeIPCache(),
-		remoteVtepCache: NewRemoteVtepCache(),
+		nodeIPCache: NewNodeIPCache(),
 	}
 
 	_, err = config.KubeClient.CoreV1().Nodes().Get(context.TODO(), config.NodeName, metav1.GetOptions{})
@@ -361,9 +359,6 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 
 		if mac, exist := c.nodeIPCache.SearchIP(ip); exist {
 			// find node ip.
-			vtepMac = mac
-		} else if mac, exist = c.remoteVtepCache.SearchIP(ip); exist {
-			// find remote node ip.
 			vtepMac = mac
 		} else {
 			ipInstance, err := c.getIPInstanceByAddress(ip)

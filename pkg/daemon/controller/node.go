@@ -53,11 +53,12 @@ func NewNodeIPCache() *NodeIPCache {
 	}
 }
 
-func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string) error {
+func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string, remoteNodeList []*ramav1.RemoteVtep) error {
 	nic.mu.Lock()
 	defer nic.mu.Unlock()
 
 	nic.nodeIPMap = map[string]net.HardwareAddr{}
+
 	for _, node := range nodeList {
 		// Only update remote node vtep information.
 		if node.Name == localNodeName {
@@ -78,6 +79,15 @@ func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string)
 		for _, ipString := range ipStringList {
 			nic.nodeIPMap[ipString] = macAddr
 		}
+	}
+
+	for _, remoteNode := range remoteNodeList {
+		macAddr, err := net.ParseMAC(remoteNode.Spec.VtepMAC)
+		if err != nil {
+			return fmt.Errorf("parse remote node vtep mac %v failed: %v", remoteNode.Spec.VtepMAC, err)
+		}
+
+		nic.nodeIPMap[remoteNode.Spec.VtepIP] = macAddr
 	}
 
 	return nil
@@ -308,10 +318,6 @@ func (c *Controller) reconcileNodeInfo() error {
 		}
 	}
 
-	if err := c.nodeIPCache.UpdateNodeIPs(nodeList, c.config.NodeName); err != nil {
-		return fmt.Errorf("update node ip cache failed: %v", err)
-	}
-
 	for _, node := range nodeList {
 		if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
 			node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
@@ -333,14 +339,12 @@ func (c *Controller) reconcileNodeInfo() error {
 		vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
 	}
 
+	var remoteVtepList []*ramav1.RemoteVtep
+
 	if daemonfeature.MultiClusterEnabled() {
-		remoteVtepList, err := c.remoteVtepLister.List(labels.Everything())
+		remoteVtepList, err = c.remoteVtepLister.List(labels.Everything())
 		if err != nil {
 			return fmt.Errorf("list remote vtep failed: %v", err)
-		}
-
-		if err := c.remoteVtepCache.UpdateRemoteVtepIPs(remoteVtepList); err != nil {
-			return fmt.Errorf("update remote vtep ip cache failed: %v", err)
 		}
 
 		for _, remoteVtep := range remoteVtepList {
@@ -356,6 +360,10 @@ func (c *Controller) reconcileNodeInfo() error {
 
 			vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
 		}
+	}
+
+	if err := c.nodeIPCache.UpdateNodeIPs(nodeList, c.config.NodeName, remoteVtepList); err != nil {
+		return fmt.Errorf("update node ip cache failed: %v", err)
 	}
 
 	if err := vxlanDev.SyncVtepInfo(); err != nil {
