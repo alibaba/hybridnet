@@ -354,7 +354,7 @@ func (c *Controller) reconcileNodeInfo() error {
 				return fmt.Errorf("parse node vtep ip string %v failed", remoteVtep.Spec.VtepIP)
 			}
 
-			vxlanDev.RecordRemoteVtepInfo(vtepMac, vtepIP)
+			vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
 		}
 	}
 
