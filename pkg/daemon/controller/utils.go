@@ -97,12 +97,7 @@ func (c *Controller) getRemoteVtepByEndpointAddress(address net.IP) (*ramav1.Rem
 		return vtep, nil
 	}
 
-	if len(remoteVtepList) == 0 {
-		// not found
-		return nil, nil
-	}
-
-	return nil, fmt.Errorf("remote vtep for pod address %v not found", address.String())
+	return nil, nil
 }
 
 func initErrorMessageWrapper(prefix string) func(string, ...interface{}) string {
