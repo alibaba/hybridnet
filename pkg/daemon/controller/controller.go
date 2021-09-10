@@ -537,44 +537,44 @@ func (c *Controller) iptablesSyncLoop() {
 				iptablesManager := c.getIPtablesManager(subnet.Spec.Range.Version)
 				iptablesManager.RecordSubnet(cidr, ramav1.GetNetworkType(network) == ramav1.NetworkTypeOverlay)
 			}
-		}
 
-		if daemonfeature.MultiClusterEnabled() {
-			// If remote overlay network des not exist, the rcmanager will not fetch
-			// RemoteSubnet and RemoteVtep. Thus, existence check is redundant here.
+			if daemonfeature.MultiClusterEnabled() {
+				// If remote overlay network des not exist, the rcmanager will not fetch
+				// RemoteSubnet and RemoteVtep. Thus, existence check is redundant here.
 
-			remoteSubnetList, err := c.remoteSubnetLister.List(labels.Everything())
-			if err != nil {
-				return fmt.Errorf("list remote network failed: %v", err)
-			}
-
-			// Record remote vtep ip.
-			vtepList, err := c.remoteVtepLister.List(labels.Everything())
-			if err != nil {
-				return fmt.Errorf("list remote vtep failed: %v", err)
-			}
-
-			for _, vtep := range vtepList {
-				ip := net.ParseIP(vtep.Spec.VtepIP)
-				if ip.To4() != nil {
-					// v4 address
-					c.iptablesV4Manager.RecordRemoteNodeIP(ip)
-				} else {
-					// v6 address
-					c.iptablesV6Manager.RecordRemoteNodeIP(ip)
-				}
-			}
-
-			// Record remote subnet cidr
-			for _, remoteSubnet := range remoteSubnetList {
-				_, cidr, err := net.ParseCIDR(remoteSubnet.Spec.Range.CIDR)
+				remoteSubnetList, err := c.remoteSubnetLister.List(labels.Everything())
 				if err != nil {
-					return fmt.Errorf("parse remote subnet cidr %v failed: %v", remoteSubnet.Spec.Range.CIDR, err)
+					return fmt.Errorf("list remote network failed: %v", err)
 				}
 
-				if err = c.getIPtablesManager(remoteSubnet.Spec.Range.Version).
-					RecordRemoteSubnet(cidr, ramav1.GetRemoteSubnetType(remoteSubnet) == ramav1.NetworkTypeOverlay); err != nil {
-					return fmt.Errorf("cannot record remote subnet: %v", err)
+				// Record remote vtep ip.
+				vtepList, err := c.remoteVtepLister.List(labels.Everything())
+				if err != nil {
+					return fmt.Errorf("list remote vtep failed: %v", err)
+				}
+
+				for _, vtep := range vtepList {
+					ip := net.ParseIP(vtep.Spec.VtepIP)
+					if ip.To4() != nil {
+						// v4 address
+						c.iptablesV4Manager.RecordRemoteNodeIP(ip)
+					} else {
+						// v6 address
+						c.iptablesV6Manager.RecordRemoteNodeIP(ip)
+					}
+				}
+
+				// Record remote subnet cidr
+				for _, remoteSubnet := range remoteSubnetList {
+					_, cidr, err := net.ParseCIDR(remoteSubnet.Spec.Range.CIDR)
+					if err != nil {
+						return fmt.Errorf("parse remote subnet cidr %v failed: %v", remoteSubnet.Spec.Range.CIDR, err)
+					}
+
+					if err = c.getIPtablesManager(remoteSubnet.Spec.Range.Version).
+						RecordRemoteSubnet(cidr, ramav1.GetRemoteSubnetType(remoteSubnet) == ramav1.NetworkTypeOverlay); err != nil {
+						return fmt.Errorf("cannot record remote subnet: %v", err)
+					}
 				}
 			}
 		}
