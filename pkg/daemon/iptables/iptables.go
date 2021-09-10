@@ -162,17 +162,6 @@ func (mgr *Manager) SyncRules() error {
 	mgr.lock()
 	defer mgr.unlock()
 
-	if mgr.overlayIfName == "" {
-		// There might be two scenarios where overlayIfName is nil
-		// 1. overlay network never exists
-		// 2. overlay network deleted after running for a period
-		//
-		// We have to consider both the scenarios. In the second one,
-		// the overlayIf still exists. Return without error is more
-		// appropriate.
-		return nil
-	}
-
 	var overlayIPNets []string
 	var nodeIPs []string
 
@@ -241,11 +230,19 @@ func (mgr *Manager) SyncRules() error {
 	writeLine(mangleChains, utiliptables.MakeChainLine(ChainRamaPreRouting))
 	writeLine(mangleChains, utiliptables.MakeChainLine(ChainRamaPostRouting))
 
-	// Append rules.
-	writeLine(natRules, generateMasqueradeRuleSpec(mgr.overlayIfName, mgr.protocol)...)
-	writeLine(filterRules, generateVxlanFilterRuleSpec(mgr.overlayIfName, mgr.protocol)...)
-	writeLine(mangleRules, generateVxlanPodToNodeReplyMarkRuleSpec(mgr.protocol)...)
-	writeLine(mangleRules, generateVxlanPodToNodeReplyRemoveMarkRuleSpec(mgr.protocol)...)
+	if mgr.overlayIfName != "" {
+		// There might be two scenarios where overlayIfName is nil
+		// 1. overlay network never exists
+		// 2. overlay network deleted after running for a period
+		//
+		// Keep iptables chains empty for both two scenarios.
+		//
+		// Append rules.
+		writeLine(natRules, generateMasqueradeRuleSpec(mgr.overlayIfName, mgr.protocol)...)
+		writeLine(filterRules, generateVxlanFilterRuleSpec(mgr.overlayIfName, mgr.protocol)...)
+		writeLine(mangleRules, generateVxlanPodToNodeReplyMarkRuleSpec(mgr.protocol)...)
+		writeLine(mangleRules, generateVxlanPodToNodeReplyRemoveMarkRuleSpec(mgr.protocol)...)
+	}
 
 	// Write the end-of-table markers
 	writeLine(natRules, "COMMIT")
