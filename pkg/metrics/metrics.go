@@ -23,9 +23,10 @@ import (
 )
 
 const (
-	IPTotalUsageType       = "total"
-	IPUsedUsageType        = "used"
-	IPAvailableUsageType   = "available"
+	IPTotalUsageType     = "total"
+	IPUsedUsageType      = "used"
+	IPAvailableUsageType = "available"
+
 	IPStatefulAllocateType = "stateful"
 	IPNormalAllocateType   = "normal"
 )

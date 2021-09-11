@@ -124,7 +124,7 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	klog.Infof("Starting %s controller", ControllerName)
 
 	klog.Info("Waiting for informer caches to sync")
-	if ok := cache.WaitForCacheSync(stopCh, c.remoteClusterSynced, c.remoteSubnetSynced, c.remoteVtepSynced, c.localClusterSubnetSynced); !ok {
+	if ok := cache.WaitForCacheSync(stopCh, c.remoteClusterSynced, c.remoteSubnetSynced, c.remoteVtepSynced, c.localClusterSubnetSynced, c.localClusterNetworkSynced); !ok {
 		return fmt.Errorf("%s failed to wait for caches to sync", ControllerName)
 	}
 
