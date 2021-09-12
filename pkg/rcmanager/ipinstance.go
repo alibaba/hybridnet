@@ -19,11 +19,13 @@ package rcmanager
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gogf/gf/container/gset"
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
 	"github.com/oecp/rama/pkg/utils"
+	v1 "k8s.io/api/core/v1"
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -37,8 +39,13 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 	if len(nodeName) == 0 {
 		return nil
 	}
-	vtepName := utils.GenRemoteVtepName(m.ClusterName, nodeName)
-	node, err := m.NodeLister.Get(nodeName)
+	var (
+		node     *v1.Node
+		err      error
+		vtepName string
+	)
+	vtepName = utils.GenRemoteVtepName(m.ClusterName, nodeName)
+	node, err = m.NodeLister.Get(nodeName)
 	if err != nil {
 		if k8serror.IsNotFound(err) {
 			err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), vtepName, metav1.DeleteOptions{})
@@ -48,15 +55,15 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		}
 		return err
 	}
-	vtepIP := node.Annotations[constants.AnnotationNodeVtepIP]
-	vtepMac := node.Annotations[constants.AnnotationNodeVtepMac]
-	instances, err := m.IPLister.List(labels.SelectorFromSet(labels.Set{constants.LabelNode: nodeName}))
-	if err != nil {
-		return err
-	}
-	newVtep := false
 
-	remoteVtep, err := m.RemoteVtepLister.Get(vtepName)
+	var (
+		vtepIP     = node.Annotations[constants.AnnotationNodeVtepIP]
+		vtepMac    = node.Annotations[constants.AnnotationNodeVtepMac]
+		newVtep    = false
+		remoteVtep *networkingv1.RemoteVtep
+	)
+
+	remoteVtep, err = m.RemoteVtepLister.Get(vtepName)
 	if err != nil {
 		if !k8serror.IsNotFound(err) {
 			return err
@@ -64,31 +71,41 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		remoteVtep = utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, vtepIP, vtepMac, node.Name, nil)
 		newVtep = true
 	}
-	curTime := metav1.Now()
-	remoteVtep = remoteVtep.DeepCopy()
 
+	var (
+		curTime    = metav1.Now()
+		desired    []string
+		desiredSet *gset.StrSet
+		actual     []string
+		actualSet  *gset.StrSet
+		remove     *gset.StrSet
+		add        *gset.StrSet
+		// vtepIP or vtepMac changed
+		vtepChanged           bool
+		endpointILListChanged bool
+	)
+
+	desired, err = m.pickEndpointListFromNode(node)
+	if err != nil {
+		return err
+	}
+	actual = remoteVtep.Spec.EndpointIPList
+	desiredSet = gset.NewStrSetFrom(desired)
+	actualSet = gset.NewStrSetFrom(actual)
+	remove = actualSet.Diff(desiredSet)
+	add = desiredSet.Diff(actualSet)
+
+	remoteVtep = remoteVtep.DeepCopy()
 	remoteVtep.Spec.VtepIP = vtepIP
 	remoteVtep.Spec.VtepMAC = vtepMac
-	desired := utils.PickUsingIPList(instances)
-	actual := remoteVtep.Spec.EndpointIPList
-	desiredSet := gset.NewFrom(desired)
-	actualSet := gset.NewFrom(actual)
-	remove := actualSet.Diff(desiredSet)
-	add := desiredSet.Diff(actualSet)
+	remoteVtep.Spec.EndpointIPList = desiredSet.Slice()
+	remoteVtep.Status.LastModifyTime = curTime
 
-	remoteVtep.Spec.EndpointIPList = func() []string {
-		ipList := make([]string, 0, desiredSet.Size())
-		for _, v := range desiredSet.Slice() {
-			ipList = append(ipList, fmt.Sprint(v))
-		}
-		return ipList
-	}()
-	vtepChanged := vtepIP != "" && vtepMac != "" && (vtepIP != remoteVtep.Spec.VtepIP || vtepMac != remoteVtep.Spec.VtepMAC)
-	ipListChanged := remove.Size() != 0 || add.Size() != 0
-	if !newVtep && !ipListChanged && !vtepChanged {
+	vtepChanged = vtepIP != "" && vtepMac != "" && (vtepIP != remoteVtep.Spec.VtepIP || vtepMac != remoteVtep.Spec.VtepMAC)
+	endpointILListChanged = remove.Size() != 0 || add.Size() != 0
+	if !newVtep && !endpointILListChanged && !vtepChanged {
 		return nil
 	}
-
 	if newVtep {
 		remoteVtep, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{})
 		if err != nil {
@@ -100,17 +117,19 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 			return err
 		}
 	}
-	remoteVtep.Status.LastModifyTime = curTime
 	_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
 	return err
 }
 
-func (m *Manager) nodeToIPList(nodeName string) ([]string, error) {
-	instances, err := m.IPLister.List(labels.SelectorFromSet(labels.Set{constants.LabelNode: nodeName}))
+func (m *Manager) pickEndpointListFromNode(node *v1.Node) ([]string, error) {
+	instances, err := m.IPLister.List(labels.SelectorFromSet(labels.Set{constants.LabelNode: node.Name}))
 	if err != nil {
 		return nil, err
 	}
-	return utils.PickUsingIPList(instances), nil
+	desired := utils.PickUsingIPList(instances)
+	nodeLocalVxlanipStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
+	desired = append(desired, nodeLocalVxlanipStringList...)
+	return desired, nil
 }
 
 func (m *Manager) RunIPInstanceWorker() {

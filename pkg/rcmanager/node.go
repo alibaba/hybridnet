@@ -122,7 +122,7 @@ func (m *Manager) diffNodeAndVtep(nodes []*apiv1.Node, vteps []*networkingv1.Rem
 		if vtepName == "" {
 			continue
 		}
-		nodeIPList, err := m.nodeToIPList(node.Name)
+		endpointIPList, err := m.pickEndpointListFromNode(node)
 		if err != nil {
 			continue
 		}
@@ -130,11 +130,11 @@ func (m *Manager) diffNodeAndVtep(nodes []*apiv1.Node, vteps []*networkingv1.Rem
 		vtepMac := node.Annotations[constants.AnnotationNodeVtepMac]
 		if vtep, exists := vtepMap[vtepName]; exists {
 			if vtep.Spec.VtepIP != vtepIP || vtep.Spec.VtepMAC != vtepMac {
-				v := utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, vtepIP, vtepMac, node.Name, nodeIPList)
+				v := utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, vtepIP, vtepMac, node.Name, endpointIPList)
 				update = append(update, v)
 			}
 		} else {
-			v := utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, vtepIP, vtepMac, node.Name, nodeIPList)
+			v := utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, vtepIP, vtepMac, node.Name, endpointIPList)
 			add = append(add, v)
 		}
 	}
