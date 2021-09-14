@@ -81,11 +81,6 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 	return nil
 }
 
-func (c *Controller) delRCMgr(clusterName string) {
-	klog.Infof("deleting cluster=%v.", clusterName)
-	c.rcMgrCache.Del(clusterName)
-}
-
 func (c *Controller) processRCManagerQueue() {
 	for c.processNextRemoteClusterMgr() {
 	}

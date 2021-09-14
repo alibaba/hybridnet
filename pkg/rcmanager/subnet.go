@@ -262,9 +262,8 @@ func (m *Manager) filterSubnet(obj interface{}) bool {
 	return ok
 }
 
-func (m *Manager) addOrDelSubnet(obj interface{}) {
-	subnet, _ := obj.(*networkingv1.Subnet)
-	m.EnqueueSubnet(subnet.ObjectMeta.Name)
+func (m *Manager) addOrDelSubnet(_ interface{}) {
+	m.EnqueueSubnet(ReconcileSubnet)
 }
 
 func (m *Manager) updateSubnet(oldObj, newObj interface{}) {
@@ -274,7 +273,7 @@ func (m *Manager) updateSubnet(oldObj, newObj interface{}) {
 	if oldRC.ResourceVersion == newRC.ResourceVersion {
 		return
 	}
-	m.EnqueueSubnet(newRC.ObjectMeta.Name)
+	m.EnqueueSubnet(ReconcileSubnet)
 }
 
 func (m *Manager) EnqueueSubnet(subnetName string) {

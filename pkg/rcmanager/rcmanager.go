@@ -22,8 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/wait"
-
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/client/clientset/versioned"
 	"github.com/oecp/rama/pkg/client/clientset/versioned/scheme"
@@ -32,6 +30,7 @@ import (
 	"github.com/oecp/rama/pkg/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	kubeclientset "k8s.io/client-go/kubernetes"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -155,15 +154,15 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 		NodeLister:               kubeInformerFactory.Core().V1().Nodes().Lister(),
 		NodeSynced:               kubeInformerFactory.Core().V1().Nodes().Informer().HasSynced,
 		NodeQueue:                workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("%v-node", rc.ClusterName)),
-		NetworkLister:            ramaInformerFactory.Networking().V1().Networks().Lister(),
+		NetworkLister:            networkInformer.Lister(),
 		NetworkSynced:            networkInformer.Informer().HasSynced,
-		SubnetLister:             ramaInformerFactory.Networking().V1().Subnets().Lister(),
+		SubnetLister:             subnetInformer.Lister(),
 		SubnetSynced:             subnetInformer.Informer().HasSynced,
 		SubnetQueue:              workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("%v-subnet", rc.ClusterName)),
-		IPLister:                 ramaInformerFactory.Networking().V1().IPInstances().Lister(),
+		IPLister:                 ipInformer.Lister(),
 		IPSynced:                 ipInformer.Informer().HasSynced,
 		IPQueue:                  workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("%v-ipinstance", rc.ClusterName)),
-		RemoteClusterNodeLister:  kubeInformerFactory.Core().V1().Nodes().Lister(),
+		RemoteClusterNodeLister:  nodeInformer.Lister(),
 		RemoteClusterNodeSynced:  nodeInformer.Informer().HasSynced,
 		Recorder:                 recorder,
 	}
@@ -203,7 +202,7 @@ func (m *Manager) Run() {
 
 	managerCh := m.StopCh
 	go func() {
-		if ok := cache.WaitForCacheSync(managerCh, m.NodeSynced, m.SubnetSynced, m.IPSynced); !ok {
+		if ok := cache.WaitForCacheSync(managerCh, m.NodeSynced, m.SubnetSynced, m.IPSynced, m.NetworkSynced, m.RemoteClusterNodeSynced); !ok {
 			klog.Errorf("failed to wait for remote cluster caches to sync. clusterName=%v", m.ClusterName)
 			return
 		}

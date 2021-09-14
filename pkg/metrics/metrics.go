@@ -26,9 +26,6 @@ const (
 	IPTotalUsageType     = "total"
 	IPUsedUsageType      = "used"
 	IPAvailableUsageType = "available"
-
-	IPStatefulAllocateType = "stateful"
-	IPNormalAllocateType   = "normal"
 )
 
 var IPUsageGauge = prometheus.NewGaugeVec(
@@ -40,6 +37,11 @@ var IPUsageGauge = prometheus.NewGaugeVec(
 		"networkName",
 		"usageType",
 	},
+)
+
+const (
+	IPStatefulAllocateType = "stateful"
+	IPNormalAllocateType   = "normal"
 )
 
 var IPAllocationPeriodSummary = prometheus.NewSummaryVec(
