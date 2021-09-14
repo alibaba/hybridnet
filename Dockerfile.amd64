@@ -21,7 +21,7 @@ RUN export GOCACHE=/tmp && \
 RUN cd /go/src/github.com/alibaba/hybridnet/dist/secrets && \
     sh generate-tls-certificates.sh
 
-FROM alpine:3.12
+FROM alpine:3.14
 
 # replace apk source url
 RUN sed -i s@/dl-cdn.alpinelinux.org/@/mirrors.aliyun.com/@g /etc/apk/repositories && \
