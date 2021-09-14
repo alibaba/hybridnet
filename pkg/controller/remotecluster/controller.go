@@ -59,7 +59,7 @@ type Controller struct {
 	UUID                      types.UID
 	OverlayNetID              *uint32
 	overlayNetIDMU            sync.RWMutex
-	rcMgrCache                *Cache
+	rcMgrMap                  *Cache
 	kubeClient                kubeclientset.Interface
 	ramaClient                versioned.Interface
 	RamaInformerFactory       externalversions.SharedInformerFactory
@@ -101,7 +101,7 @@ func NewController(
 	}
 
 	c := &Controller{
-		rcMgrCache:                NewCache(),
+		rcMgrMap:                  NewCache(),
 		UUID:                      uuid,
 		kubeClient:                kubeClient,
 		ramaClient:                ramaClient,
@@ -160,7 +160,7 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 
 func (c *Controller) closeRemoteClusterManager() {
 	// no need to lock
-	for _, mgr := range c.rcMgrCache.rcMgrMap {
+	for _, mgr := range c.rcMgrMap.rcMgrMap {
 		mgr.Close()
 	}
 }
@@ -198,26 +198,27 @@ func (c *Controller) updateRemoteClusterStatus() {
 	)
 	for _, rc := range remoteClusters {
 		r := rc.DeepCopy()
-		manager, exists := c.rcMgrCache.Get(r.Name)
+		manager, exists := c.rcMgrMap.Get(r.Name)
 		if !exists {
 			continue
 		}
 		cnt = cnt + 1
 		wg.Add(1)
-		go c.updateSingleRCStatus(manager, r, &wg)
+		go func() {
+			c.updateSingleRCStatus(manager, r)
+			wg.Done()
+		}()
 	}
 	wg.Wait()
 }
 
-func (c *Controller) updateSingleRCStatus(manager *rcmanager.Manager, rc *networkingv1.RemoteCluster, wg *sync.WaitGroup) {
-	rc = rc.DeepCopy()
+func (c *Controller) updateSingleRCStatus(manager *rcmanager.Manager, rc *networkingv1.RemoteCluster) {
 	defer func() {
 		if err := recover(); err != nil {
 			klog.Errorf("updateSingleRCStatus panic. err=%v\n%v", err, string(debug.Stack()))
 		}
 	}()
 	defer metrics.RemoteClusterStatusUpdateDurationFromStart(time.Now())
-	defer wg.Done()
 
 	manager.IsReadyLock.Lock()
 	defer manager.IsReadyLock.Unlock()
@@ -230,6 +231,7 @@ func (c *Controller) updateSingleRCStatus(manager *rcmanager.Manager, rc *networ
 		ResumeReconcile(manager)
 	}
 
+	rc = rc.DeepCopy()
 	updateLastTransitionTime := func() {
 		conditionChanged := false
 		if len(conditions) != len(rc.Status.Conditions) {

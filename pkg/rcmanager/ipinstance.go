@@ -19,9 +19,7 @@ package rcmanager
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/gogf/gf/container/gset"
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
 	"github.com/oecp/rama/pkg/utils"
@@ -68,18 +66,14 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		if !k8serror.IsNotFound(err) {
 			return err
 		}
-		remoteVtep = utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, vtepIP, vtepMac, node.Name, nil)
+		remoteVtep = utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, vtepIP, vtepMac,
+			node.Annotations[constants.AnnotationNodeLocalVxlanIPList], node.Name, nil)
 		newVtep = true
 	}
 
 	var (
-		curTime    = metav1.Now()
-		desired    []string
-		desiredSet *gset.StrSet
-		actual     []string
-		actualSet  *gset.StrSet
-		remove     *gset.StrSet
-		add        *gset.StrSet
+		curTime = metav1.Now()
+		desired []string
 		// vtepIP or vtepMac changed
 		vtepChanged           bool
 		endpointILListChanged bool
@@ -89,20 +83,15 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 	if err != nil {
 		return err
 	}
-	actual = remoteVtep.Spec.EndpointIPList
-	desiredSet = gset.NewStrSetFrom(desired)
-	actualSet = gset.NewStrSetFrom(actual)
-	remove = actualSet.Diff(desiredSet)
-	add = desiredSet.Diff(actualSet)
+	endpointILListChanged = utils.DifferentSetFromStringSlice(remoteVtep.Spec.EndpointIPList, desired)
 
 	remoteVtep = remoteVtep.DeepCopy()
 	remoteVtep.Spec.VtepIP = vtepIP
 	remoteVtep.Spec.VtepMAC = vtepMac
-	remoteVtep.Spec.EndpointIPList = desiredSet.Slice()
+	remoteVtep.Spec.EndpointIPList = desired
 	remoteVtep.Status.LastModifyTime = curTime
 
 	vtepChanged = vtepIP != "" && vtepMac != "" && (vtepIP != remoteVtep.Spec.VtepIP || vtepMac != remoteVtep.Spec.VtepMAC)
-	endpointILListChanged = remove.Size() != 0 || add.Size() != 0
 	if !newVtep && !endpointILListChanged && !vtepChanged {
 		return nil
 	}
@@ -126,10 +115,7 @@ func (m *Manager) pickEndpointListFromNode(node *v1.Node) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	desired := utils.PickUsingIPList(instances)
-	nodeLocalVxlanipStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
-	desired = append(desired, nodeLocalVxlanipStringList...)
-	return desired, nil
+	return utils.PickUsingIPList(instances), nil
 }
 
 func (m *Manager) RunIPInstanceWorker() {

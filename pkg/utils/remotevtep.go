@@ -36,12 +36,15 @@ func GenRemoteVtepName(clusterName string, nodeName string) string {
 	return fmt.Sprintf(remoteVtepNameFormat, clusterName, nodeName)
 }
 
-func NewRemoteVtep(clusterName string, uid types.UID, vtepIP, macAddr, nodeName string, endpointIPList []string) *networkingv1.RemoteVtep {
+func NewRemoteVtep(clusterName string, uid types.UID, vtepIP string, macAddr string, nodeLocalVxlanIPList string, nodeName string, endpointIPList []string) *networkingv1.RemoteVtep {
 	vtep := &networkingv1.RemoteVtep{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: GenRemoteVtepName(clusterName, nodeName),
 			Labels: map[string]string{
 				constants.LabelCluster: clusterName,
+			},
+			Annotations: map[string]string{
+				constants.AnnotationNodeLocalVxlanIPList: nodeLocalVxlanIPList,
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{

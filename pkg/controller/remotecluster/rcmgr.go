@@ -32,7 +32,7 @@ import (
 
 func (c *Controller) startRemoteClusterMgr(clusterName string) error {
 	klog.Infof("processNextRemoteClusterMgr name=%v", clusterName)
-	rcManager, exists := c.rcMgrCache.Get(clusterName)
+	rcManager, exists := c.rcMgrMap.Get(clusterName)
 	if !exists {
 		klog.Errorf("Can't find rcManager. clusterName=%v", clusterName)
 		return errors.Errorf("Can't find rcManager. clusterName=%v", clusterName)
@@ -44,15 +44,15 @@ func (c *Controller) startRemoteClusterMgr(clusterName string) error {
 // use remove+add instead of update
 func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 	// lock in function range to avoid renewing cluster manager when newing one
-	c.rcMgrCache.RWMutex.Lock()
-	defer c.rcMgrCache.RWMutex.Unlock()
+	c.rcMgrMap.RWMutex.Lock()
+	defer c.rcMgrMap.RWMutex.Unlock()
 	klog.Infof("[addOrUpdateRCMgr] cluster=%v", rc.Name)
 
 	clusterName := rc.Name
-	if mgr, exists := c.rcMgrCache.rcMgrMap[clusterName]; exists {
+	if mgr, exists := c.rcMgrMap.rcMgrMap[clusterName]; exists {
 		klog.Infof("Delete cluster %v from cache", clusterName)
 		mgr.Close()
-		delete(c.rcMgrCache.rcMgrMap, clusterName)
+		delete(c.rcMgrMap.rcMgrMap, clusterName)
 	}
 
 	rcMgr, err := rcmanager.NewRemoteClusterManager(rc, c.kubeClient, c.ramaClient, c.remoteSubnetLister,
@@ -76,7 +76,7 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 	}
 	rcMgr.SetIsReady(IsReady(conditions))
 
-	c.rcMgrCache.rcMgrMap[clusterName] = rcMgr
+	c.rcMgrMap.rcMgrMap[clusterName] = rcMgr
 	c.rcMgrQueue.Add(clusterName)
 	return nil
 }

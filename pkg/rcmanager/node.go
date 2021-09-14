@@ -129,12 +129,16 @@ func (m *Manager) diffNodeAndVtep(nodes []*apiv1.Node, vteps []*networkingv1.Rem
 		vtepIP := node.Annotations[constants.AnnotationNodeVtepIP]
 		vtepMac := node.Annotations[constants.AnnotationNodeVtepMac]
 		if vtep, exists := vtepMap[vtepName]; exists {
-			if vtep.Spec.VtepIP != vtepIP || vtep.Spec.VtepMAC != vtepMac {
-				v := utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, vtepIP, vtepMac, node.Name, endpointIPList)
-				update = append(update, v)
+			endpointIPListChanged := utils.DifferentSetFromStringSlice(endpointIPList, vtep.Spec.EndpointIPList)
+			if vtep.Spec.VtepIP != vtepIP || vtep.Spec.VtepMAC != vtepMac || endpointIPListChanged {
+				vtep = vtep.DeepCopy()
+				vtep.Spec.VtepIP = vtepIP
+				vtep.Spec.VtepMAC = vtepMac
+				vtep.Spec.EndpointIPList = endpointIPList
 			}
 		} else {
-			v := utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, vtepIP, vtepMac, node.Name, endpointIPList)
+			v := utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, vtepIP, vtepMac,
+				node.Annotations[constants.AnnotationNodeLocalVxlanIPList], node.Name, endpointIPList)
 			add = append(add, v)
 		}
 	}
