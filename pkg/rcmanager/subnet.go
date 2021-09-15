@@ -30,7 +30,6 @@ import (
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 	"k8s.io/utils/pointer"
 )
@@ -84,61 +83,70 @@ func (m *Manager) reconcileSubnet() error {
 	}()
 	add, update, remove := m.diffSubnetAndRCSubnet(remoteClusterSubnets, localClusterRemoteSubnets, networkMap)
 	var (
-		wg  sync.WaitGroup
-		cur = metav1.Now()
+		wg        sync.WaitGroup
+		cur       = metav1.Now()
+		errHappen bool
 	)
-	wg.Add(3)
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for _, v := range add {
 			rcSubnet, err := m.convertSubnet2RemoteSubnet(v, networkMap[v.Spec.Network])
 			if err != nil {
+				errHappen = true
 				klog.Warningf("convertSubnet2RemoteSubnet error. err=%v. subnet name=%v. ClusterID=%v", err, v.Name, m.ClusterName)
 				continue
 			}
 			newSubnet, err := m.LocalClusterRamaClient.NetworkingV1().RemoteSubnets().Create(context.TODO(), rcSubnet, metav1.CreateOptions{})
 			if err != nil {
-				klog.Warningf("Can't create remote subnet in local cluster. err=%v. remote subnet name=%v", err, rcSubnet.Name)
+				errHappen = true
+				klog.Warningf("Can't create remote subnet. err=%v. remote subnet name=%v", err, rcSubnet.Name)
 				continue
 			}
 			newSubnet.Status.LastModifyTime = cur
 			_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), newSubnet, metav1.UpdateOptions{})
 			if err != nil {
-				klog.Warningf("Can't UpdateStatus remote subnet in local cluster. err=%v. remote subnet name=%v", err, rcSubnet.Name)
+				errHappen = true
+				klog.Warningf("Can't update remote subnet status. err=%v. remote subnet name=%v", err, rcSubnet.Name)
 			}
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for _, v := range update {
-			var newRemoteSubnet *networkingv1.RemoteSubnet
-			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				newRemoteSubnet, err = m.LocalClusterRamaClient.NetworkingV1().RemoteSubnets().Update(context.TODO(), v, metav1.UpdateOptions{})
-				if err != nil {
-					return err
-				}
-				newRemoteSubnet.Status.LastModifyTime = cur
-				_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), newRemoteSubnet, metav1.UpdateOptions{})
-				return err
-			})
+			remoteSubnet, err := m.LocalClusterRamaClient.NetworkingV1().RemoteSubnets().Update(context.TODO(), v, metav1.UpdateOptions{})
 			if err != nil {
-				klog.Warningf("Can't update remote subnet in local cluster. err=%v. name=%v", err, v.Name)
+				errHappen = true
+				klog.Warningf("Can't update remote subnet. err=%v. remote subnet name=%v", err, remoteSubnet.Name)
 				continue
+			}
+			remoteSubnet.Status.LastModifyTime = cur
+			_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), remoteSubnet, metav1.UpdateOptions{})
+			if err != nil {
+				errHappen = true
+				klog.Warningf("Can't update remote subnet status. err=%v. remote subnet name=%v", err, remoteSubnet.Name)
 			}
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for _, v := range remove {
 			_ = m.LocalClusterRamaClient.NetworkingV1().RemoteSubnets().Delete(context.TODO(), v.Name, metav1.DeleteOptions{})
 			if err != nil && !k8serror.IsNotFound(err) {
-				klog.Warningf("Can't delete remote subnet in local cluster. remote subnet name=%v", v.Name)
+				errHappen = true
+				klog.Warningf("Can't delete remote subnet. remote subnet name=%v", v.Name)
 			}
 		}
 	}()
 	wg.Wait()
+
+	if errHappen {
+		return errors.New("some error happened in add/update/remove function")
+	}
 	return nil
 }
 

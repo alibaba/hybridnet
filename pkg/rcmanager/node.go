@@ -18,6 +18,7 @@ package rcmanager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -28,8 +29,6 @@ import (
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 )
 
@@ -49,54 +48,64 @@ func (m *Manager) reconcileNode() error {
 
 	add, update, remove := m.diffNodeAndVtep(nodes, vteps)
 	var (
-		wg  sync.WaitGroup
-		cur = metav1.Now()
+		wg        sync.WaitGroup
+		cur       = metav1.Now()
+		errHappen bool
 	)
-	wg.Add(3)
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for _, v := range add {
 			vtep, err := m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), v, metav1.CreateOptions{})
 			if err != nil {
+				errHappen = true
 				klog.Warningf("Can't create remote vtep in local cluster. err=%v. remote vtep name=%v", err, v.Name)
 				continue
 			}
 			vtep.Status.LastModifyTime = cur
 			_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
 			if err != nil {
-				runtimeutil.HandleError(err)
+				errHappen = true
+				klog.Warningf("Can't update remote vtep status in local cluster. err=%v. remote vtep name=%v", err, v.Name)
 			}
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for _, v := range update {
-			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				vtep, err := m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), v, metav1.UpdateOptions{})
-				if err != nil {
-					return err
-				}
-				vtep.Status.LastModifyTime = cur
-				_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
-				return err
-			})
+			vtep, err := m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), v, metav1.UpdateOptions{})
 			if err != nil {
+				errHappen = true
 				klog.Warningf("Can't update remote vtep in local cluster. err=%v. name=%v", err, v.Name)
+				continue
+			}
+			vtep.Status.LastModifyTime = cur
+			_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
+			if err != nil {
+				errHappen = true
+				klog.Warningf("Can't update remote vtep status in local cluster. err=%v. name=%v", err, v.Name)
 			}
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for _, v := range remove {
 			_ = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), v, metav1.DeleteOptions{})
 			if err != nil && !k8serror.IsNotFound(err) {
+				errHappen = true
 				klog.Warningf("Can't delete remote vtep in local cluster. remote vtep name=%v", v)
 			}
 		}
 	}()
+
 	wg.Wait()
+	if errHappen {
+		return errors.New("some error happened in add/update/remove function")
+	}
 	return nil
 }
 
@@ -122,25 +131,24 @@ func (m *Manager) diffNodeAndVtep(nodes []*apiv1.Node, vteps []*networkingv1.Rem
 		if vtepName == "" {
 			continue
 		}
-		endpointIPList, err := m.pickEndpointListFromNode(node)
-		if err != nil {
-			continue
-		}
-		vtepIP := node.Annotations[constants.AnnotationNodeVtepIP]
-		vtepMac := node.Annotations[constants.AnnotationNodeVtepMac]
 		if vtep, exists := vtepMap[vtepName]; exists {
-			endpointIPListChanged := utils.DifferentSetFromStringSlice(endpointIPList, vtep.Spec.EndpointIPList)
-			if vtep.Spec.VtepIP != vtepIP || vtep.Spec.VtepMAC != vtepMac || endpointIPListChanged {
-				vtep = vtep.DeepCopy()
-				vtep.Spec.VtepIP = vtepIP
-				vtep.Spec.VtepMAC = vtepMac
-				vtep.Spec.EndpointIPList = endpointIPList
+			remoteVtepChanged, newRemoteVtep, err := m.RemoteVtepChanged(vtep, node)
+			if err != nil {
+				continue
+			}
+			if remoteVtepChanged {
+				update = append(update, newRemoteVtep)
 			}
 		} else {
-			v := utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, vtepIP, vtepMac,
+			endpointIPList, err := m.pickEndpointListFromNode(node)
+			if err != nil {
+				continue
+			}
+			v := utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, node.Annotations[constants.AnnotationNodeVtepIP], node.Annotations[constants.AnnotationNodeVtepMac],
 				node.Annotations[constants.AnnotationNodeLocalVxlanIPList], node.Name, endpointIPList)
 			add = append(add, v)
 		}
+
 	}
 	for _, vtep := range vteps {
 		if _, exists := nodeMap[vtep.Spec.NodeName]; !exists {

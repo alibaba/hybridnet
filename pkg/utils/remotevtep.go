@@ -19,12 +19,11 @@ package utils
 import (
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
-
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
 )
 
 const remoteVtepNameFormat = "%v.%v"

@@ -55,10 +55,9 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 	}
 
 	var (
-		vtepIP     = node.Annotations[constants.AnnotationNodeVtepIP]
-		vtepMac    = node.Annotations[constants.AnnotationNodeVtepMac]
-		newVtep    = false
-		remoteVtep *networkingv1.RemoteVtep
+		newVtep           bool
+		remoteVtepChanged bool
+		remoteVtep        *networkingv1.RemoteVtep
 	)
 
 	remoteVtep, err = m.RemoteVtepLister.Get(vtepName)
@@ -66,35 +65,21 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		if !k8serror.IsNotFound(err) {
 			return err
 		}
-		remoteVtep = utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, vtepIP, vtepMac,
-			node.Annotations[constants.AnnotationNodeLocalVxlanIPList], node.Name, nil)
+		remoteVtep = utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, node.Annotations[constants.AnnotationNodeVtepIP],
+			node.Annotations[constants.AnnotationNodeVtepMac], node.Annotations[constants.AnnotationNodeLocalVxlanIPList], node.Name, nil)
 		newVtep = true
 	}
 
-	var (
-		curTime = metav1.Now()
-		desired []string
-		// vtepIP or vtepMac changed
-		vtepChanged           bool
-		endpointILListChanged bool
-	)
-
-	desired, err = m.pickEndpointListFromNode(node)
-	if err != nil {
-		return err
+	if !newVtep {
+		remoteVtepChanged, remoteVtep, err = m.RemoteVtepChanged(remoteVtep, node)
+		if err != nil {
+			return err
+		}
 	}
-	endpointILListChanged = utils.DifferentSetFromStringSlice(remoteVtep.Spec.EndpointIPList, desired)
-
-	remoteVtep = remoteVtep.DeepCopy()
-	remoteVtep.Spec.VtepIP = vtepIP
-	remoteVtep.Spec.VtepMAC = vtepMac
-	remoteVtep.Spec.EndpointIPList = desired
-	remoteVtep.Status.LastModifyTime = curTime
-
-	vtepChanged = vtepIP != "" && vtepMac != "" && (vtepIP != remoteVtep.Spec.VtepIP || vtepMac != remoteVtep.Spec.VtepMAC)
-	if !newVtep && !endpointILListChanged && !vtepChanged {
+	if !newVtep || !remoteVtepChanged {
 		return nil
 	}
+
 	if newVtep {
 		remoteVtep, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{})
 		if err != nil {
@@ -106,8 +91,38 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 			return err
 		}
 	}
+	remoteVtep.Status.LastModifyTime = metav1.Now()
 	_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
 	return err
+}
+
+func (m *Manager) RemoteVtepChanged(oldRemoteVtep *networkingv1.RemoteVtep, desiredNode *v1.Node) (changed bool, newRemoteVtep *networkingv1.RemoteVtep, err error) {
+	endpointIPList, err := m.pickEndpointListFromNode(desiredNode)
+	if err != nil {
+		return false, oldRemoteVtep, err
+	}
+	if utils.DifferentSetFromStringSlice(endpointIPList, oldRemoteVtep.Spec.EndpointIPList) {
+		changed = true
+	}
+	desiredVtepIP := desiredNode.Annotations[constants.AnnotationNodeVtepIP]
+	desiredVtepMac := desiredNode.Annotations[constants.AnnotationNodeVtepMac]
+	if oldRemoteVtep.Spec.VtepIP != desiredVtepIP || oldRemoteVtep.Spec.VtepMAC != desiredVtepMac {
+		changed = true
+	}
+	if oldRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] != desiredNode.Annotations[constants.AnnotationNodeLocalVxlanIPList] {
+		changed = true
+	}
+	if changed {
+		newRemoteVtep = oldRemoteVtep.DeepCopy()
+		newRemoteVtep.Spec.VtepIP = desiredVtepIP
+		newRemoteVtep.Spec.VtepMAC = desiredVtepMac
+		newRemoteVtep.Spec.EndpointIPList = endpointIPList
+		if newRemoteVtep.Annotations == nil {
+			newRemoteVtep.Annotations = make(map[string]string)
+		}
+		newRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] = desiredNode.Annotations[constants.AnnotationNodeLocalVxlanIPList]
+	}
+	return
 }
 
 func (m *Manager) pickEndpointListFromNode(node *v1.Node) ([]string, error) {
