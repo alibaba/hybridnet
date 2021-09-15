@@ -134,9 +134,9 @@ func (dev *Device) SyncVtepInfo() error {
 			HardwareAddr: broadcastFdbMac,
 		}
 
-		// Duplicate append action will node case error.
+		// Duplicate append action will not case error.
 		if err := netlink.NeighAppend(&broadcastFdbEntry); err != nil {
-			return fmt.Errorf("append broadcast fdb entry %v for interface %v failed: %v", unicastFdbEntry.String(), dev.link.Name, err)
+			return fmt.Errorf("append broadcast fdb entry %v for interface %v failed: %v", broadcastFdbEntry.String(), dev.link.Name, err)
 		}
 	}
 
