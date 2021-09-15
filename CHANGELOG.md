@@ -43,3 +43,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed Issues
 - Fix wrong masquerading for remote pod to access local pod (update daemon image and rebuild pod will take effect)
+
+## v0.2.1
+### Fixed Issues
+- Fix daemon iptables-restore execute error on CentOS 8 
