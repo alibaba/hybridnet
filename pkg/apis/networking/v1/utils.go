@@ -21,6 +21,8 @@ import (
 	"math"
 	"math/big"
 	"net"
+
+	"github.com/containernetworking/plugins/pkg/ip"
 )
 
 func ValidateAddressRange(ar *AddressRange) (err error) {
@@ -61,6 +63,9 @@ func ValidateAddressRange(ar *AddressRange) (err error) {
 	}
 	if len(ar.End) > 0 && !cidr.Contains(end) {
 		return fmt.Errorf("end %s is not in CIDR %s", ar.End, ar.CIDR)
+	}
+	if len(ar.Start) > 0 && len(ar.End) > 0 && ip.Cmp(start, end) > 0 {
+		return fmt.Errorf("subnet should have at least one available IP. start=%s, end=%s", start, end)
 	}
 	if !cidr.Contains(gateway) {
 		return fmt.Errorf("gateway %s is not in CIDR %s", ar.Gateway, ar.CIDR)
