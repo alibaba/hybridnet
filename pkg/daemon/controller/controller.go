@@ -504,8 +504,8 @@ func (c *Controller) iptablesSyncLoop() {
 					continue
 				}
 
-				nodeLocalVxlanipStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
-				for _, ipString := range nodeLocalVxlanipStringList {
+				nodeLocalVxlanIPStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
+				for _, ipString := range nodeLocalVxlanIPStringList {
 					ip := net.ParseIP(ipString)
 					if ip.To4() != nil {
 						// v4 address
@@ -554,13 +554,28 @@ func (c *Controller) iptablesSyncLoop() {
 				}
 
 				for _, vtep := range vtepList {
-					ip := net.ParseIP(vtep.Spec.VtepIP)
-					if ip.To4() != nil {
-						// v4 address
-						c.iptablesV4Manager.RecordRemoteNodeIP(ip)
-					} else {
-						// v6 address
-						c.iptablesV6Manager.RecordRemoteNodeIP(ip)
+					if _, exist := vtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
+						ip := net.ParseIP(vtep.Spec.VtepIP)
+						if ip.To4() != nil {
+							// v4 address
+							c.iptablesV4Manager.RecordRemoteNodeIP(ip)
+						} else {
+							// v6 address
+							c.iptablesV6Manager.RecordRemoteNodeIP(ip)
+						}
+						continue
+					}
+
+					nodeLocalVxlanIPStringList := strings.Split(vtep.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
+					for _, ipString := range nodeLocalVxlanIPStringList {
+						ip := net.ParseIP(ipString)
+						if ip.To4() != nil {
+							// v4 address
+							c.iptablesV4Manager.RecordRemoteNodeIP(ip)
+						} else {
+							// v6 address
+							c.iptablesV6Manager.RecordRemoteNodeIP(ip)
+						}
 					}
 				}
 

@@ -53,7 +53,7 @@ func NewNodeIPCache() *NodeIPCache {
 	}
 }
 
-func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string, remoteNodeList []*ramav1.RemoteVtep) error {
+func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string, remoteVtepList []*ramav1.RemoteVtep) error {
 	nic.mu.Lock()
 	defer nic.mu.Unlock()
 
@@ -69,6 +69,9 @@ func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string,
 		if _, exist := node.Annotations[constants.AnnotationNodeVtepMac]; !exist {
 			continue
 		}
+		if _, exist := node.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
+			continue
+		}
 
 		macAddr, err := net.ParseMAC(node.Annotations[constants.AnnotationNodeVtepMac])
 		if err != nil {
@@ -81,13 +84,21 @@ func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string,
 		}
 	}
 
-	for _, remoteNode := range remoteNodeList {
-		macAddr, err := net.ParseMAC(remoteNode.Spec.VtepMAC)
+	for _, remoteVtep := range remoteVtepList {
+		macAddr, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
 		if err != nil {
-			return fmt.Errorf("parse remote node vtep mac %v failed: %v", remoteNode.Spec.VtepMAC, err)
+			return fmt.Errorf("parse remote node vtep mac %v failed: %v", remoteVtep.Spec.VtepMAC, err)
 		}
 
-		nic.nodeIPMap[remoteNode.Spec.VtepIP] = macAddr
+		if _, exist := remoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
+			nic.nodeIPMap[remoteVtep.Spec.VtepIP] = macAddr
+			continue
+		}
+
+		ipStringList := strings.Split(remoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
+		for _, ipString := range ipStringList {
+			nic.nodeIPMap[ipString] = macAddr
+		}
 	}
 
 	return nil
