@@ -220,7 +220,8 @@ func (m *Manager) updateNode(oldObj, newObj interface{}) {
 		return
 	}
 	if newNodeAnnotations[constants.AnnotationNodeVtepIP] == oldNodeAnnotations[constants.AnnotationNodeVtepIP] &&
-		newNodeAnnotations[constants.AnnotationNodeVtepMac] == oldNodeAnnotations[constants.AnnotationNodeVtepMac] {
+		newNodeAnnotations[constants.AnnotationNodeVtepMac] == oldNodeAnnotations[constants.AnnotationNodeVtepMac] &&
+		newNodeAnnotations[constants.AnnotationNodeLocalVxlanIPList] == oldNodeAnnotations[constants.AnnotationNodeLocalVxlanIPList] {
 		return
 	}
 	m.EnqueueNode(ReconcileNode)
