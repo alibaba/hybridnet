@@ -31,7 +31,7 @@ func (c *Controller) reconcileRemoteCluster(clusterName string) error {
 	remoteCluster, err := c.remoteClusterLister.Get(clusterName)
 	if err != nil {
 		if k8serror.IsNotFound(err) {
-			c.delRcMgrIfExists(clusterName)
+			c.RcMgrCache.Del(clusterName)
 			return nil
 		}
 		return err

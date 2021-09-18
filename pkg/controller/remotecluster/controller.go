@@ -56,10 +56,10 @@ const (
 
 type Controller struct {
 	// localCluster's UUID
-	UUID                      types.UID
-	OverlayNetID              *uint32
-	overlayNetIDMU            sync.RWMutex
-	rcMgrMap                  *sync.Map
+	UUID           types.UID
+	OverlayNetID   *uint32
+	overlayNetIDMU sync.RWMutex
+	*RcMgrCache
 	kubeClient                kubeclientset.Interface
 	ramaClient                versioned.Interface
 	RamaInformerFactory       externalversions.SharedInformerFactory
@@ -101,7 +101,7 @@ func NewController(
 	}
 
 	c := &Controller{
-		rcMgrMap:                  new(sync.Map),
+		RcMgrCache:                NewCache(),
 		UUID:                      uuid,
 		kubeClient:                kubeClient,
 		ramaClient:                ramaClient,
@@ -159,12 +159,13 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 }
 
 func (c *Controller) closeRemoteClusterManager() {
-	c.rcMgrMap.Range(func(_, value interface{}) bool {
-		if mgr, ok := value.(*rcmanager.Manager); ok {
-			mgr.Close()
-		}
-		return true
-	})
+	c.RcMgrCache.Lock()
+	defer c.RcMgrCache.Unlock()
+
+	for key, mgr := range c.rcMgrMap {
+		delete(c.rcMgrMap, key)
+		mgr.Close()
+	}
 }
 
 func (c *Controller) runOverlayNetIDWorker() {
@@ -200,15 +201,14 @@ func (c *Controller) updateRemoteClusterStatus() {
 	)
 	for _, rc := range remoteClusters {
 		r := rc.DeepCopy()
-		manager, exists := c.rcMgrMap.Load(r.Name)
+		manager, exists := c.RcMgrCache.Get(r.Name)
 		if !exists {
 			continue
 		}
-		mgr := manager.(*rcmanager.Manager)
 		cnt = cnt + 1
 		wg.Add(1)
 		go func() {
-			c.updateSingleRCStatus(mgr, r)
+			c.updateSingleRCStatus(manager, r)
 			wg.Done()
 		}()
 	}

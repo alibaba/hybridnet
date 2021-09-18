@@ -32,13 +32,12 @@ import (
 
 func (c *Controller) startRemoteClusterMgr(clusterName string) error {
 	klog.Infof("processNextRemoteClusterMgr name=%v", clusterName)
-	rcManager, exists := c.rcMgrMap.Load(clusterName)
+	rcManager, exists := c.RcMgrCache.Get(clusterName)
 	if !exists {
 		klog.Errorf("Can't find rcManager. clusterName=%v", clusterName)
 		return errors.Errorf("Can't find rcManager. clusterName=%v", clusterName)
 	}
-	mgr := rcManager.(*rcmanager.Manager)
-	mgr.Run()
+	rcManager.Run()
 	return nil
 }
 
@@ -47,7 +46,7 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 	klog.Infof("[addOrUpdateRCMgr] cluster=%v", rc.Name)
 
 	clusterName := rc.Name
-	c.delRcMgrIfExists(clusterName)
+	c.RcMgrCache.Del(clusterName)
 
 	rcMgr, err := rcmanager.NewRemoteClusterManager(rc, c.kubeClient, c.ramaClient, c.remoteSubnetLister,
 		c.localClusterSubnetLister, c.remoteVtepLister)
@@ -70,17 +69,9 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 	}
 	rcMgr.SetIsReady(IsReady(conditions))
 
-	c.rcMgrMap.Store(clusterName, rcMgr)
+	c.RcMgrCache.Set(clusterName, rcMgr)
 	c.rcMgrQueue.Add(clusterName)
 	return nil
-}
-
-func (c *Controller) delRcMgrIfExists(clusterName string) {
-	if rcMgr, loaded := c.rcMgrMap.LoadAndDelete(clusterName); loaded {
-		klog.Infof("Delete cluster %v from cache", clusterName)
-		mgr := rcMgr.(*rcmanager.Manager)
-		mgr.Close()
-	}
 }
 
 func (c *Controller) processRCManagerQueue() {
