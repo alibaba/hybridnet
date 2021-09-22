@@ -20,6 +20,14 @@ import (
 	"fmt"
 	"time"
 
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	"github.com/oecp/rama/pkg/client/clientset/versioned"
+	informers "github.com/oecp/rama/pkg/client/informers/externalversions/networking/v1"
+	listers "github.com/oecp/rama/pkg/client/listers/networking/v1"
+	"github.com/oecp/rama/pkg/feature"
+	"github.com/oecp/rama/pkg/ipam"
+	"github.com/oecp/rama/pkg/ipam/allocator"
+	"github.com/oecp/rama/pkg/ipam/store"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/runtime"
@@ -33,15 +41,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
-
-	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/client/clientset/versioned"
-	informers "github.com/oecp/rama/pkg/client/informers/externalversions/networking/v1"
-	listers "github.com/oecp/rama/pkg/client/listers/networking/v1"
-	"github.com/oecp/rama/pkg/feature"
-	"github.com/oecp/rama/pkg/ipam"
-	"github.com/oecp/rama/pkg/ipam/allocator"
-	"github.com/oecp/rama/pkg/ipam/store"
 )
 
 const ControllerName = "ipam"
@@ -179,7 +178,6 @@ func NewController(
 			DeleteFunc: c.delNode,
 		},
 	})
-
 	return c
 }
 

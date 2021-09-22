@@ -23,7 +23,7 @@ import (
 	"reflect"
 
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-
+	"github.com/oecp/rama/pkg/feature"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -124,5 +124,16 @@ func NetworkDeleteValidation(ctx context.Context, req *admission.Request, handle
 			return admission.Denied(fmt.Sprintf("still have child subnet %s", subnet.Name))
 		}
 	}
+
+	if network.Spec.Type == ramav1.NetworkTypeOverlay && feature.MultiClusterEnabled() {
+		remoteClusterList := &ramav1.RemoteClusterList{}
+		if err = handler.Client.List(ctx, remoteClusterList); err != nil {
+			return admission.Errored(http.StatusInternalServerError, err)
+		}
+		if len(remoteClusterList.Items) != 0 {
+			return admission.Denied(fmt.Sprintf("still have remote cluster. number=%v", len(remoteClusterList.Items)))
+		}
+	}
+
 	return admission.Allowed("validation pass")
 }

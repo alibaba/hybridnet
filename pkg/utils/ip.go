@@ -16,7 +16,13 @@
 
 package utils
 
-import "net"
+import (
+	"net"
+
+	"github.com/containernetworking/plugins/pkg/ip"
+	"github.com/gogf/gf/container/gset"
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
+)
 
 func StringToIPNet(in string) *net.IPNet {
 	ip, cidr, _ := net.ParseCIDR(in)
@@ -24,10 +30,91 @@ func StringToIPNet(in string) *net.IPNet {
 	return cidr
 }
 
-// If IP is valid, return itself otherwise empty string
+// NormalizedIP If IP is valid, return itself otherwise empty string
 func NormalizedIP(ip string) string {
 	if net.ParseIP(ip) != nil {
 		return ip
 	}
 	return ""
+}
+
+// Intersect Calls after validation to ensure that AddressRange is valid(cidr
+// contains start and end, start <= end)
+func Intersect(rangeA networkingv1.AddressRange, rangeB networkingv1.AddressRange) bool {
+	if rangeA.Version != rangeB.Version {
+		return false
+	}
+	var (
+		netA *net.IPNet
+		netB *net.IPNet
+	)
+
+	_, netA, _ = net.ParseCIDR(rangeA.CIDR)
+	_, netB, _ = net.ParseCIDR(rangeB.CIDR)
+
+	if !netA.Contains(netB.IP) && !netB.Contains(netA.IP) {
+		return false
+	}
+
+	var (
+		startA         = net.ParseIP(rangeA.Start)
+		endA           = net.ParseIP(rangeA.End)
+		excludedIPSetA = gset.NewStrSetFrom(rangeA.ExcludeIPs)
+		startB         = net.ParseIP(rangeB.Start)
+		endB           = net.ParseIP(rangeB.End)
+		excludedIPSetB = gset.NewStrSetFrom(rangeB.ExcludeIPs)
+		rangeASet      = gset.NewStrSet()
+	)
+	if startA == nil {
+		startA = ip.NextIP(netA.IP)
+	}
+	if startB == nil {
+		startB = ip.NextIP(netB.IP)
+	}
+	if endA == nil {
+		endA = LastIP(netA)
+	}
+	if endB == nil {
+		endB = LastIP(netB)
+	}
+	for i := startA; ip.Cmp(i, endA) <= 0; i = ip.NextIP(i) {
+		if excludedIPSetA.Contains(i.String()) {
+			continue
+		}
+		rangeASet.Add(i.String())
+	}
+	for i := startB; ip.Cmp(i, endB) <= 0; i = ip.NextIP(i) {
+		if excludedIPSetB.Contains(i.String()) {
+			continue
+		}
+		if rangeASet.Contains(i.String()) {
+			return true
+		}
+	}
+	return false
+}
+
+func PickUsingIPList(instances []*networkingv1.IPInstance) []string {
+	ipList := make([]string, 0)
+	for _, v := range instances {
+		if v == nil || v.Status.Phase != networkingv1.IPPhaseUsing {
+			continue
+		}
+		usingIP, _, _ := net.ParseCIDR(v.Spec.Address.IP)
+		ipList = append(ipList, usingIP.String())
+	}
+	return ipList
+}
+
+// LastIP Determine the last IP of a subnet, excluding the broadcast if IPv4
+func LastIP(subnet *net.IPNet) net.IP {
+	var end net.IP
+	for i := 0; i < len(subnet.IP); i++ {
+		end = append(end, subnet.IP[i]|^subnet.Mask[i])
+	}
+	if subnet.IP.To4() != nil {
+		end[3]--
+	}
+
+	return end
 }

@@ -1,0 +1,10 @@
+apiVersion: networking.alibaba.com/v1
+kind: RemoteCluster
+metadata:
+  name: remotecluster-1
+spec:
+  connConfig:
+    endpoint: https://192.168.0.93:6443
+    caBundle: ${replact it with `certificate-authority-data` in your kube config}
+    clientCert: ${replact it with `client-certificate-data` in your kube config}
+    clientKey: ${replact it with `client-key-data` in your kube_config}
