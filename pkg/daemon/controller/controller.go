@@ -25,25 +25,22 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/oecp/rama/pkg/daemon/addr"
-
-	"github.com/vishvananda/netns"
-
 	"github.com/heptiolabs/healthcheck"
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	ramainformer "github.com/oecp/rama/pkg/client/informers/externalversions"
 	ramalister "github.com/oecp/rama/pkg/client/listers/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
+	"github.com/oecp/rama/pkg/daemon/addr"
 	daemonconfig "github.com/oecp/rama/pkg/daemon/config"
 	"github.com/oecp/rama/pkg/daemon/containernetwork"
 	daemonfeature "github.com/oecp/rama/pkg/daemon/feature"
+
 	"github.com/oecp/rama/pkg/daemon/iptables"
 	"github.com/oecp/rama/pkg/daemon/neigh"
 	"github.com/oecp/rama/pkg/daemon/route"
 	"github.com/vishvananda/netlink"
-
+	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"

@@ -11,10 +11,12 @@ require (
 	github.com/gogf/gf v1.16.5
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
 	github.com/heptiolabs/healthcheck v0.0.0-20180807145615-6ff867650f40
+	github.com/json-iterator/go v1.1.10
 	github.com/mdlayher/ethernet v0.0.0-20190606142754-0394541c37b7
 	github.com/mdlayher/ndp v0.0.0-20200602162440-17ab9e3e5567
 	github.com/mdlayher/raw v0.0.0-20190606142536-fef19f00fc18
 	github.com/parnurzeal/gorequest v0.2.16
+	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.0.0
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/pflag v1.0.5
@@ -27,6 +29,7 @@ require (
 	golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	gopkg.in/DATA-DOG/go-sqlmock.v1 v1.3.0 // indirect
+	gopkg.in/errgo.v2 v2.1.0
 	k8s.io/api v0.18.15
 	k8s.io/apimachinery v0.20.4
 	k8s.io/apiserver v0.20.4

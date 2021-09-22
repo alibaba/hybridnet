@@ -19,15 +19,17 @@ package manager
 import (
 	"fmt"
 
-	"k8s.io/klog"
-
 	"github.com/oecp/rama/pkg/controller/ipam"
+	"github.com/oecp/rama/pkg/controller/remotecluster"
+	"github.com/oecp/rama/pkg/feature"
+	"k8s.io/klog"
 )
 
 type initFunc func(manager *Manager) error
 
 var initFuncMap = map[string]initFunc{
-	ipam.ControllerName: initIPAMController,
+	ipam.ControllerName:          initIPAMController,
+	remotecluster.ControllerName: initRemoteClusterController,
 }
 
 var ipamController *ipam.Controller
@@ -41,6 +43,24 @@ func initIPAMController(m *Manager) error {
 		m.RamaInformerFactory.Networking().V1().Networks(),
 		m.RamaInformerFactory.Networking().V1().Subnets(),
 		m.RamaInformerFactory.Networking().V1().IPInstances(),
+	)
+	return nil
+}
+
+var rcController *remotecluster.Controller
+
+func initRemoteClusterController(m *Manager) error {
+	if !feature.MultiClusterEnabled() {
+		return nil
+	}
+	rcController = remotecluster.NewController(
+		m.KubeClient,
+		m.RamaClient,
+		m.RamaInformerFactory.Networking().V1().RemoteClusters(),
+		m.RamaInformerFactory.Networking().V1().RemoteSubnets(),
+		m.RamaInformerFactory.Networking().V1().Subnets(),
+		m.RamaInformerFactory.Networking().V1().RemoteVteps(),
+		m.RamaInformerFactory.Networking().V1().Networks(),
 	)
 	return nil
 }
