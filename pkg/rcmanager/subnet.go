@@ -200,10 +200,10 @@ func (m *Manager) diffSubnetAndRCSubnet(subnets []*networkingv1.Subnet, rcSubnet
 	}()
 
 	for _, v := range rcSubnets {
-		if v.ClusterName != m.ClusterName {
+		if v.Spec.ClusterName != m.ClusterName {
 			continue
 		}
-		if subnet, exists := subnetMap[v.Name]; !exists {
+		if subnet, exists := subnetMap[v.Labels[constants.LabelSubnet]]; !exists {
 			remove = append(remove, v)
 		} else {
 			newestRemoteSubnet, err := m.convertSubnet2RemoteSubnet(subnet, networkMap[subnet.Spec.Network])

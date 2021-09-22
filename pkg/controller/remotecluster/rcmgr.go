@@ -18,7 +18,6 @@ package remotecluster
 
 import (
 	"context"
-	"fmt"
 
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/rcmanager"
@@ -29,17 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog"
 )
-
-func (c *Controller) startRemoteClusterMgr(clusterName string) error {
-	klog.Infof("processNextRemoteClusterMgr name=%v", clusterName)
-	rcManager, exists := c.RcMgrCache.Get(clusterName)
-	if !exists {
-		klog.Errorf("Can't find rcManager. clusterName=%v", clusterName)
-		return errors.Errorf("Can't find rcManager. clusterName=%v", clusterName)
-	}
-	rcManager.Run()
-	return nil
-}
 
 // use remove+add instead of update
 func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
@@ -70,51 +58,6 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 	rcMgr.SetIsReady(IsReady(conditions))
 
 	c.RcMgrCache.Set(clusterName, rcMgr)
-	c.rcMgrQueue.Add(clusterName)
+	rcMgr.Run()
 	return nil
-}
-
-func (c *Controller) processRCManagerQueue() {
-	for c.processNextRemoteClusterMgr() {
-	}
-}
-
-func (c *Controller) processNextRemoteClusterMgr() bool {
-	defer func() {
-		if err := recover(); err != nil {
-			klog.Errorf("processNextRemoteClusterMgr panic. err=%v", err)
-		}
-	}()
-
-	obj, shutdown := c.rcMgrQueue.Get()
-	if shutdown {
-		return false
-	}
-
-	err := func(obj interface{}) error {
-		defer c.rcMgrQueue.Done(obj)
-		var (
-			key string
-			ok  bool
-		)
-		if key, ok = obj.(string); !ok {
-			c.rcMgrQueue.Forget(obj)
-			return nil
-		}
-		if err := c.startRemoteClusterMgr(key); err != nil {
-			// TODO: use retry handler to
-			// Put the item back on the workqueue to handle any transient errors
-			c.rcMgrQueue.AddRateLimited(key)
-			return fmt.Errorf("[remote cluster mgr] fail to sync '%v': %v, requeuing", key, err)
-		}
-		c.rcMgrQueue.Forget(obj)
-		klog.Infof("[remote-cluster-manager] succeed to sync '%v'", key)
-		return nil
-	}(obj)
-
-	if err != nil {
-		klog.Error(err)
-	}
-
-	return true
 }

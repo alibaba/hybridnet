@@ -75,8 +75,7 @@ type Controller struct {
 	localClusterNetworkLister listers.NetworkLister
 	localClusterNetworkSynced cache.InformerSynced
 
-	recorder   record.EventRecorder
-	rcMgrQueue workqueue.RateLimitingInterface
+	recorder record.EventRecorder
 }
 
 func NewController(
@@ -116,7 +115,6 @@ func NewController(
 		localClusterNetworkLister: localClusterNetworkInformer.Lister(),
 		localClusterNetworkSynced: localClusterNetworkInformer.Informer().HasSynced,
 		remoteClusterQueue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ControllerName),
-		rcMgrQueue:                workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "remoteclustermanager"),
 		recorder:                  recorder,
 	}
 
@@ -134,7 +132,6 @@ func NewController(
 
 func (c *Controller) Run(stopCh <-chan struct{}) error {
 	defer runtimeutil.HandleCrash()
-	defer c.rcMgrQueue.ShutDown()
 	defer c.remoteClusterQueue.ShutDown()
 
 	klog.Infof("Starting %s controller", ControllerName)
@@ -147,7 +144,6 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	// start workers
 	klog.Info("Starting workers")
 	go wait.Until(c.runRemoteClusterWorker, time.Second, stopCh)
-	go wait.Until(c.processRCManagerQueue, time.Second, stopCh)
 	go wait.Until(c.runOverlayNetIDWorker, time.Minute, stopCh)
 	go wait.Until(c.updateRemoteClusterStatus, HealthCheckPeriod, stopCh)
 	<-stopCh
