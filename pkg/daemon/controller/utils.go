@@ -163,26 +163,6 @@ func parseSubnetSpecRangeMeta(addressRange *ramav1.AddressRange) (cidr *net.IPNe
 	return
 }
 
-func isAddressRangeEqual(a, b *ramav1.AddressRange) bool {
-	if a == nil && b == nil {
-		return true
-	}
-
-	if a == nil || b == nil {
-		return false
-	}
-
-	if a.Version != b.Version ||
-		a.CIDR != b.CIDR || a.Start != b.Start || a.End != b.End ||
-		a.Gateway != b.Gateway ||
-		!isIPListEqual(a.ReservedIPs, b.ReservedIPs) ||
-		!isIPListEqual(a.ExcludeIPs, b.ExcludeIPs) {
-		return false
-	}
-
-	return true
-}
-
 func isIPListEqual(a, b []string) bool {
 	if len(a) == 0 && len(b) == 0 {
 		return true

@@ -158,7 +158,7 @@ func (m *Manager) RunSubnetWorker() {
 // validate only in local cluster
 func (m *Manager) checkLocalClusterOverlap(subnet *networkingv1.Subnet, subnets []*networkingv1.Subnet) error {
 	for _, s := range subnets {
-		if utils.Intersect(subnet.Spec.Range, s.Spec.Range) {
+		if utils.Intersect(&subnet.Spec.Range, &s.Spec.Range) {
 			err := errors.Newf("Two subnet intersect. One is from cluster %v, cidr=%v. Another is from lcoal cluster, cidr=%v",
 				m.ClusterName, subnet.Spec.Range.CIDR, s.Spec.Range.CIDR)
 			klog.Error(err.Error())
@@ -176,7 +176,7 @@ func (m *Manager) checkRemoteSubnetOverlap(subnet *networkingv1.Subnet, rcSubnet
 		if rc.Name == utils.GenRemoteSubnetName(m.ClusterName, subnet.Name) {
 			continue
 		}
-		if utils.Intersect(rc.Spec.Range, subnet.Spec.Range) {
+		if utils.Intersect(&rc.Spec.Range, &subnet.Spec.Range) {
 			err := errors.Newf("Two subnet intersect. One is from cluster %v, cidr=%v. Another is from cluster %v, cidr=%v",
 				m.ClusterName, subnet.Spec.Range.CIDR, rc.Spec.ClusterName, rc.Spec.Range.CIDR)
 			klog.Error(err.Error())
