@@ -18,10 +18,11 @@ package controller
 
 import (
 	"fmt"
+	"reflect"
 
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/daemon/containernetwork"
-	daemonfeature "github.com/oecp/rama/pkg/daemon/feature"
+	"github.com/oecp/rama/pkg/feature"
 
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog"
@@ -42,6 +43,7 @@ func (c *Controller) enqueueUpdateSubnet(oldObj, newObj interface{}) {
 		(oldSubnetNetID != nil && newSubnetNetID == nil) ||
 		(oldSubnetNetID != nil && newSubnetNetID != nil && *oldSubnetNetID != *newSubnetNetID) ||
 		oldSubnet.Spec.Network != newSubnet.Spec.Network ||
+		!reflect.DeepEqual(oldSubnet.Spec.Range, newSubnet.Spec.Range) ||
 		ramav1.IsSubnetAutoNatOutgoing(&oldSubnet.Spec) != ramav1.IsSubnetAutoNatOutgoing(&newSubnet.Spec) {
 		c.subnetQueue.Add(ActionReconcileSubnet)
 	}
@@ -153,7 +155,7 @@ func (c *Controller) reconcileSubnet() error {
 			forwardNodeIfName, autoNatOutgoing, isOverlay)
 	}
 
-	if daemonfeature.MultiClusterEnabled() {
+	if feature.MultiClusterEnabled() {
 		klog.Info("Reconciling remote subnet information")
 
 		remoteSubnetList, err := c.remoteSubnetLister.List(labels.Everything())

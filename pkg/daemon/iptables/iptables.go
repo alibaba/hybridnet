@@ -154,6 +154,18 @@ func (mgr *Manager) RecordSubnet(subnetCidr *net.IPNet, isOverlay bool) {
 	}
 }
 
+func (mgr *Manager) RecordRemoteNodeIP(nodeIP net.IP) {
+	mgr.remoteNodeIPList = append(mgr.remoteNodeIPList, nodeIP)
+}
+
+func (mgr *Manager) RecordRemoteSubnet(subnetCidr *net.IPNet, isOverlay bool) {
+	if isOverlay {
+		mgr.remoteOverlaySubnet = append(mgr.remoteOverlaySubnet, subnetCidr)
+	} else {
+		mgr.remoteUnderlaySubnet = append(mgr.remoteUnderlaySubnet, subnetCidr)
+	}
+}
+
 func (mgr *Manager) SetOverlayIfName(overlayIfName string) {
 	mgr.overlayIfName = overlayIfName
 }

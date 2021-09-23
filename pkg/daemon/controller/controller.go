@@ -33,7 +33,7 @@ import (
 	"github.com/oecp/rama/pkg/daemon/addr"
 	daemonconfig "github.com/oecp/rama/pkg/daemon/config"
 	"github.com/oecp/rama/pkg/daemon/containernetwork"
-	daemonfeature "github.com/oecp/rama/pkg/daemon/feature"
+	"github.com/oecp/rama/pkg/feature"
 
 	"github.com/oecp/rama/pkg/daemon/iptables"
 	"github.com/oecp/rama/pkg/daemon/neigh"
@@ -221,7 +221,7 @@ func NewController(config *daemonconfig.Configuration,
 	})
 
 	// clustermesh-related
-	if daemonfeature.MultiClusterEnabled() {
+	if feature.MultiClusterEnabled() {
 		remoteSubnetInformer := ramaInformerFactory.Networking().V1().RemoteSubnets()
 		remoteVtepInformer := ramaInformerFactory.Networking().V1().RemoteVteps()
 
@@ -265,7 +265,7 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 
 	synced := []cache.InformerSynced{c.subnetSynced, c.ipInstanceSynced, c.networkSynced, c.nodeSynced}
 
-	if daemonfeature.MultiClusterEnabled() {
+	if feature.MultiClusterEnabled() {
 		synced = append(synced, c.remoteSubnetSynced, c.remoteVtepSynced)
 	}
 
@@ -376,7 +376,7 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 					return fmt.Errorf("parse vtep mac %v failed: %v",
 						node.Annotations[constants.AnnotationNodeVtepMac], err)
 				}
-			} else if daemonfeature.MultiClusterEnabled() {
+			} else if feature.MultiClusterEnabled() {
 				// try to find remote vtep according to pod ip
 				vtep, err := c.getRemoteVtepByEndpointAddress(ip)
 				if err != nil {
@@ -535,7 +535,7 @@ func (c *Controller) iptablesSyncLoop() {
 				iptablesManager.RecordSubnet(cidr, ramav1.GetNetworkType(network) == ramav1.NetworkTypeOverlay)
 			}
 
-			if daemonfeature.MultiClusterEnabled() {
+			if feature.MultiClusterEnabled() {
 				// If remote overlay network des not exist, the rcmanager will not fetch
 				// RemoteSubnet and RemoteVtep. Thus, existence check is redundant here.
 
@@ -583,10 +583,8 @@ func (c *Controller) iptablesSyncLoop() {
 						return fmt.Errorf("parse remote subnet cidr %v failed: %v", remoteSubnet.Spec.Range.CIDR, err)
 					}
 
-					if err = c.getIPtablesManager(remoteSubnet.Spec.Range.Version).
-						RecordRemoteSubnet(cidr, ramav1.GetRemoteSubnetType(remoteSubnet) == ramav1.NetworkTypeOverlay); err != nil {
-						return fmt.Errorf("cannot record remote subnet: %v", err)
-					}
+					c.getIPtablesManager(remoteSubnet.Spec.Range.Version).
+						RecordRemoteSubnet(cidr, ramav1.GetRemoteSubnetType(remoteSubnet) == ramav1.NetworkTypeOverlay)
 				}
 			}
 		}

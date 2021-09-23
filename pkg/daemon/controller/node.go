@@ -26,8 +26,8 @@ import (
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
 	"github.com/oecp/rama/pkg/daemon/containernetwork"
-	daemonfeature "github.com/oecp/rama/pkg/daemon/feature"
 	"github.com/oecp/rama/pkg/daemon/vxlan"
+	"github.com/oecp/rama/pkg/feature"
 
 	"golang.org/x/sys/unix"
 
@@ -352,7 +352,7 @@ func (c *Controller) reconcileNodeInfo() error {
 
 	var remoteVtepList []*ramav1.RemoteVtep
 
-	if daemonfeature.MultiClusterEnabled() {
+	if feature.MultiClusterEnabled() {
 		remoteVtepList, err = c.remoteVtepLister.List(labels.Everything())
 		if err != nil {
 			return fmt.Errorf("list remote vtep failed: %v", err)
