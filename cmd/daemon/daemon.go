@@ -23,6 +23,7 @@ import (
 	daemonconfig "github.com/oecp/rama/pkg/daemon/config"
 	"github.com/oecp/rama/pkg/daemon/controller"
 	"github.com/oecp/rama/pkg/daemon/server"
+	"github.com/oecp/rama/pkg/feature"
 	"k8s.io/client-go/informers"
 	"k8s.io/klog"
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -35,6 +36,7 @@ func main() {
 	defer klog.Flush()
 
 	klog.Infof("Starting rama daemon with git commit: %v", gitCommit)
+	klog.Infof("known features: %v", feature.KnownFeatures())
 
 	config, err := daemonconfig.ParseFlags()
 	if err != nil {

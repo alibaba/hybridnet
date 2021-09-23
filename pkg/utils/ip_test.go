@@ -240,7 +240,7 @@ func TestIntersect(t *testing.T) {
 
 	for _, test := range testCase {
 		t.Run(test.name, func(t *testing.T) {
-			if out := Intersect(test.in[0], test.in[1]); out != test.expected {
+			if out := Intersect(&test.in[0], &test.in[1]); out != test.expected {
 				t.Errorf("test %s fails: expected %v but got %v", test.name, test.expected, out)
 				return
 			}

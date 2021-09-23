@@ -123,7 +123,7 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 			return admission.Errored(http.StatusInternalServerError, err)
 		}
 		for _, rcSubnet := range rcSubnetList.Items {
-			if utils.Intersect(subnet.Spec.Range, rcSubnet.Spec.Range) {
+			if utils.Intersect(&subnet.Spec.Range, &rcSubnet.Spec.Range) {
 				return admission.Denied(fmt.Sprintf("overlap with existing RemoteSubnet %s", rcSubnet.Name))
 			}
 		}

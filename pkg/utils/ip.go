@@ -40,7 +40,7 @@ func NormalizedIP(ip string) string {
 
 // Intersect Calls after validation to ensure that AddressRange is valid(cidr
 // contains start and end, start <= end)
-func Intersect(rangeA networkingv1.AddressRange, rangeB networkingv1.AddressRange) bool {
+func Intersect(rangeA *networkingv1.AddressRange, rangeB *networkingv1.AddressRange) bool {
 	if rangeA.Version != rangeB.Version {
 		return false
 	}
