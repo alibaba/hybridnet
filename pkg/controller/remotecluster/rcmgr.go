@@ -19,14 +19,15 @@ package remotecluster
 import (
 	"context"
 
-	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/rcmanager"
-	"github.com/oecp/rama/pkg/utils"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog"
+
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	"github.com/oecp/rama/pkg/rcmanager"
+	"github.com/oecp/rama/pkg/utils"
 )
 
 // use remove+add instead of update
@@ -34,7 +35,12 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 	klog.Infof("[addOrUpdateRCMgr] cluster=%v", rc.Name)
 
 	clusterName := rc.Name
-	c.RcMgrCache.Del(clusterName)
+	if oldManagerObject, loaded := c.rcManagerCache.LoadAndDelete(clusterName); loaded {
+		oldManager, ok := oldManagerObject.(*rcmanager.Manager)
+		if ok {
+			oldManager.Close()
+		}
+	}
 
 	rcMgr, err := rcmanager.NewRemoteClusterManager(rc, c.kubeClient, c.ramaClient, c.remoteSubnetLister,
 		c.localClusterSubnetLister, c.remoteVtepLister)
@@ -57,7 +63,7 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 	}
 	rcMgr.SetIsReady(IsReady(conditions))
 
-	c.RcMgrCache.Set(clusterName, rcMgr)
+	c.rcManagerCache.Store(clusterName, rcMgr)
 	rcMgr.Run()
 	return nil
 }
