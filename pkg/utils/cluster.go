@@ -18,10 +18,9 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/constants"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -30,6 +29,9 @@ import (
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
+
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	"github.com/oecp/rama/pkg/constants"
 )
 
 const (
@@ -76,4 +78,18 @@ func GetUUID(client kubernetes.Interface) (types.UID, error) {
 		return "", err
 	}
 	return ns.UID, nil
+}
+
+func GetUUIDFromRemoteCluster(rc *networkingv1.RemoteCluster) (types.UID, error) {
+	cfg, err := BuildClusterConfig(rc)
+	if err != nil {
+		return "", err
+	}
+
+	k8sClient, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return "", fmt.Errorf("invalid config for building client: %v", err)
+	}
+
+	return GetUUID(k8sClient)
 }

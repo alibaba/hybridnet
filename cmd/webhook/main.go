@@ -19,10 +19,6 @@ package main
 import (
 	"flag"
 
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/feature"
-	"github.com/oecp/rama/pkg/webhook/mutating"
-	"github.com/oecp/rama/pkg/webhook/validating"
 	"github.com/spf13/pflag"
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
@@ -31,16 +27,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
 	"k8s.io/klog/klogr"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	"github.com/oecp/rama/pkg/feature"
+	"github.com/oecp/rama/pkg/webhook/mutating"
+	"github.com/oecp/rama/pkg/webhook/validating"
 )
 
 var (
 	scheme             = runtime.NewScheme()
 	port               int
 	metricsBindAddress string
-	stopCh             = controllerruntime.SetupSignalHandler()
 )
 
 func init() {
@@ -58,10 +57,6 @@ func init() {
 	// controller-runtime initialize logger with fake implementation
 	// so we should new another Logger for this
 	ctrl.SetLogger(klogr.New())
-
-	if feature.MultiClusterEnabled() {
-		validating.InitRemoteClusterInformer(stopCh)
-	}
 }
 
 func main() {
