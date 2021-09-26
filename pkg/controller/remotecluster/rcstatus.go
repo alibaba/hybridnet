@@ -21,14 +21,15 @@ import (
 	"runtime/debug"
 	"strings"
 
-	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/client/clientset/versioned"
-	"github.com/oecp/rama/pkg/utils"
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog"
+
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	"github.com/oecp/rama/pkg/client/clientset/versioned"
+	"github.com/oecp/rama/pkg/utils"
 )
 
 type CheckStatusFunc func(c *Controller, rcRamaClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error)

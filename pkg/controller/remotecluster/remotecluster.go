@@ -20,18 +20,20 @@ import (
 	"fmt"
 	"reflect"
 
-	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/klog"
+
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 )
 
 // remote cluster is managed by admin, no need to full synchronize
+// FIXME: use finalizer to delete remote cluster gracefully
 func (c *Controller) reconcileRemoteCluster(clusterName string) error {
 	klog.Infof("Reconciling Remote Cluster %v", clusterName)
 	remoteCluster, err := c.remoteClusterLister.Get(clusterName)
 	if err != nil {
 		if k8serror.IsNotFound(err) {
-			c.RcMgrCache.Del(clusterName)
+			c.rcManagerCache.Delete(clusterName)
 			return nil
 		}
 		return err

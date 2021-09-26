@@ -23,14 +23,6 @@ import (
 	"sync"
 	"time"
 
-	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"github.com/oecp/rama/pkg/client/clientset/versioned"
-	"github.com/oecp/rama/pkg/client/informers/externalversions"
-	informers "github.com/oecp/rama/pkg/client/informers/externalversions/networking/v1"
-	listers "github.com/oecp/rama/pkg/client/listers/networking/v1"
-	"github.com/oecp/rama/pkg/metrics"
-	"github.com/oecp/rama/pkg/rcmanager"
-	"github.com/oecp/rama/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -44,6 +36,15 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
+
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	"github.com/oecp/rama/pkg/client/clientset/versioned"
+	"github.com/oecp/rama/pkg/client/informers/externalversions"
+	informers "github.com/oecp/rama/pkg/client/informers/externalversions/networking/v1"
+	listers "github.com/oecp/rama/pkg/client/listers/networking/v1"
+	"github.com/oecp/rama/pkg/metrics"
+	"github.com/oecp/rama/pkg/rcmanager"
+	"github.com/oecp/rama/pkg/utils"
 )
 
 const (
@@ -59,7 +60,9 @@ type Controller struct {
 	UUID           types.UID
 	OverlayNetID   *uint32
 	overlayNetIDMU sync.RWMutex
-	*RcMgrCache
+
+	rcManagerCache sync.Map
+
 	kubeClient                kubeclientset.Interface
 	ramaClient                versioned.Interface
 	RamaInformerFactory       externalversions.SharedInformerFactory
@@ -100,7 +103,7 @@ func NewController(
 	}
 
 	c := &Controller{
-		RcMgrCache:                NewCache(),
+		rcManagerCache:            sync.Map{},
 		UUID:                      uuid,
 		kubeClient:                kubeClient,
 		ramaClient:                ramaClient,
@@ -148,20 +151,19 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	go wait.Until(c.updateRemoteClusterStatus, HealthCheckPeriod, stopCh)
 	<-stopCh
 
-	c.closeRemoteClusterManager()
+	c.closeAllRemoteClusterManager()
 
 	klog.Info("Shutting down workers")
 	return nil
 }
 
-func (c *Controller) closeRemoteClusterManager() {
-	c.RcMgrCache.Lock()
-	defer c.RcMgrCache.Unlock()
-
-	for key, mgr := range c.rcMgrMap {
-		delete(c.rcMgrMap, key)
-		mgr.Close()
-	}
+func (c *Controller) closeAllRemoteClusterManager() {
+	c.rcManagerCache.Range(func(_, value interface{}) bool {
+		if manager, ok := value.(*rcmanager.Manager); ok {
+			manager.Close()
+		}
+		return true
+	})
 }
 
 func (c *Controller) runOverlayNetIDWorker() {
@@ -191,17 +193,19 @@ func (c *Controller) updateRemoteClusterStatus() {
 		return
 	}
 
-	var (
-		wg  sync.WaitGroup
-		cnt = 0
-	)
+	var wg sync.WaitGroup
 	for _, rc := range remoteClusters {
 		r := rc.DeepCopy()
-		manager, exists := c.RcMgrCache.Get(r.Name)
-		if !exists {
+
+		managerObject, ok := c.rcManagerCache.Load(r.Name)
+		if !ok {
 			continue
 		}
-		cnt = cnt + 1
+		manager, ok := managerObject.(*rcmanager.Manager)
+		if !ok {
+			continue
+		}
+
 		wg.Add(1)
 		go func() {
 			c.updateSingleRCStatus(manager, r)
