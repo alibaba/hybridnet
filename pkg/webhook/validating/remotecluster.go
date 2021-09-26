@@ -23,15 +23,14 @@ import (
 	"regexp"
 	"sync"
 
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/utils"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var (
-	validateLock     sync.Mutex
+	rcLock           sync.Mutex
 	validEndpoint    = regexp.MustCompile(`^(https?://)[\w-]+(\.[\w-]+)+:\d{1,5}$`)
 	remoteClusterGVK = gvkConverter(ramav1.SchemeGroupVersion.WithKind("RemoteCluster"))
 )
@@ -44,57 +43,57 @@ func init() {
 
 func RCCreateValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
 	rc := &ramav1.RemoteCluster{}
-	err := handler.Decoder.Decode(*req, rc)
-	if err != nil {
+	if err := handler.Decoder.Decode(*req, rc); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
-	return validate(rc)
+	return validate(ctx, rc, handler)
 }
 
 func RCUpdateValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
-	var (
-		err   error
-		newRC *ramav1.RemoteCluster
-	)
-	if err = handler.Decoder.DecodeRaw(req.Object, newRC); err != nil {
+	newRC := &ramav1.RemoteCluster{}
+	if err := handler.Decoder.DecodeRaw(req.Object, newRC); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
-	return validate(newRC)
+	return validate(ctx, newRC, handler)
 }
 
 func RCDeleteValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
 	return admission.Allowed("validation pass")
 }
 
-func validate(rc *ramav1.RemoteCluster) admission.Response {
-	validateLock.Lock()
-	defer validateLock.Unlock()
+func validate(ctx context.Context, rc *ramav1.RemoteCluster, handler *Handler) admission.Response {
+	rcLock.Lock()
+	defer rcLock.Unlock()
 
+	// validate connection config
 	connConfig := rc.Spec.ConnConfig
 	if connConfig.Endpoint == "" || connConfig.CABundle == nil || connConfig.ClientKey == nil || connConfig.ClientCert == nil {
 		return admission.Denied("empty connection config, please check.")
 	}
+
+	// validate endpoint format
 	if !validEndpoint.Match([]byte(connConfig.Endpoint)) {
 		return admission.Denied("endpoint format: https://server:address, please check")
 	}
 
-	cfg, err := utils.BuildClusterConfig(rc)
+	// get unique key of remote cluster
+	uuid, err := utils.GetUUIDFromRemoteCluster(rc)
 	if err != nil {
-		return admission.Denied(fmt.Sprintf("Can't build connection to remote cluster, maybe wrong config. Err=%v", err.Error()))
-	}
-	client := kubernetes.NewForConfigOrDie(cfg)
-	uuid, err := utils.GetUUID(client)
-	if err != nil {
-		return admission.Errored(http.StatusInternalServerError, err)
+		return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to get UUID of remote cluster: %v", err))
 	}
 
-	rcs, err := RCLister.List(labels.Everything())
-	if err != nil {
+	// ensure the uniqueness of cluster config
+	rcs := &ramav1.RemoteClusterList{}
+	if err = handler.Client.List(ctx, rcs); err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
-	for _, rc := range rcs {
-		if uuid == rc.Status.UUID {
-			return admission.Denied("Duplicate cluster configuration")
+	for i := range rcs.Items {
+		if rc.Name == rcs.Items[i].Name {
+			// self skip
+			continue
+		}
+		if uuid == rcs.Items[i].Status.UUID {
+			return admission.Denied(fmt.Sprintf("duplicated UUID with another remote cluster %s", rcs.Items[i].Name))
 		}
 	}
 	return admission.Allowed("validation pass")
