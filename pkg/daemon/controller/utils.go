@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/gogf/gf/container/gset"
 	"github.com/vishvananda/netlink"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
@@ -74,6 +75,29 @@ func (c *Controller) getIPInstanceByAddress(address net.IP) (*networkingv1.IPIns
 	}
 
 	return nil, fmt.Errorf("ip instance for address %v not found", address.String())
+}
+
+func (c *Controller) getRemoteVtepByEndpointAddress(address net.IP) (*networkingv1.RemoteVtep, error) {
+	// try to find remote pod ip
+	remoteVtepList, err := c.remoteVtepIndexer.ByIndex(ByEndpointIPIndexer, address.String())
+	if err != nil {
+		return nil, fmt.Errorf("get remote vtep by ip %v indexer failed: %v", address.String(), err)
+	}
+
+	if len(remoteVtepList) > 1 {
+		return nil, fmt.Errorf("get more than one remote vtep for ip %v", address.String())
+	}
+
+	if len(remoteVtepList) == 1 {
+		vtep, ok := remoteVtepList[0].(*networkingv1.RemoteVtep)
+		if !ok {
+			return nil, fmt.Errorf("transform obj to remote vtep failed")
+		}
+
+		return vtep, nil
+	}
+
+	return nil, nil
 }
 
 func initErrorMessageWrapper(prefix string) func(string, ...interface{}) string {
@@ -137,4 +161,16 @@ func parseSubnetSpecRangeMeta(addressRange *networkingv1.AddressRange) (cidr *ne
 	}
 
 	return
+}
+
+func isIPListEqual(a, b []string) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+
+	return gset.NewStrSetFrom(a).Equal(gset.NewStrSetFrom(b))
 }

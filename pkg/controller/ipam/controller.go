@@ -20,6 +20,14 @@ import (
 	"fmt"
 	"time"
 
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
+	informers "github.com/alibaba/hybridnet/pkg/client/informers/externalversions/networking/v1"
+	listers "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/ipam"
+	"github.com/alibaba/hybridnet/pkg/ipam/allocator"
+	"github.com/alibaba/hybridnet/pkg/ipam/store"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/runtime"
@@ -33,15 +41,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
-
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
-	informers "github.com/alibaba/hybridnet/pkg/client/informers/externalversions/networking/v1"
-	listers "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/feature"
-	"github.com/alibaba/hybridnet/pkg/ipam"
-	"github.com/alibaba/hybridnet/pkg/ipam/allocator"
-	"github.com/alibaba/hybridnet/pkg/ipam/store"
 )
 
 const ControllerName = "ipam"
@@ -179,7 +178,6 @@ func NewController(
 			DeleteFunc: c.delNode,
 		},
 	})
-
 	return c
 }
 

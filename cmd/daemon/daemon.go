@@ -23,10 +23,10 @@ import (
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/controller"
 	"github.com/alibaba/hybridnet/pkg/daemon/server"
+	"github.com/alibaba/hybridnet/pkg/feature"
 
 	"k8s.io/client-go/informers"
 	"k8s.io/klog"
-
 	controllerruntime "sigs.k8s.io/controller-runtime"
 )
 
@@ -37,6 +37,7 @@ func main() {
 	defer klog.Flush()
 
 	klog.Infof("Starting hybridnet daemon with git commit: %v", gitCommit)
+	klog.Infof("known features: %v", feature.KnownFeatures())
 
 	config, err := daemonconfig.ParseFlags()
 	if err != nil {

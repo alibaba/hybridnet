@@ -18,9 +18,11 @@ package controller
 
 import (
 	"fmt"
+	"reflect"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+	"github.com/alibaba/hybridnet/pkg/feature"
 
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog"
@@ -41,6 +43,7 @@ func (c *Controller) enqueueUpdateSubnet(oldObj, newObj interface{}) {
 		(oldSubnetNetID != nil && newSubnetNetID == nil) ||
 		(oldSubnetNetID != nil && newSubnetNetID != nil && *oldSubnetNetID != *newSubnetNetID) ||
 		oldSubnet.Spec.Network != newSubnet.Spec.Network ||
+		!reflect.DeepEqual(oldSubnet.Spec.Range, newSubnet.Spec.Range) ||
 		networkingv1.IsSubnetAutoNatOutgoing(&oldSubnet.Spec) != networkingv1.IsSubnetAutoNatOutgoing(&newSubnet.Spec) {
 		c.subnetQueue.Add(ActionReconcileSubnet)
 	}
@@ -150,6 +153,33 @@ func (c *Controller) reconcileSubnet() error {
 		routeManager := c.getRouterManager(subnet.Spec.Range.Version)
 		routeManager.AddSubnetInfo(subnetCidr, gatewayIP, startIP, endIP, excludeIPs,
 			forwardNodeIfName, autoNatOutgoing, isOverlay)
+	}
+
+	if feature.MultiClusterEnabled() {
+		klog.Info("Reconciling remote subnet information")
+
+		remoteSubnetList, err := c.remoteSubnetLister.List(labels.Everything())
+		if err != nil {
+			return fmt.Errorf("failed to list remote subnet %v", err)
+		}
+
+		for _, remoteSubnet := range remoteSubnetList {
+			subnetCidr, gatewayIP, startIP, endIP, excludeIPs,
+				_, err := parseSubnetSpecRangeMeta(&remoteSubnet.Spec.Range)
+
+			if err != nil {
+				return fmt.Errorf("parse subnet %v spec range meta failed: %v", remoteSubnet.Name, err)
+			}
+
+			var isOverlay = networkingv1.GetRemoteSubnetType(remoteSubnet) == networkingv1.NetworkTypeOverlay
+
+			routeManager := c.getRouterManager(remoteSubnet.Spec.Range.Version)
+			err = routeManager.AddRemoteSubnetInfo(subnetCidr, gatewayIP, startIP, endIP, excludeIPs, isOverlay)
+
+			if err != nil {
+				return fmt.Errorf("failed to add remote subnet info: %v", err)
+			}
+		}
 	}
 
 	if err := c.routeV4Manager.SyncRoutes(); err != nil {

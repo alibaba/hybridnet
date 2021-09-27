@@ -21,11 +21,13 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/alibaba/hybridnet/pkg/daemon/vxlan"
+	"github.com/alibaba/hybridnet/pkg/feature"
 
 	"golang.org/x/sys/unix"
 
@@ -41,22 +43,22 @@ import (
 type NodeIPCache struct {
 	// ip string to node vtep mac
 	nodeIPMap map[string]net.HardwareAddr
-
-	ch chan struct{}
+	mu        *sync.RWMutex
 }
 
 func NewNodeIPCache() *NodeIPCache {
 	return &NodeIPCache{
 		nodeIPMap: map[string]net.HardwareAddr{},
-		ch:        make(chan struct{}, 1),
+		mu:        &sync.RWMutex{},
 	}
 }
 
-func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string) error {
-	nic.lock()
-	defer nic.unlock()
+func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string, remoteVtepList []*networkingv1.RemoteVtep) error {
+	nic.mu.Lock()
+	defer nic.mu.Unlock()
 
 	nic.nodeIPMap = map[string]net.HardwareAddr{}
+
 	for _, node := range nodeList {
 		// Only update remote node vtep information.
 		if node.Name == localNodeName {
@@ -65,6 +67,9 @@ func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string)
 
 		// ignore empty information
 		if _, exist := node.Annotations[constants.AnnotationNodeVtepMac]; !exist {
+			continue
+		}
+		if _, exist := node.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
 			continue
 		}
 
@@ -79,23 +84,32 @@ func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string)
 		}
 	}
 
+	for _, remoteVtep := range remoteVtepList {
+		macAddr, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
+		if err != nil {
+			return fmt.Errorf("parse remote node vtep mac %v failed: %v", remoteVtep.Spec.VtepMAC, err)
+		}
+
+		if _, exist := remoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
+			nic.nodeIPMap[remoteVtep.Spec.VtepIP] = macAddr
+			continue
+		}
+
+		ipStringList := strings.Split(remoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
+		for _, ipString := range ipStringList {
+			nic.nodeIPMap[ipString] = macAddr
+		}
+	}
+
 	return nil
 }
 
 func (nic *NodeIPCache) SearchIP(ip net.IP) (net.HardwareAddr, bool) {
-	nic.lock()
-	defer nic.unlock()
+	nic.mu.RLock()
+	defer nic.mu.RUnlock()
 
 	mac, exist := nic.nodeIPMap[ip.String()]
 	return mac, exist
-}
-
-func (nic *NodeIPCache) lock() {
-	nic.ch <- struct{}{}
-}
-
-func (nic *NodeIPCache) unlock() {
-	<-nic.ch
 }
 
 // reconcile node infos on node if node info changed
@@ -161,16 +175,16 @@ func (c *Controller) reconcileNodeInfo() error {
 		return fmt.Errorf("failed to list network %v", err)
 	}
 
-	var overlayNetwork *networkingv1.Network
+	var overlayNetID *uint32
 	for _, network := range networkList {
 		if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
-			overlayNetwork = network
+			overlayNetID = network.Spec.NetID
 			break
 		}
 	}
 
 	// overlay network not exist, do nothing
-	if overlayNetwork == nil {
+	if overlayNetID == nil {
 		return nil
 	}
 
@@ -218,7 +232,7 @@ func (c *Controller) reconcileNodeInfo() error {
 	}
 	vtepMac := link.Attrs().HardwareAddr
 
-	vxlanLinkName, err := containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, overlayNetwork.Spec.NetID)
+	vxlanLinkName, err := containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, overlayNetID)
 	if err != nil {
 		return fmt.Errorf("generate vxlan interface name failed: %v", err)
 	}
@@ -268,7 +282,7 @@ func (c *Controller) reconcileNodeInfo() error {
 		return fmt.Errorf("list node failed: %v", err)
 	}
 
-	vxlanDev, err := vxlan.NewVxlanDevice(vxlanLinkName, int(*overlayNetwork.Spec.NetID),
+	vxlanDev, err := vxlan.NewVxlanDevice(vxlanLinkName, int(*overlayNetID),
 		c.config.NodeVxlanIfName, vtepIP, c.config.VxlanUDPPort, c.config.VxlanBaseReachableTime, true)
 	if err != nil {
 		return fmt.Errorf("create vxlan device %v failed: %v", vxlanLinkName, err)
@@ -311,10 +325,6 @@ func (c *Controller) reconcileNodeInfo() error {
 		}
 	}
 
-	if err := c.nodeIPCache.UpdateNodeIPs(nodeList, c.config.NodeName); err != nil {
-		return fmt.Errorf("update node ip cache failed: %v", err)
-	}
-
 	for _, node := range nodeList {
 		if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
 			node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
@@ -334,6 +344,33 @@ func (c *Controller) reconcileNodeInfo() error {
 		}
 
 		vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
+	}
+
+	var remoteVtepList []*networkingv1.RemoteVtep
+
+	if feature.MultiClusterEnabled() {
+		remoteVtepList, err = c.remoteVtepLister.List(labels.Everything())
+		if err != nil {
+			return fmt.Errorf("list remote vtep failed: %v", err)
+		}
+
+		for _, remoteVtep := range remoteVtepList {
+			vtepMac, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
+			if err != nil {
+				return fmt.Errorf("parse node vtep mac string %v failed: %v", remoteVtep.Spec.VtepMAC, err)
+			}
+
+			vtepIP := net.ParseIP(remoteVtep.Spec.VtepIP)
+			if vtepIP == nil {
+				return fmt.Errorf("parse node vtep ip string %v failed", remoteVtep.Spec.VtepIP)
+			}
+
+			vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
+		}
+	}
+
+	if err := c.nodeIPCache.UpdateNodeIPs(nodeList, c.config.NodeName, remoteVtepList); err != nil {
+		return fmt.Errorf("update node ip cache failed: %v", err)
 	}
 
 	if err := vxlanDev.SyncVtepInfo(); err != nil {

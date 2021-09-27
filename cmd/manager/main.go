@@ -20,12 +20,11 @@ import (
 	"context"
 	"flag"
 
+	"github.com/alibaba/hybridnet/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/manager"
 	"github.com/spf13/pflag"
 	"k8s.io/klog"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-
-	"github.com/alibaba/hybridnet/pkg/feature"
-	"github.com/alibaba/hybridnet/pkg/manager"
 )
 
 var (

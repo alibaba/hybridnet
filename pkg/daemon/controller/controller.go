@@ -25,25 +25,22 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alibaba/hybridnet/pkg/daemon/addr"
-
-	"github.com/vishvananda/netns"
-
-	"github.com/alibaba/hybridnet/pkg/daemon/iptables"
-
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	hybridnetinformer "github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
 	networkinglister "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/daemon/addr"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+	"github.com/alibaba/hybridnet/pkg/daemon/iptables"
 	"github.com/alibaba/hybridnet/pkg/daemon/neigh"
 	"github.com/alibaba/hybridnet/pkg/daemon/route"
+	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/heptiolabs/healthcheck"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 
 	"golang.org/x/sys/unix"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -60,6 +57,7 @@ const (
 	ActionReconcileNode       = "ReconcileNode"
 
 	ByInstanceIPIndexer = "instanceIP"
+	ByEndpointIPIndexer = "endpointIP"
 )
 
 // Controller is a set of kubernetes controllers
@@ -79,6 +77,15 @@ type Controller struct {
 	nodeLister corev1.NodeLister
 	nodeSynced cache.InformerSynced
 	nodeQueue  workqueue.RateLimitingInterface
+
+	// cluster-mesh related crd: RemoteSubnet
+	remoteSubnetLister networkinglister.RemoteSubnetLister
+	remoteSubnetSynced cache.InformerSynced
+
+	// cluster-mesh related crd: RemoteVtep
+	remoteVtepLister  networkinglister.RemoteVtepLister
+	remoteVtepSynced  cache.InformerSynced
+	remoteVtepIndexer cache.Indexer
 
 	config *daemonconfig.Configuration
 
@@ -213,6 +220,37 @@ func NewController(config *daemonconfig.Configuration,
 		DeleteFunc: controller.enqueueAddOrDeleteNode,
 	})
 
+	// clustermesh-related
+	if feature.MultiClusterEnabled() {
+		remoteSubnetInformer := hybridnetInformerFactory.Networking().V1().RemoteSubnets()
+		remoteVtepInformer := hybridnetInformerFactory.Networking().V1().RemoteVteps()
+
+		if err := remoteVtepInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{
+			ByEndpointIPIndexer: indexByEndpointIP,
+		}); err != nil {
+			return nil, fmt.Errorf("add indexer to remote vtep informer failed: %v", err)
+		}
+
+		controller.remoteSubnetLister = remoteSubnetInformer.Lister()
+		controller.remoteSubnetSynced = remoteSubnetInformer.Informer().HasSynced
+
+		controller.remoteVtepLister = remoteVtepInformer.Lister()
+		controller.remoteVtepSynced = remoteVtepInformer.Informer().HasSynced
+		controller.remoteVtepIndexer = remoteVtepInformer.Informer().GetIndexer()
+
+		remoteSubnetInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    controller.enqueueAddOrDeleteRemoteSubnet,
+			UpdateFunc: controller.enqueueUpdateRemoteSubnet,
+			DeleteFunc: controller.enqueueAddOrDeleteRemoteSubnet,
+		})
+
+		remoteVtepInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    controller.enqueueAddOrDeleteRemoteVtep,
+			UpdateFunc: controller.enqueueUpdateRemoteVtep,
+			DeleteFunc: controller.enqueueAddOrDeleteRemoteVtep,
+		})
+	}
+
 	return controller, nil
 }
 
@@ -225,7 +263,13 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	defer c.ipInstanceQueue.ShutDown()
 	defer c.nodeQueue.ShutDown()
 
-	if ok := cache.WaitForCacheSync(stopCh, c.subnetSynced, c.ipInstanceSynced, c.networkSynced, c.nodeSynced); !ok {
+	synced := []cache.InformerSynced{c.subnetSynced, c.ipInstanceSynced, c.networkSynced, c.nodeSynced}
+
+	if feature.MultiClusterEnabled() {
+		synced = append(synced, c.remoteSubnetSynced, c.remoteVtepSynced)
+	}
+
+	if ok := cache.WaitForCacheSync(stopCh, synced...); !ok {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
@@ -308,8 +352,8 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 	ipSearch := func(ip net.IP, link netlink.Link) error {
 		var vtepMac net.HardwareAddr
 
-		// Try to find node ip.
 		if mac, exist := c.nodeIPCache.SearchIP(ip); exist {
+			// find node ip.
 			vtepMac = mac
 		} else {
 			ipInstance, err := c.getIPInstanceByAddress(ip)
@@ -330,16 +374,29 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 					return fmt.Errorf("parse vtep mac %v failed: %v",
 						node.Annotations[constants.AnnotationNodeVtepMac], err)
 				}
-			} else {
-				// if ip not exist, try to clear it's neigh entries
-				if err := neigh.ClearStaleNeighEntryByIP(link.Attrs().Index, ip); err != nil {
-					return fmt.Errorf("clear stale neigh for link %v and ip %v failed: %v",
-						link.Attrs().Name, ip.String(), err)
+			} else if feature.MultiClusterEnabled() {
+				// try to find remote vtep according to pod ip
+				vtep, err := c.getRemoteVtepByEndpointAddress(ip)
+				if err != nil {
+					return fmt.Errorf("get remote vtep by address %s failed: %v", ip.String(), err)
+				}
+
+				if vtep != nil {
+					vtepMac, err = net.ParseMAC(vtep.Spec.VtepMAC)
+					if err != nil {
+						return fmt.Errorf("parse vtep mac %v failed: %v", vtep.Spec.VtepMAC, err)
+					}
 				}
 			}
 		}
 
 		if len(vtepMac) == 0 {
+			// if ip not exist, try to clear it's neigh entries
+			if err := neigh.ClearStaleNeighEntryByIP(link.Attrs().Index, ip); err != nil {
+				return fmt.Errorf("clear stale neigh for link %v and ip %v failed: %v",
+					link.Attrs().Name, ip.String(), err)
+			}
+
 			return fmt.Errorf("no matched node or pod ip cache found for ip %v", ip.String())
 		}
 
@@ -445,7 +502,7 @@ func (c *Controller) iptablesSyncLoop() {
 			}
 		}
 
-		// Sync rules.
+		// add local subnets
 		if overlayExist {
 			// Record node ips.
 			nodeList, err := c.nodeLister.List(labels.Everything())
@@ -463,8 +520,8 @@ func (c *Controller) iptablesSyncLoop() {
 					continue
 				}
 
-				nodeLocalVxlanipStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
-				for _, ipString := range nodeLocalVxlanipStringList {
+				nodeLocalVxlanIPStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
+				for _, ipString := range nodeLocalVxlanIPStringList {
 					ip := net.ParseIP(ipString)
 					if ip.To4() != nil {
 						// v4 address
@@ -497,13 +554,67 @@ func (c *Controller) iptablesSyncLoop() {
 				iptablesManager.RecordSubnet(cidr, networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay)
 			}
 
-			if err := c.iptablesV4Manager.SyncRules(); err != nil {
-				return fmt.Errorf("sync v4 iptables rule failed: %v", err)
-			}
+			if feature.MultiClusterEnabled() {
+				// If remote overlay network des not exist, the rcmanager will not fetch
+				// RemoteSubnet and RemoteVtep. Thus, existence check is redundant here.
 
-			if err := c.iptablesV6Manager.SyncRules(); err != nil {
-				return fmt.Errorf("sync v6 iptables rule failed: %v", err)
+				remoteSubnetList, err := c.remoteSubnetLister.List(labels.Everything())
+				if err != nil {
+					return fmt.Errorf("list remote network failed: %v", err)
+				}
+
+				// Record remote vtep ip.
+				vtepList, err := c.remoteVtepLister.List(labels.Everything())
+				if err != nil {
+					return fmt.Errorf("list remote vtep failed: %v", err)
+				}
+
+				for _, vtep := range vtepList {
+					if _, exist := vtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
+						ip := net.ParseIP(vtep.Spec.VtepIP)
+						if ip.To4() != nil {
+							// v4 address
+							c.iptablesV4Manager.RecordRemoteNodeIP(ip)
+						} else {
+							// v6 address
+							c.iptablesV6Manager.RecordRemoteNodeIP(ip)
+						}
+						continue
+					}
+
+					nodeLocalVxlanIPStringList := strings.Split(vtep.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
+					for _, ipString := range nodeLocalVxlanIPStringList {
+						ip := net.ParseIP(ipString)
+						if ip.To4() != nil {
+							// v4 address
+							c.iptablesV4Manager.RecordRemoteNodeIP(ip)
+						} else {
+							// v6 address
+							c.iptablesV6Manager.RecordRemoteNodeIP(ip)
+						}
+					}
+				}
+
+				// Record remote subnet cidr
+				for _, remoteSubnet := range remoteSubnetList {
+					_, cidr, err := net.ParseCIDR(remoteSubnet.Spec.Range.CIDR)
+					if err != nil {
+						return fmt.Errorf("parse remote subnet cidr %v failed: %v", remoteSubnet.Spec.Range.CIDR, err)
+					}
+
+					c.getIPtablesManager(remoteSubnet.Spec.Range.Version).
+						RecordRemoteSubnet(cidr, networkingv1.GetRemoteSubnetType(remoteSubnet) == networkingv1.NetworkTypeOverlay)
+				}
 			}
+		}
+
+		// Sync rules.
+		if err := c.iptablesV4Manager.SyncRules(); err != nil {
+			return fmt.Errorf("sync v4 iptables rule failed: %v", err)
+		}
+
+		if err := c.iptablesV6Manager.SyncRules(); err != nil {
+			return fmt.Errorf("sync v6 iptables rule failed: %v", err)
 		}
 
 		return nil
@@ -553,6 +664,17 @@ func indexByInstanceIP(obj interface{}) ([]string, error) {
 		}
 
 		return []string{podIP.String()}, nil
+	}
+	return []string{}, nil
+}
+
+var indexByEndpointIP cache.IndexFunc = func(obj interface{}) ([]string, error) {
+	vtep, ok := obj.(*networkingv1.RemoteVtep)
+	if ok {
+		endpointIPs := vtep.Spec.EndpointIPList
+		if len(endpointIPs) > 0 {
+			return endpointIPs, nil
+		}
 	}
 	return []string{}, nil
 }

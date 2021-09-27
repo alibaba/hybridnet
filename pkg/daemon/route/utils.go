@@ -459,7 +459,7 @@ func ensureExcludedIPBlockRoutes(excludeIPBlockMap map[string]*net.IPNet, table,
 	}
 
 	for _, route := range excludedRouteList {
-		if _, exist := excludeIPBlockMap[route.Dst.String()]; !exist {
+		if _, exists := excludeIPBlockMap[route.Dst.String()]; !exists {
 			if err := netlink.RouteDel(&route); err != nil {
 				return fmt.Errorf("delete excluded route %v failed: %v", route, err)
 			}
@@ -501,4 +501,36 @@ func isExcludeRoute(route *netlink.Route) bool {
 		return false
 	}
 	return route.Type == unix.RTN_THROW
+}
+
+func combineLocalAndRemoteSubnetInfoMap(local, remote SubnetInfoMap) SubnetInfoMap {
+	if len(remote) == 0 {
+		return local
+	}
+
+	res := make(map[string]*SubnetInfo, len(local)+len(remote))
+	for cidr, info := range local {
+		res[cidr] = info
+	}
+	for cidr, info := range remote {
+		res[cidr] = info
+	}
+
+	return res
+}
+
+func combineLocalAndRemoteExcludeIPBlockMap(local, remote map[string]*net.IPNet) map[string]*net.IPNet {
+	if len(remote) == 0 {
+		return local
+	}
+
+	res := make(map[string]*net.IPNet, len(local)+len(remote))
+	for s, block := range local {
+		res[s] = block
+	}
+	for s, block := range remote {
+		res[s] = block
+	}
+
+	return res
 }

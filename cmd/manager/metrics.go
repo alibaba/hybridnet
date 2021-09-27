@@ -21,12 +21,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alibaba/hybridnet/pkg/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/pflag"
 	"k8s.io/klog"
-
-	"github.com/alibaba/hybridnet/pkg/metrics"
 )
 
 var (

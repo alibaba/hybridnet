@@ -56,6 +56,12 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Networking().V1().IPInstances().Informer()}, nil
 	case v1.SchemeGroupVersion.WithResource("networks"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Networking().V1().Networks().Informer()}, nil
+	case v1.SchemeGroupVersion.WithResource("remoteclusters"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Networking().V1().RemoteClusters().Informer()}, nil
+	case v1.SchemeGroupVersion.WithResource("remotesubnets"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Networking().V1().RemoteSubnets().Informer()}, nil
+	case v1.SchemeGroupVersion.WithResource("remotevteps"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Networking().V1().RemoteVteps().Informer()}, nil
 	case v1.SchemeGroupVersion.WithResource("subnets"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Networking().V1().Subnets().Informer()}, nil
 

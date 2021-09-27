@@ -22,12 +22,15 @@ import (
 	"k8s.io/klog"
 
 	"github.com/alibaba/hybridnet/pkg/controller/ipam"
+	"github.com/alibaba/hybridnet/pkg/controller/remotecluster"
+	"github.com/alibaba/hybridnet/pkg/feature"
 )
 
 type initFunc func(manager *Manager) error
 
 var initFuncMap = map[string]initFunc{
-	ipam.ControllerName: initIPAMController,
+	ipam.ControllerName:          initIPAMController,
+	remotecluster.ControllerName: initRemoteClusterController,
 }
 
 var ipamController *ipam.Controller
@@ -41,6 +44,24 @@ func initIPAMController(m *Manager) error {
 		m.HybridnetInformerFactory.Networking().V1().Networks(),
 		m.HybridnetInformerFactory.Networking().V1().Subnets(),
 		m.HybridnetInformerFactory.Networking().V1().IPInstances(),
+	)
+	return nil
+}
+
+var rcController *remotecluster.Controller
+
+func initRemoteClusterController(m *Manager) error {
+	if !feature.MultiClusterEnabled() {
+		return nil
+	}
+	rcController = remotecluster.NewController(
+		m.KubeClient,
+		m.HybridnetClient,
+		m.HybridnetInformerFactory.Networking().V1().RemoteClusters(),
+		m.HybridnetInformerFactory.Networking().V1().RemoteSubnets(),
+		m.HybridnetInformerFactory.Networking().V1().Subnets(),
+		m.HybridnetInformerFactory.Networking().V1().RemoteVteps(),
+		m.HybridnetInformerFactory.Networking().V1().Networks(),
 	)
 	return nil
 }
