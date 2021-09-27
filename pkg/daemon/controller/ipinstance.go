@@ -295,6 +295,10 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 			klog.Errorf("get pod addresses and host link index error: %v", err)
 		}
 
+		if hostLinkIndex == 0 {
+			continue
+		}
+
 		hostLink, err := netlink.LinkByIndex(hostLinkIndex)
 		if err != nil {
 			return fmt.Errorf("get host link by index %v failed: %v", hostLinkIndex, err)
