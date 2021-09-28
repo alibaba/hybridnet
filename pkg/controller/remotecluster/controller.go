@@ -130,6 +130,34 @@ func NewController(
 		},
 	})
 
+	localClusterNetworkInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
+		FilterFunc: func(obj interface{}) bool {
+			network, ok := obj.(*networkingv1.Network)
+			if !ok {
+				return false
+			}
+			return network.Spec.Type == networkingv1.NetworkTypeOverlay
+		},
+		Handler: cache.ResourceEventHandlerFuncs{
+			AddFunc: func(_ interface{}) {
+				c.syncLocalOverlayNetIDOnce()
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				oldNetwork, _ := oldObj.(*networkingv1.Network)
+				newNetwork, _ := newObj.(*networkingv1.Network)
+				needSync := oldNetwork.Spec.Type != newNetwork.Spec.Type || oldNetwork.Spec.NetID == nil ||
+					newNetwork.Spec.NetID == nil || *oldNetwork.Spec.NetID != *newNetwork.Spec.NetID
+
+				if needSync {
+					c.syncLocalOverlayNetIDOnce()
+				}
+			},
+			DeleteFunc: func(_ interface{}) {
+				c.syncLocalOverlayNetIDOnce()
+			},
+		},
+	})
+
 	return c
 }
 
@@ -147,7 +175,6 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	// start workers
 	klog.Info("Starting workers")
 	go wait.Until(c.runRemoteClusterWorker, time.Second, stopCh)
-	go wait.Until(c.runOverlayNetIDWorker, time.Minute, stopCh)
 	go wait.Until(c.updateRemoteClusterStatus, HealthCheckPeriod, stopCh)
 	<-stopCh
 
@@ -166,19 +193,23 @@ func (c *Controller) closeAllRemoteClusterManager() {
 	})
 }
 
-func (c *Controller) runOverlayNetIDWorker() {
+func (c *Controller) syncLocalOverlayNetIDOnce() {
 	c.overlayNetIDMU.Lock()
 	defer c.overlayNetIDMU.Unlock()
 
 	networks, err := c.localClusterNetworkLister.List(labels.Everything())
 	if err != nil {
-		klog.Warningf("Can't list local cluster network. err=%v", err)
+		klog.Warningf("failed to list networks: %v", err)
 		return
 	}
 	for _, network := range networks {
 		if network.Spec.Type == networkingv1.NetworkTypeOverlay {
-			n := network.DeepCopy()
-			c.OverlayNetID = n.Spec.NetID
+			switch {
+			case c.OverlayNetID == nil || network.Spec.NetID == nil:
+				fallthrough
+			case *c.OverlayNetID != *network.Spec.NetID:
+				c.OverlayNetID = copyUint32Ptr(network.Spec.NetID)
+			}
 			break
 		}
 	}
@@ -268,4 +299,12 @@ func (c *Controller) updateSingleRCStatus(manager *rcmanager.Manager, rc *networ
 func ResumeReconcile(manager *rcmanager.Manager) {
 	manager.EnqueueSubnet(rcmanager.ReconcileSubnet)
 	manager.EnqueueNode(rcmanager.ReconcileNode)
+}
+
+func copyUint32Ptr(i *uint32) *uint32 {
+	if i == nil {
+		return nil
+	}
+	o := *i
+	return &o
 }
