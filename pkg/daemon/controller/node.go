@@ -357,12 +357,12 @@ func (c *Controller) reconcileNodeInfo() error {
 		for _, remoteVtep := range remoteVtepList {
 			vtepMac, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
 			if err != nil {
-				return fmt.Errorf("parse node vtep mac string %v failed: %v", remoteVtep.Spec.VtepMAC, err)
+				return fmt.Errorf("parse remote vtep mac string %v failed: %v", remoteVtep.Spec.VtepMAC, err)
 			}
 
 			vtepIP := net.ParseIP(remoteVtep.Spec.VtepIP)
 			if vtepIP == nil {
-				return fmt.Errorf("parse node vtep ip string %v failed", remoteVtep.Spec.VtepIP)
+				return fmt.Errorf("parse remote vtep ip string %v failed", remoteVtep.Spec.VtepIP)
 			}
 
 			vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
