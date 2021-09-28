@@ -99,6 +99,29 @@ func (w *Worker) ReCouple(pod *v1.Pod, ip *ipamtypes.IP) (err error) {
 	return w.patchIPtoPod(pod, ip)
 }
 
+func (w *Worker) DeCouple(pod *v1.Pod) (err error) {
+	if len(pod.Annotations[constants.AnnotationIP]) == 0 {
+		return
+	}
+
+	var ipInstanceList *networkingv1.IPInstanceList
+	if ipInstanceList, err = w.hybridnetClient.NetworkingV1().IPInstances(pod.Namespace).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: metav1.SetAsLabelSelector(map[string]string{
+			constants.LabelPod: pod.Name,
+		}).String(),
+	}); err != nil {
+		return err
+	}
+
+	for i := range ipInstanceList.Items {
+		if err = w.deleteIP(pod.Namespace, ipInstanceList.Items[i].Name); err != nil {
+			return err
+		}
+	}
+
+	return w.releaseIPFromPod(pod)
+}
+
 func (w *Worker) IPRecycle(namespace string, ip *ipamtypes.IP) (err error) {
 	return w.deleteIP(namespace, toDNSLabelFormat(ip))
 }
