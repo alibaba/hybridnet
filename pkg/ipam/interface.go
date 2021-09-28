@@ -59,6 +59,7 @@ type DualStackUsage interface {
 type Store interface {
 	Couple(pod *v1.Pod, ip *types.IP) (err error)
 	ReCouple(pod *v1.Pod, ip *types.IP) (err error)
+	DeCouple(pod *v1.Pod) (err error)
 	IPRecycle(namespace string, ip *types.IP) (err error)
 	IPUnBind(namespace, ip string) (err error)
 	SyncNetworkUsage(name string, usage *types.Usage) (err error)
@@ -69,6 +70,7 @@ type Store interface {
 type DualStackStore interface {
 	Couple(pod *v1.Pod, IPs []*types.IP) (err error)
 	ReCouple(pod *v1.Pod, IPs []*types.IP) (err error)
+	DeCouple(pod *v1.Pod) (err error)
 	IPRecycle(namespace string, ip *types.IP) (err error)
 	IPUnBind(namespace, ip string) (err error)
 	SyncNetworkUsage(name string, usages [3]*types.Usage) (err error)
