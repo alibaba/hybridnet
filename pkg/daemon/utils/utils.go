@@ -27,14 +27,14 @@ import (
 	"k8s.io/klog"
 )
 
-type RamaDaemonError string
+type HybridnetDaemonError string
 
-func (e RamaDaemonError) Error() string {
+func (e HybridnetDaemonError) Error() string {
 	return "error info: " + string(e)
 }
 
 const (
-	NotExist = RamaDaemonError("not exist")
+	NotExist = HybridnetDaemonError("not exist")
 )
 
 func ValidDockerNetnsDir(path string) bool {

@@ -22,12 +22,6 @@ import (
 	"sync"
 	"time"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
-	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned/scheme"
-	"github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
-	listers "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -40,6 +34,13 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
+	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned/scheme"
+	"github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
+	listers "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 const (
@@ -50,30 +51,30 @@ const (
 // Manager Those without the localCluster prefix are the resources of the remote cluster
 type Manager struct {
 	Meta
-	LocalClusterKubeClient   kubeclientset.Interface
-	LocalClusterRamaClient   versioned.Interface
-	RemoteSubnetLister       listers.RemoteSubnetLister
-	RemoteVtepLister         listers.RemoteVtepLister
-	LocalClusterSubnetLister listers.SubnetLister
+	LocalClusterKubeClient      kubeclientset.Interface
+	LocalClusterHybridnetClient versioned.Interface
+	RemoteSubnetLister          listers.RemoteSubnetLister
+	RemoteVtepLister            listers.RemoteVtepLister
+	LocalClusterSubnetLister    listers.SubnetLister
 
-	KubeClient              *kubeclientset.Clientset
-	RamaClient              *versioned.Clientset
-	KubeInformerFactory     informers.SharedInformerFactory
-	RamaInformerFactory     externalversions.SharedInformerFactory
-	NodeLister              corev1.NodeLister
-	NodeSynced              cache.InformerSynced
-	NodeQueue               workqueue.RateLimitingInterface
-	NetworkLister           listers.NetworkLister
-	NetworkSynced           cache.InformerSynced
-	SubnetLister            listers.SubnetLister
-	SubnetSynced            cache.InformerSynced
-	SubnetQueue             workqueue.RateLimitingInterface
-	IPLister                listers.IPInstanceLister
-	IPSynced                cache.InformerSynced
-	IPQueue                 workqueue.RateLimitingInterface
-	RemoteClusterNodeLister corev1.NodeLister
-	RemoteClusterNodeSynced cache.InformerSynced
-	Recorder                record.EventRecorder
+	KubeClient               *kubeclientset.Clientset
+	HybridnetClient          *versioned.Clientset
+	KubeInformerFactory      informers.SharedInformerFactory
+	HybridnetInformerFactory externalversions.SharedInformerFactory
+	NodeLister               corev1.NodeLister
+	NodeSynced               cache.InformerSynced
+	NodeQueue                workqueue.RateLimitingInterface
+	NetworkLister            listers.NetworkLister
+	NetworkSynced            cache.InformerSynced
+	SubnetLister             listers.SubnetLister
+	SubnetSynced             cache.InformerSynced
+	SubnetQueue              workqueue.RateLimitingInterface
+	IPLister                 listers.IPInstanceLister
+	IPSynced                 cache.InformerSynced
+	IPQueue                  workqueue.RateLimitingInterface
+	RemoteClusterNodeLister  corev1.NodeLister
+	RemoteClusterNodeSynced  cache.InformerSynced
+	Recorder                 record.EventRecorder
 }
 
 type Meta struct {
@@ -95,7 +96,7 @@ type Meta struct {
 
 func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	localClusterKubeClient kubeclientset.Interface,
-	localClusterRamaClient versioned.Interface,
+	localClusterHybridnetClient versioned.Interface,
 	remoteSubnetLister listers.RemoteSubnetLister,
 	localClusterSubnetLister listers.SubnetLister,
 	remoteVtepLister listers.RemoteVtepLister) (*Manager, error) {
@@ -118,14 +119,14 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: ControllerName})
 
 	kubeClient := kubeclientset.NewForConfigOrDie(config)
-	ramaClient := versioned.NewForConfigOrDie(restclient.AddUserAgent(config, UserAgentName))
+	hybridnetClient := versioned.NewForConfigOrDie(restclient.AddUserAgent(config, UserAgentName))
 	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
-	ramaInformerFactory := externalversions.NewSharedInformerFactory(ramaClient, 0)
+	hybridnetInformerFactory := externalversions.NewSharedInformerFactory(hybridnetClient, 0)
 
 	nodeInformer := kubeInformerFactory.Core().V1().Nodes()
-	networkInformer := ramaInformerFactory.Networking().V1().Networks()
-	subnetInformer := ramaInformerFactory.Networking().V1().Subnets()
-	ipInformer := ramaInformerFactory.Networking().V1().IPInstances()
+	networkInformer := hybridnetInformerFactory.Networking().V1().Networks()
+	subnetInformer := hybridnetInformerFactory.Networking().V1().Subnets()
+	ipInformer := hybridnetInformerFactory.Networking().V1().IPInstances()
 
 	uuid, err := utils.GetUUID(kubeClient)
 	if err != nil {
@@ -142,29 +143,29 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 			StopCh:           stopCh,
 			IsReady:          false,
 		},
-		LocalClusterKubeClient:   localClusterKubeClient,
-		LocalClusterRamaClient:   localClusterRamaClient,
-		RemoteSubnetLister:       remoteSubnetLister,
-		LocalClusterSubnetLister: localClusterSubnetLister,
-		RemoteVtepLister:         remoteVtepLister,
-		KubeClient:               kubeClient,
-		RamaClient:               ramaClient,
-		KubeInformerFactory:      kubeInformerFactory,
-		RamaInformerFactory:      ramaInformerFactory,
-		NodeLister:               kubeInformerFactory.Core().V1().Nodes().Lister(),
-		NodeSynced:               kubeInformerFactory.Core().V1().Nodes().Informer().HasSynced,
-		NodeQueue:                workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("%v-node", rc.ClusterName)),
-		NetworkLister:            networkInformer.Lister(),
-		NetworkSynced:            networkInformer.Informer().HasSynced,
-		SubnetLister:             subnetInformer.Lister(),
-		SubnetSynced:             subnetInformer.Informer().HasSynced,
-		SubnetQueue:              workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("%v-subnet", rc.ClusterName)),
-		IPLister:                 ipInformer.Lister(),
-		IPSynced:                 ipInformer.Informer().HasSynced,
-		IPQueue:                  workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("%v-ipinstance", rc.ClusterName)),
-		RemoteClusterNodeLister:  nodeInformer.Lister(),
-		RemoteClusterNodeSynced:  nodeInformer.Informer().HasSynced,
-		Recorder:                 recorder,
+		LocalClusterKubeClient:      localClusterKubeClient,
+		LocalClusterHybridnetClient: localClusterHybridnetClient,
+		RemoteSubnetLister:          remoteSubnetLister,
+		LocalClusterSubnetLister:    localClusterSubnetLister,
+		RemoteVtepLister:            remoteVtepLister,
+		KubeClient:                  kubeClient,
+		HybridnetClient:             hybridnetClient,
+		KubeInformerFactory:         kubeInformerFactory,
+		HybridnetInformerFactory:    hybridnetInformerFactory,
+		NodeLister:                  kubeInformerFactory.Core().V1().Nodes().Lister(),
+		NodeSynced:                  kubeInformerFactory.Core().V1().Nodes().Informer().HasSynced,
+		NodeQueue:                   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("%v-node", rc.ClusterName)),
+		NetworkLister:               networkInformer.Lister(),
+		NetworkSynced:               networkInformer.Informer().HasSynced,
+		SubnetLister:                subnetInformer.Lister(),
+		SubnetSynced:                subnetInformer.Informer().HasSynced,
+		SubnetQueue:                 workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("%v-subnet", rc.ClusterName)),
+		IPLister:                    ipInformer.Lister(),
+		IPSynced:                    ipInformer.Informer().HasSynced,
+		IPQueue:                     workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("%v-ipinstance", rc.ClusterName)),
+		RemoteClusterNodeLister:     nodeInformer.Lister(),
+		RemoteClusterNodeSynced:     nodeInformer.Informer().HasSynced,
+		Recorder:                    recorder,
 	}
 
 	nodeInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
@@ -211,7 +212,7 @@ func (m *Manager) Run() {
 		go wait.Until(m.RunIPInstanceWorker, 1*time.Second, managerCh)
 	}()
 	go m.KubeInformerFactory.Start(managerCh)
-	go m.RamaInformerFactory.Start(managerCh)
+	go m.HybridnetInformerFactory.Start(managerCh)
 }
 
 func (m *Manager) GetIsReady() bool {

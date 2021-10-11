@@ -97,14 +97,14 @@ func (m *Manager) reconcileSubnet() error {
 				klog.Warningf("convertSubnet2RemoteSubnet error. err=%v. subnet name=%v. ClusterID=%v", err, v.Name, m.ClusterName)
 				continue
 			}
-			newSubnet, err := m.LocalClusterRamaClient.NetworkingV1().RemoteSubnets().Create(context.TODO(), rcSubnet, metav1.CreateOptions{})
+			newSubnet, err := m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().Create(context.TODO(), rcSubnet, metav1.CreateOptions{})
 			if err != nil {
 				errHappen = true
 				klog.Warningf("Can't create remote subnet. err=%v. remote subnet name=%v", err, rcSubnet.Name)
 				continue
 			}
 			newSubnet.Status.LastModifyTime = cur
-			_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), newSubnet, metav1.UpdateOptions{})
+			_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), newSubnet, metav1.UpdateOptions{})
 			if err != nil {
 				errHappen = true
 				klog.Warningf("Can't update remote subnet status. err=%v. remote subnet name=%v", err, rcSubnet.Name)
@@ -116,14 +116,14 @@ func (m *Manager) reconcileSubnet() error {
 	go func() {
 		defer wg.Done()
 		for _, v := range update {
-			remoteSubnet, err := m.LocalClusterRamaClient.NetworkingV1().RemoteSubnets().Update(context.TODO(), v, metav1.UpdateOptions{})
+			remoteSubnet, err := m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().Update(context.TODO(), v, metav1.UpdateOptions{})
 			if err != nil {
 				errHappen = true
 				klog.Warningf("Can't update remote subnet. err=%v. remote subnet name=%v", err, remoteSubnet.Name)
 				continue
 			}
 			remoteSubnet.Status.LastModifyTime = cur
-			_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), remoteSubnet, metav1.UpdateOptions{})
+			_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), remoteSubnet, metav1.UpdateOptions{})
 			if err != nil {
 				errHappen = true
 				klog.Warningf("Can't update remote subnet status. err=%v. remote subnet name=%v", err, remoteSubnet.Name)
@@ -135,7 +135,7 @@ func (m *Manager) reconcileSubnet() error {
 	go func() {
 		defer wg.Done()
 		for _, v := range remove {
-			_ = m.LocalClusterRamaClient.NetworkingV1().RemoteSubnets().Delete(context.TODO(), v.Name, metav1.DeleteOptions{})
+			_ = m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().Delete(context.TODO(), v.Name, metav1.DeleteOptions{})
 			if err != nil && !k8serror.IsNotFound(err) {
 				errHappen = true
 				klog.Warningf("Can't delete remote subnet. remote subnet name=%v", v.Name)

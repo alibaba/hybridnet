@@ -46,7 +46,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 	node, err = m.NodeLister.Get(nodeName)
 	if err != nil {
 		if k8serror.IsNotFound(err) {
-			err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), vtepName, metav1.DeleteOptions{})
+			err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), vtepName, metav1.DeleteOptions{})
 			if k8serror.IsNotFound(err) {
 				return nil
 			}
@@ -81,18 +81,18 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 	}
 
 	if newVtep {
-		remoteVtep, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{})
+		remoteVtep, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
 	} else {
-		remoteVtep, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), remoteVtep, metav1.UpdateOptions{})
+		remoteVtep, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Update(context.TODO(), remoteVtep, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
 	}
 	remoteVtep.Status.LastModifyTime = metav1.Now()
-	_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
+	_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
 	return err
 }
 

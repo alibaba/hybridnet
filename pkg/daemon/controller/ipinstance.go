@@ -312,11 +312,11 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 		if hostLink.Attrs().MasterIndex != 0 {
 			bridge, err := netlink.LinkByIndex(hostLink.Attrs().MasterIndex)
 			if err != nil {
-				return fmt.Errorf("get rama bridge by index %v failed: %v", hostLink.Attrs().MasterIndex, err)
+				return fmt.Errorf("get bridge by index %v failed: %v", hostLink.Attrs().MasterIndex, err)
 			}
 
 			if err := netlink.LinkDel(bridge); err != nil {
-				return fmt.Errorf("delete rama bridge %v failed: %v", bridge.Attrs().Name, err)
+				return fmt.Errorf("delete bridge %v failed: %v", bridge.Attrs().Name, err)
 			}
 		}
 
