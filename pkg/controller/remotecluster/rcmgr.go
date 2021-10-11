@@ -42,21 +42,21 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 		}
 	}
 
-	rcMgr, err := rcmanager.NewRemoteClusterManager(rc, c.kubeClient, c.ramaClient, c.remoteSubnetLister,
+	rcMgr, err := rcmanager.NewRemoteClusterManager(rc, c.kubeClient, c.hybridnetClient, c.remoteSubnetLister,
 		c.localClusterSubnetLister, c.remoteVtepLister)
 
 	conditions := make([]networkingv1.ClusterCondition, 0)
-	if err != nil || rcMgr == nil || rcMgr.RamaClient == nil || rcMgr.KubeClient == nil {
+	if err != nil || rcMgr == nil || rcMgr.HybridnetClient == nil || rcMgr.KubeClient == nil {
 		connErr := errors.Errorf("Can't connect to remote cluster %v", clusterName)
 		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig", connErr.Error())
 		conditions = append(conditions, utils.NewClusterOffline(connErr))
 	} else {
-		conditions = CheckCondition(c, rcMgr.RamaClient, rc.ClusterName, DefaultChecker)
+		conditions = CheckCondition(c, rcMgr.HybridnetClient, rc.ClusterName, DefaultChecker)
 		rc.Status.UUID = rcMgr.ClusterUUID
 	}
 	rc.Status.Conditions = conditions
 
-	_, err = c.ramaClient.NetworkingV1().RemoteClusters().UpdateStatus(context.TODO(), rc, metav1.UpdateOptions{})
+	_, err = c.hybridnetClient.NetworkingV1().RemoteClusters().UpdateStatus(context.TODO(), rc, metav1.UpdateOptions{})
 	if err != nil {
 		runtime.HandleError(err)
 		return err

@@ -56,14 +56,14 @@ func (m *Manager) reconcileNode() error {
 	go func() {
 		defer wg.Done()
 		for _, v := range add {
-			vtep, err := m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), v, metav1.CreateOptions{})
+			vtep, err := m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Create(context.TODO(), v, metav1.CreateOptions{})
 			if err != nil {
 				errHappen = true
 				klog.Warningf("Can't create remote vtep in local cluster. err=%v. remote vtep name=%v", err, v.Name)
 				continue
 			}
 			vtep.Status.LastModifyTime = cur
-			_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
+			_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
 			if err != nil {
 				errHappen = true
 				klog.Warningf("Can't update remote vtep status in local cluster. err=%v. remote vtep name=%v", err, v.Name)
@@ -75,14 +75,14 @@ func (m *Manager) reconcileNode() error {
 	go func() {
 		defer wg.Done()
 		for _, v := range update {
-			vtep, err := m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), v, metav1.UpdateOptions{})
+			vtep, err := m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Update(context.TODO(), v, metav1.UpdateOptions{})
 			if err != nil {
 				errHappen = true
 				klog.Warningf("Can't update remote vtep in local cluster. err=%v. name=%v", err, v.Name)
 				continue
 			}
 			vtep.Status.LastModifyTime = cur
-			_, err = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
+			_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
 			if err != nil {
 				errHappen = true
 				klog.Warningf("Can't update remote vtep status in local cluster. err=%v. name=%v", err, v.Name)
@@ -94,7 +94,7 @@ func (m *Manager) reconcileNode() error {
 	go func() {
 		defer wg.Done()
 		for _, v := range remove {
-			_ = m.LocalClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), v, metav1.DeleteOptions{})
+			_ = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), v, metav1.DeleteOptions{})
 			if err != nil && !k8serror.IsNotFound(err) {
 				errHappen = true
 				klog.Warningf("Can't delete remote vtep in local cluster. remote vtep name=%v", v)

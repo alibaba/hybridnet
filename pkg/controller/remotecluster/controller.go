@@ -64,8 +64,8 @@ type Controller struct {
 	rcManagerCache sync.Map
 
 	kubeClient                kubeclientset.Interface
-	ramaClient                versioned.Interface
-	RamaInformerFactory       externalversions.SharedInformerFactory
+	hybridnetClient           versioned.Interface
+	HybridnetInformerFactory  externalversions.SharedInformerFactory
 	remoteClusterLister       listers.RemoteClusterLister
 	remoteClusterSynced       cache.InformerSynced
 	remoteClusterQueue        workqueue.RateLimitingInterface
@@ -83,7 +83,7 @@ type Controller struct {
 
 func NewController(
 	kubeClient kubeclientset.Interface,
-	ramaClient versioned.Interface,
+	hybridnetClient versioned.Interface,
 	remoteClusterInformer informers.RemoteClusterInformer,
 	remoteSubnetInformer informers.RemoteSubnetInformer,
 	localClusterSubnetInformer informers.SubnetInformer,
@@ -106,7 +106,7 @@ func NewController(
 		rcManagerCache:            sync.Map{},
 		UUID:                      uuid,
 		kubeClient:                kubeClient,
-		ramaClient:                ramaClient,
+		hybridnetClient:           hybridnetClient,
 		remoteClusterLister:       remoteClusterInformer.Lister(),
 		remoteClusterSynced:       remoteClusterInformer.Informer().HasSynced,
 		remoteSubnetLister:        remoteSubnetInformer.Lister(),
@@ -265,7 +265,7 @@ func (c *Controller) updateSingleRCStatus(manager *rcmanager.Manager, rc *networ
 	manager.IsReadyLock.Lock()
 	defer manager.IsReadyLock.Unlock()
 
-	conditions := CheckCondition(c, manager.RamaClient, manager.ClusterName, DefaultChecker)
+	conditions := CheckCondition(c, manager.HybridnetClient, manager.ClusterName, DefaultChecker)
 	newIsReady := IsReady(conditions)
 
 	if !manager.IsReady && newIsReady {
@@ -298,7 +298,7 @@ func (c *Controller) updateSingleRCStatus(manager *rcmanager.Manager, rc *networ
 	}
 	updateLastTransitionTime()
 
-	_, err := c.ramaClient.NetworkingV1().RemoteClusters().UpdateStatus(context.TODO(), rc, metav1.UpdateOptions{})
+	_, err := c.hybridnetClient.NetworkingV1().RemoteClusters().UpdateStatus(context.TODO(), rc, metav1.UpdateOptions{})
 	if err != nil {
 		klog.Warningf("[updateSingleRCStatus] can't update remote cluster. err=%v", err)
 	}

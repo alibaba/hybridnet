@@ -24,7 +24,7 @@ import (
 )
 
 func init() {
-	if err := feature.DefaultMutableFeatureGate.Add(DefaultRamaFeatureGates); err != nil {
+	if err := feature.DefaultMutableFeatureGate.Add(DefaultHybridnetFeatureGates); err != nil {
 		klog.Fatalf("feature gate init fails: %v", err)
 	}
 
@@ -41,7 +41,7 @@ const (
 	MultiCluster featuregate.Feature = "MultiCluster"
 )
 
-var DefaultRamaFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
+var DefaultHybridnetFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
 	DualStack: {
 		Default:    false,
 		PreRelease: featuregate.Alpha,

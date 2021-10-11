@@ -161,7 +161,7 @@ func (c *Controller) updateNodeNetworkAttachment(node *v1.Node) error {
 		return c.setNodeCondition(node.Name, v1.NodeCondition{
 			Type:               v1.NodeNetworkUnavailable,
 			Status:             v1.ConditionFalse,
-			Reason:             "RamaNetworkAttached",
+			Reason:             "HybridnetNetworkAttached",
 			Message:            fmt.Sprintf("Node belong to network %s", networkName),
 			LastTransitionTime: metav1.Now(),
 		})
@@ -170,7 +170,7 @@ func (c *Controller) updateNodeNetworkAttachment(node *v1.Node) error {
 	return c.setNodeCondition(node.Name, v1.NodeCondition{
 		Type:               v1.NodeNetworkUnavailable,
 		Status:             v1.ConditionTrue,
-		Reason:             "RamaNetworkDetached",
+		Reason:             "HybridnetNetworkDetached",
 		Message:            "Node has no related hybridnet network",
 		LastTransitionTime: metav1.Now(),
 	})

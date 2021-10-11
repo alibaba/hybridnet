@@ -32,7 +32,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
-type CheckStatusFunc func(c *Controller, rcRamaClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error)
+type CheckStatusFunc func(c *Controller, hybridnetClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error)
 
 var (
 	DefaultChecker    []CheckStatusFunc
@@ -47,11 +47,11 @@ func init() {
 	ConditionAllReady[utils.TypeSameOverlayNetID] = true
 }
 
-func CheckCondition(c *Controller, ramaClient *versioned.Clientset, clusterName string,
+func CheckCondition(c *Controller, hybridnetClient *versioned.Clientset, clusterName string,
 	checkers []CheckStatusFunc) []networkingv1.ClusterCondition {
 	conditions := make([]networkingv1.ClusterCondition, 0)
 	for _, checker := range checkers {
-		cond, err := checker(c, ramaClient, clusterName)
+		cond, err := checker(c, hybridnetClient, clusterName)
 		if err != nil {
 			break
 		}
@@ -83,10 +83,10 @@ func meetCondition(conditions []networkingv1.ClusterCondition) bool {
 	return cnt == len(ConditionAllReady)
 }
 
-func HealthChecker(c *Controller, ramaClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error) {
+func HealthChecker(c *Controller, hybridnetClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error) {
 	conditions := make([]networkingv1.ClusterCondition, 0)
 
-	body, err := ramaClient.Discovery().RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
+	body, err := hybridnetClient.Discovery().RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
 	if err != nil {
 		runtimeutil.HandleError(errors.Wrapf(err, "Cluster Health Check failed for cluster %v", clusterName))
 		conditions = append(conditions, utils.NewClusterOffline(err))
@@ -101,10 +101,10 @@ func HealthChecker(c *Controller, ramaClient *versioned.Clientset, clusterName s
 }
 
 // BidirectionalConnChecker check if remote cluster has create the remote cluster
-func BidirectionalConnChecker(c *Controller, ramaClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error) {
+func BidirectionalConnChecker(c *Controller, hybridnetClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error) {
 	conditions := make([]networkingv1.ClusterCondition, 0)
 
-	rcs, err := ramaClient.NetworkingV1().RemoteClusters().List(context.TODO(), metav1.ListOptions{})
+	rcs, err := hybridnetClient.NetworkingV1().RemoteClusters().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		runtimeutil.HandleError(err)
 		conditions = append(conditions, utils.NewBidirectionalConnNotReady(err.Error()))
@@ -130,7 +130,7 @@ func BidirectionalConnChecker(c *Controller, ramaClient *versioned.Clientset, cl
 	return conditions, nil
 }
 
-func OverlayNetIDChecker(c *Controller, ramaClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error) {
+func OverlayNetIDChecker(c *Controller, hybridnetClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error) {
 	defer func() {
 		if err := recover(); err != nil {
 			klog.Errorf("OverlayNetIDChecker panic. err=%v\n%v", err, debug.Stack())
@@ -138,7 +138,7 @@ func OverlayNetIDChecker(c *Controller, ramaClient *versioned.Clientset, cluster
 	}()
 	conditions := make([]networkingv1.ClusterCondition, 0)
 
-	networkList, err := ramaClient.NetworkingV1().Networks().List(context.TODO(), metav1.ListOptions{})
+	networkList, err := hybridnetClient.NetworkingV1().Networks().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		runtimeutil.HandleError(err)
 		conditions = append(conditions, utils.NewOverlayNetIDNotReady(err.Error()))
