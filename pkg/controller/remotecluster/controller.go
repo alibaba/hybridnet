@@ -202,8 +202,11 @@ func (c *Controller) syncLocalOverlayNetIDOnce() {
 		klog.Warningf("failed to list networks: %v", err)
 		return
 	}
+
+	var overlayNetworkExist = false
 	for _, network := range networks {
 		if network.Spec.Type == networkingv1.NetworkTypeOverlay {
+			overlayNetworkExist = true
 			switch {
 			case c.OverlayNetID == nil || network.Spec.NetID == nil:
 				fallthrough
@@ -212,6 +215,11 @@ func (c *Controller) syncLocalOverlayNetIDOnce() {
 			}
 			break
 		}
+	}
+
+	// clean overlay netID cache if non-existence
+	if !overlayNetworkExist {
+		c.OverlayNetID = nil
 	}
 }
 
