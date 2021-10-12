@@ -17,24 +17,18 @@
 package remotecluster
 
 import (
-	"context"
-
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/rcmanager"
-	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 // use remove+add instead of update
-func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
-	klog.Infof("[addOrUpdateRCMgr] cluster=%v", rc.Name)
+func (c *Controller) syncRemoteClusterManager(remoteCluster *networkingv1.RemoteCluster) error {
+	klog.Infof("[syncRemoteClusterManager] cluster=%v", remoteCluster.Name)
 
-	clusterName := rc.Name
+	clusterName := remoteCluster.Name
 	if oldManagerObject, loaded := c.rcManagerCache.LoadAndDelete(clusterName); loaded {
 		oldManager, ok := oldManagerObject.(*rcmanager.Manager)
 		if ok {
@@ -42,28 +36,15 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 		}
 	}
 
-	rcMgr, err := rcmanager.NewRemoteClusterManager(rc, c.kubeClient, c.hybridnetClient, c.remoteSubnetLister,
+	manager, err := rcmanager.NewRemoteClusterManager(remoteCluster, c.kubeClient, c.hybridnetClient, c.remoteSubnetLister,
 		c.localClusterSubnetLister, c.remoteVtepLister)
-
-	conditions := make([]networkingv1.ClusterCondition, 0)
-	if err != nil || rcMgr == nil || rcMgr.HybridnetClient == nil || rcMgr.KubeClient == nil {
-		connErr := errors.Errorf("Can't connect to remote cluster %v", clusterName)
-		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig", connErr.Error())
-		conditions = append(conditions, utils.NewClusterOffline(connErr))
-	} else {
-		conditions = CheckCondition(c, rcMgr.HybridnetClient, rc.ClusterName, DefaultChecker)
-		rc.Status.UUID = rcMgr.ClusterUUID
-	}
-	rc.Status.Conditions = conditions
-
-	_, err = c.hybridnetClient.NetworkingV1().RemoteClusters().UpdateStatus(context.TODO(), rc, metav1.UpdateOptions{})
 	if err != nil {
-		runtime.HandleError(err)
+		klog.Errorf("fail to create remote cluster manager: %v", err)
+		c.recorder.Event(remoteCluster, corev1.EventTypeWarning, "ErrNewRemoteClusterManager", err.Error())
 		return err
 	}
-	rcMgr.SetIsReady(IsReady(conditions))
 
-	c.rcManagerCache.Store(clusterName, rcMgr)
-	rcMgr.Run()
+	c.rcManagerCache.Store(clusterName, manager)
+	manager.Run()
 	return nil
 }

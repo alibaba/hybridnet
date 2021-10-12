@@ -44,7 +44,7 @@ func (c *Controller) reconcileRemoteCluster(clusterName string) error {
 		}
 		return err
 	}
-	return c.addOrUpdateRCMgr(remoteCluster)
+	return c.syncRemoteClusterManager(remoteCluster)
 }
 
 func (c *Controller) filterRemoteCluster(obj interface{}) bool {
