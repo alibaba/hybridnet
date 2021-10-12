@@ -109,16 +109,6 @@ func (in *ClusterCondition) DeepCopyInto(out *ClusterCondition) {
 		in, out := &in.LastTransitionTime, &out.LastTransitionTime
 		*out = (*in).DeepCopy()
 	}
-	if in.Reason != nil {
-		in, out := &in.Reason, &out.Reason
-		*out = new(string)
-		**out = **in
-	}
-	if in.Message != nil {
-		in, out := &in.Message, &out.Message
-		*out = new(string)
-		**out = **in
-	}
 	return
 }
 
