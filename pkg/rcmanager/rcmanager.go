@@ -128,18 +128,12 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	subnetInformer := hybridnetInformerFactory.Networking().V1().Subnets()
 	ipInformer := hybridnetInformerFactory.Networking().V1().IPInstances()
 
-	uuid, err := utils.GetUUID(kubeClient)
-	if err != nil {
-		return nil, err
-	}
-
 	stopCh := make(chan struct{})
 
 	rcMgr := &Manager{
 		Meta: Meta{
 			ClusterName:      rc.Name,
 			RemoteClusterUID: rc.UID,
-			ClusterUUID:      uuid,
 			StopCh:           stopCh,
 			IsReady:          false,
 		},
@@ -196,6 +190,10 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	})
 	klog.Infof("Successfully New Remote Cluster Manager. Cluster=%v", rc.Name)
 	return rcMgr, nil
+}
+
+func (m *Manager) GetUUID() types.UID {
+	return m.Meta.ClusterUUID
 }
 
 func (m *Manager) Run() {
