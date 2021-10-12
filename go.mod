@@ -1,6 +1,6 @@
 module github.com/alibaba/hybridnet
 
-go 1.13
+go 1.15
 
 require (
 	github.com/containernetworking/cni v0.7.1
