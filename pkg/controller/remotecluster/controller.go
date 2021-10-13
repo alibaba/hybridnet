@@ -17,14 +17,11 @@
 package remotecluster
 
 import (
-	"context"
 	"fmt"
-	"runtime/debug"
 	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
@@ -42,7 +39,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
 	informers "github.com/alibaba/hybridnet/pkg/client/informers/externalversions/networking/v1"
 	listers "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/metrics"
 	"github.com/alibaba/hybridnet/pkg/rcmanager"
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
@@ -51,8 +47,8 @@ const (
 	ControllerName = "remotecluster"
 
 	// HealthCheckPeriod Every HealthCheckPeriod will resync remote cluster cache and check rc
-	// health. Default: 20 second. Set to zero will also use the default value
-	HealthCheckPeriod = 20 * time.Second
+	// health. Default: 30 second. Set to zero will also use the default value
+	HealthCheckPeriod = 30 * time.Second
 )
 
 type Controller struct {
@@ -247,66 +243,11 @@ func (c *Controller) updateRemoteClusterStatus() {
 
 		wg.Add(1)
 		go func() {
-			c.updateSingleRCStatus(manager, r)
+			updateSingleRemoteClusterStatus(c, manager, r)
 			wg.Done()
 		}()
 	}
 	wg.Wait()
-}
-
-func (c *Controller) updateSingleRCStatus(manager *rcmanager.Manager, rc *networkingv1.RemoteCluster) {
-	defer func() {
-		if err := recover(); err != nil {
-			klog.Errorf("updateSingleRCStatus panic. err=%v\n%v", err, string(debug.Stack()))
-		}
-	}()
-	defer metrics.RemoteClusterStatusUpdateDurationFromStart(time.Now())
-
-	manager.IsReadyLock.Lock()
-	defer manager.IsReadyLock.Unlock()
-
-	conditions := CheckCondition(c, manager.HybridnetClient, manager.ClusterName, DefaultChecker)
-	newIsReady := IsReady(conditions)
-
-	if !manager.IsReady && newIsReady {
-		manager.IsReady = true
-		ResumeReconcile(manager)
-	}
-
-	rc = rc.DeepCopy()
-	updateLastTransitionTime := func() {
-		conditionChanged := false
-		if len(conditions) != len(rc.Status.Conditions) {
-			conditionChanged = true
-		} else {
-			for i := range conditions {
-				if conditions[i].Status == rc.Status.Conditions[i].Status &&
-					conditions[i].Type == rc.Status.Conditions[i].Type {
-					continue
-				} else {
-					conditionChanged = true
-					break
-				}
-			}
-		}
-		if !conditionChanged {
-			for i := range rc.Status.Conditions {
-				conditions[i].LastTransitionTime = rc.Status.Conditions[i].LastTransitionTime
-			}
-		}
-		rc.Status.Conditions = conditions
-	}
-	updateLastTransitionTime()
-
-	_, err := c.hybridnetClient.NetworkingV1().RemoteClusters().UpdateStatus(context.TODO(), rc, metav1.UpdateOptions{})
-	if err != nil {
-		klog.Warningf("[updateSingleRCStatus] can't update remote cluster. err=%v", err)
-	}
-}
-
-func ResumeReconcile(manager *rcmanager.Manager) {
-	manager.EnqueueSubnet(rcmanager.ReconcileSubnet)
-	manager.EnqueueNode(rcmanager.ReconcileNode)
 }
 
 func copyUint32Ptr(i *uint32) *uint32 {
@@ -315,4 +256,15 @@ func copyUint32Ptr(i *uint32) *uint32 {
 	}
 	o := *i
 	return &o
+}
+
+func (c *Controller) GetUUID() types.UID {
+	return c.UUID
+}
+
+func (c *Controller) GetOverlayNetID() *uint32 {
+	c.overlayNetIDMU.RLock()
+	defer c.overlayNetIDMU.RUnlock()
+
+	return c.OverlayNetID
 }

@@ -17,7 +17,6 @@
 package v1
 
 import (
-	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -225,7 +224,7 @@ type ClusterCondition struct {
 	// Type of cluster condition, Ready or Offline.
 	Type ClusterConditionType `json:"type"`
 	// Status of the condition, one of True, False, Unknown.
-	Status apiv1.ConditionStatus `json:"status"`
+	Status metav1.ConditionStatus `json:"status"`
 	// Last time the condition was checked.
 	LastProbeTime metav1.Time `json:"lastProbeTime"`
 	// Last time the condition transit from one status to another.

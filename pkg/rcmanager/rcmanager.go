@@ -23,6 +23,7 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -194,6 +195,34 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 
 func (m *Manager) GetUUID() types.UID {
 	return m.Meta.ClusterUUID
+}
+
+func (m *Manager) SetUUID(uid types.UID) {
+	m.Meta.ClusterUUID = uid
+}
+
+func (m *Manager) GetHybridnetClient() versioned.Interface {
+	return m.HybridnetClient
+}
+
+func (m *Manager) GetClusterName() string {
+	return m.Meta.ClusterName
+}
+
+func (m *Manager) GetOverlayNetID() *uint32 {
+	networks, err := m.NetworkLister.List(labels.Everything())
+	if err != nil {
+		return nil
+	}
+
+	for i := range networks {
+		if networks[i].Spec.Type == networkingv1.NetworkTypeOverlay {
+			if networks[i].Spec.NetID != nil {
+				return &(*networks[i].Spec.NetID)
+			}
+		}
+	}
+	return nil
 }
 
 func (m *Manager) Run() {
