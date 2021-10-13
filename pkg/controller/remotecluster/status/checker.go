@@ -39,6 +39,10 @@ var ConditionCheckers = []RegisteredChecker{
 		Checker: HealthProbeChecker,
 	},
 	{
+		Name:    LoopbackCheck,
+		Checker: LoopbackChecker,
+	},
+	{
 		Name:    OverlayNetIDCheck,
 		Checker: OverlayNetIDChecker,
 	},

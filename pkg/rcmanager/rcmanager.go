@@ -17,12 +17,14 @@
 package rcmanager
 
 import (
+	"context"
 	"fmt"
 	"runtime/debug"
 	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -199,11 +201,20 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 }
 
 func (m *Manager) GetUUID() types.UID {
-	return m.Meta.ClusterUUID
-}
+	if len(m.Meta.ClusterUUID) > 0 {
+		return m.Meta.ClusterUUID
+	}
 
-func (m *Manager) SetUUID(uid types.UID) {
-	m.Meta.ClusterUUID = uid
+	ns, err := m.KubeClient.CoreV1().Namespaces().Get(context.TODO(), "kube-system", metav1.GetOptions{})
+	if err != nil {
+		return ""
+	}
+
+	m.Lock()
+	m.Meta.ClusterUUID = ns.UID
+	m.Unlock()
+
+	return m.Meta.ClusterUUID
 }
 
 func (m *Manager) GetHybridnetClient() versioned.Interface {

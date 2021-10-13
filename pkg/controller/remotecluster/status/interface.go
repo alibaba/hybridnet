@@ -54,7 +54,6 @@ type RemoteKubeClient interface {
 
 type RemoteUUID interface {
 	GetUUID() types.UID
-	SetUUID(uid types.UID)
 }
 
 type RemoteClusterName interface {
