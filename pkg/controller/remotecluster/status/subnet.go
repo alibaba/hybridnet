@@ -28,40 +28,45 @@ import (
 const SubnetCheck = CheckerName("SubnetCheck")
 const SubnetOverlapped = v1.ClusterConditionType("SubnetOverlapped")
 
-func SubnetChecker(localObject interface{}, remoteObject interface{}, conditions []v1.ClusterCondition) (goOn bool, clusterStatus v1.ClusterStatus) {
+func SubnetChecker(localObject interface{}, remoteObject interface{}, status *v1.RemoteClusterStatus) (goOn bool) {
 	localSubnetInterface, ok := localObject.(LocalSubnets)
 	if !ok {
-		fillCondition(conditions, subnetError("BadLocalObject", "local object can not support getting subnets"))
-		return false, v1.ClusterOffline
+		fillCondition(status, subnetError("BadLocalObject", "local object can not support getting subnets"))
+		fillStatus(status, v1.ClusterOffline)
+		return false
 	}
 	remoteSubnetInterface, ok := remoteObject.(RemoteSubnets)
 	if !ok {
-		fillCondition(conditions, subnetError("BadRemoteObject", "remote object can not support getting subnets"))
-		return false, v1.ClusterOffline
+		fillCondition(status, subnetError("BadRemoteObject", "remote object can not support getting subnets"))
+		fillStatus(status, v1.ClusterOffline)
+		return false
 	}
 
 	localSubnets, err := localSubnetInterface.GetSubnets()
 	if err != nil {
-		fillCondition(conditions, subnetError("FetchFail", fmt.Sprintf("fail to fetch local subnets: %v", err)))
-		return false, v1.ClusterNotReady
+		fillCondition(status, subnetError("FetchFail", fmt.Sprintf("fail to fetch local subnets: %v", err)))
+		fillStatus(status, v1.ClusterNotReady)
+		return false
 	}
 	remoteSubnets, err := remoteSubnetInterface.GetSubnets()
 	if err != nil {
-		fillCondition(conditions, subnetError("FetchFail", fmt.Sprintf("fail to fetch remote subnets: %v", err)))
-		return false, v1.ClusterNotReady
+		fillCondition(status, subnetError("FetchFail", fmt.Sprintf("fail to fetch remote subnets: %v", err)))
+		fillStatus(status, v1.ClusterNotReady)
+		return false
 	}
 
 	for _, localSubnet := range localSubnets {
 		for _, remoteSubnet := range remoteSubnets {
 			if utils.Intersect(&localSubnet.Spec.Range, &remoteSubnet.Spec.Range) {
-				fillCondition(conditions, subnetError("SubnetOverlapped", fmt.Sprintf("local subnet %s is overlapped with remote subnet %s", localSubnet.Name, remoteSubnet.Name)))
-				return false, v1.ClusterNotReady
+				fillCondition(status, subnetError("SubnetOverlapped", fmt.Sprintf("local subnet %s is overlapped with remote subnet %s", localSubnet.Name, remoteSubnet.Name)))
+				fillStatus(status, v1.ClusterNotReady)
+				return false
 			}
 		}
 	}
 
-	fillCondition(conditions, subnetOK("NoOverlapped", ""))
-	return true, ""
+	fillCondition(status, subnetOK("NoOverlapped", ""))
+	return true
 }
 
 func subnetError(reason, message string) *v1.ClusterCondition {
@@ -81,4 +86,3 @@ func subnetOK(reason, message string) *v1.ClusterCondition {
 		Message: message,
 	}
 }
-

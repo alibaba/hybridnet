@@ -22,14 +22,14 @@ import (
 	v1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 )
 
-func fillCondition(conditions []v1.ClusterCondition, toFill *v1.ClusterCondition) {
+func fillCondition(status *v1.RemoteClusterStatus, toFill *v1.ClusterCondition) {
 	if toFill == nil || len(toFill.Type) == 0 {
 		return
 	}
 
 	idx := -1
-	for i := range conditions {
-		if conditions[i].Type == toFill.Type {
+	for i := range status.Conditions {
+		if status.Conditions[i].Type == toFill.Type {
 			idx = i
 			break
 		}
@@ -39,16 +39,20 @@ func fillCondition(conditions []v1.ClusterCondition, toFill *v1.ClusterCondition
 	if idx < 0 {
 		toFill.LastProbeTime = now
 		toFill.LastTransitionTime = nil
-		conditions = append(conditions, *toFill)
+		status.Conditions = append(status.Conditions, *toFill)
 		return
 	}
 
-	conditions[idx].LastProbeTime = now
-	if conditions[idx].Status != toFill.Status {
-		conditions[idx].Status = toFill.Status
+	status.Conditions[idx].LastProbeTime = now
+	if status.Conditions[idx].Status != toFill.Status {
+		status.Conditions[idx].Status = toFill.Status
 		// status change brings a transition
-		conditions[idx].LastTransitionTime = &now
+		status.Conditions[idx].LastTransitionTime = &now
 	}
-	conditions[idx].Reason = toFill.Reason
-	conditions[idx].Message = toFill.Message
+	status.Conditions[idx].Reason = toFill.Reason
+	status.Conditions[idx].Message = toFill.Message
+}
+
+func fillStatus(status *v1.RemoteClusterStatus, clusterStatus v1.ClusterStatus) {
+	status.Status = clusterStatus
 }

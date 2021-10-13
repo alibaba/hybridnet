@@ -23,8 +23,7 @@ import (
 	v1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 )
 
-type ConditionChecker func(localObject interface{}, remoteObject interface{}, conditions []v1.ClusterCondition) (
-	goOn bool, clusterStatus v1.ClusterStatus)
+type ConditionChecker func(localObject interface{}, remoteObject interface{}, status *v1.RemoteClusterStatus) (goOn bool)
 
 type CheckerName string
 
@@ -56,29 +55,30 @@ var ConditionCheckers = []RegisteredChecker{
 	},
 }
 
-func Check(localObject, remoteObject interface{}, conditions []v1.ClusterCondition) v1.ClusterStatus {
+func Check(localObject, remoteObject interface{}, status *v1.RemoteClusterStatus) {
 	if len(ConditionCheckers) == 0 {
-		return v1.ClusterUnknown
+		status.Status = v1.ClusterUnknown
+		return
 	}
 
-	var clusterStatus v1.ClusterStatus
-	var goOn = false
-
+	var goOn bool
 	for i := range ConditionCheckers {
 		var registeredChecker = ConditionCheckers[i]
 
-		goOn, clusterStatus = registeredChecker.Checker(localObject, remoteObject, conditions)
+		goOn = registeredChecker.Checker(localObject, remoteObject, status)
 		if !goOn {
-			klog.Errorf("cluster check break on %s and got cluster status %s", registeredChecker.Name, clusterStatus)
-			return clusterStatus
+			klog.Errorf("cluster check break on %s and got cluster status %s", registeredChecker.Name, status.Status)
+			return
 		}
 	}
 
-	for i := range conditions {
-		if conditions[i].Status == metav1.ConditionTrue {
-			klog.Errorf("cluster check failed on %s, will become not ready", conditions[i].Type)
-			return v1.ClusterNotReady
+	for i := range status.Conditions {
+		if status.Conditions[i].Status == metav1.ConditionTrue {
+			klog.Errorf("cluster check failed on %s, will become not ready", status.Conditions[i].Type)
+			status.Status = v1.ClusterNotReady
+			return
 		}
 	}
-	return v1.ClusterReady
+
+	status.Status = v1.ClusterReady
 }

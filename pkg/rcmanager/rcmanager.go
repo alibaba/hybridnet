@@ -234,7 +234,8 @@ func (m *Manager) GetOverlayNetID() *uint32 {
 	for i := range networks {
 		if networks[i].Spec.Type == networkingv1.NetworkTypeOverlay {
 			if networks[i].Spec.NetID != nil {
-				return &(*networks[i].Spec.NetID)
+				netID := *networks[i].Spec.NetID
+				return &netID
 			}
 		}
 	}

@@ -27,17 +27,19 @@ import (
 const BidirectionalConnection = CheckerName("BidirectionalConnection")
 const MissingPeer = v1.ClusterConditionType("MissingPeer")
 
-func BidirectionalConnectionChecker(localObject interface{}, remoteObject interface{}, conditions []v1.ClusterCondition) (goOn bool, clusterStatus v1.ClusterStatus) {
+func BidirectionalConnectionChecker(localObject interface{}, remoteObject interface{}, status *v1.RemoteClusterStatus) (goOn bool) {
 	localUUID, ok := localObject.(LocalUUID)
 	if !ok {
-		fillCondition(conditions, bidirectionalConnectionError("BadLocalObject", "local object can not support getting uuid"))
-		return false, v1.ClusterOffline
+		fillCondition(status, bidirectionalConnectionError("BadLocalObject", "local object can not support getting uuid"))
+		fillStatus(status, v1.ClusterOffline)
+		return false
 	}
 
 	clientInterface, ok := remoteObject.(RemoteHybridnetClient)
 	if !ok {
-		fillCondition(conditions, bidirectionalConnectionError("BadRemoteObject", "remote object can not support getting hybridnet client"))
-		return false, v1.ClusterOffline
+		fillCondition(status, bidirectionalConnectionError("BadRemoteObject", "remote object can not support getting hybridnet client"))
+		fillStatus(status, v1.ClusterOffline)
+		return false
 	}
 
 	var hybridnetClient = clientInterface.GetHybridnetClient()
@@ -45,8 +47,9 @@ func BidirectionalConnectionChecker(localObject interface{}, remoteObject interf
 
 	remoteClusterList, err := hybridnetClient.NetworkingV1().RemoteClusters().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		fillCondition(conditions, bidirectionalConnectionError("BadConnection", "fail to get remote clusters"))
-		return false, v1.ClusterOffline
+		fillCondition(status, bidirectionalConnectionError("BadConnection", "fail to get remote clusters"))
+		fillStatus(status, v1.ClusterOffline)
+		return false
 	}
 
 	var peered = false
@@ -62,12 +65,13 @@ func BidirectionalConnectionChecker(localObject interface{}, remoteObject interf
 	}
 
 	if !peered {
-		fillCondition(conditions, bidirectionalConnectionError("PeerNotFound", "remote cluster has no peered connection pointed here"))
-		return false, v1.ClusterNotReady
+		fillCondition(status, bidirectionalConnectionError("PeerNotFound", "remote cluster has no peered connection pointed here"))
+		fillStatus(status, v1.ClusterNotReady)
+		return false
 	}
 
-	fillCondition(conditions, bidirectionalConnectionOK("Established", ""))
-	return true, ""
+	fillCondition(status, bidirectionalConnectionOK("Established", ""))
+	return true
 }
 
 func bidirectionalConnectionError(reason, message string) *v1.ClusterCondition {
