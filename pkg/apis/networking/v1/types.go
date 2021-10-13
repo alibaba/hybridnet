@@ -26,6 +26,14 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
 
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.spec.address.ip`
+// +kubebuilder:printcolumn:name="Gateway",type=string,JSONPath=`.spec.address.gateway`
+// +kubebuilder:printcolumn:name="PodName",type=string,JSONPath=`.status.podName`
+// +kubebuilder:printcolumn:name="Node",type=string,JSONPath=`.status.nodeName`
+// +kubebuilder:printcolumn:name="Subnet",type=string,JSONPath=`.spec.subnet`
+// +kubebuilder:printcolumn:name="Network",type=string,JSONPath=`.spec.network`
+
 // IPInstance is a specification for a IPInstance resource
 type IPInstance struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -75,6 +83,19 @@ type IPInstanceList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
 
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.range.version`
+// +kubebuilder:printcolumn:name="CIDR",type=string,JSONPath=`.spec.range.cidr`
+// +kubebuilder:printcolumn:name="Start",type=string,JSONPath=`.spec.range.start`
+// +kubebuilder:printcolumn:name="End",type=string,JSONPath=`.spec.range.end`
+// +kubebuilder:printcolumn:name="Gateway",type=string,JSONPath=`.spec.range.gateway`
+// +kubebuilder:printcolumn:name="Total",type=integer,JSONPath=`.status.total`
+// +kubebuilder:printcolumn:name="Used",type=integer,JSONPath=`.status.used`
+// +kubebuilder:printcolumn:name="Available",type=integer,JSONPath=`.status.available`
+// +kubebuilder:printcolumn:name="NetID",type=integer,JSONPath=`.spec.netID`
+// +kubebuilder:printcolumn:name="Network",type=string,JSONPath=`.spec.network`
+
 // Subnet is a specification for a Subnet resource
 type Subnet struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -94,7 +115,7 @@ type SubnetSpec struct {
 
 // SubnetStatus is the status for a Subnet resource
 type SubnetStatus struct {
-	Count
+	Count           `json:",inline"`
 	LastAllocatedIP string `json:"lastAllocatedIP"`
 }
 
@@ -136,6 +157,11 @@ type SubnetList struct {
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
+
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="NetID",type=integer,JSONPath=`.spec.netID`
+// +kubebuilder:printcolumn:name="SwitchID",type=string,JSONPath=`.spec.switchID`
 
 // Network is a specification for a Network resource
 type Network struct {
@@ -181,6 +207,11 @@ type NetworkList struct {
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
+
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.spec.connConfig.endpoint`
+// +kubebuilder:printcolumn:name="UUID",type=string,JSONPath=`.status.uuid`
 
 // RemoteCluster is a specification for a RemoteCluster resource
 type RemoteCluster struct {
@@ -251,6 +282,17 @@ type RemoteClusterList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
 
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.range.version`
+// +kubebuilder:printcolumn:name="CIDR",type=string,JSONPath=`.spec.range.cidr`
+// +kubebuilder:printcolumn:name="Start",type=string,JSONPath=`.spec.range.start`
+// +kubebuilder:printcolumn:name="End",type=string,JSONPath=`.spec.range.end`
+// +kubebuilder:printcolumn:name="Gateway",type=string,JSONPath=`.spec.range.gateway`
+// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.range.type`
+// +kubebuilder:printcolumn:name="ClusterName",type=string,JSONPath=`.spec.clusterName`
+// +kubebuilder:printcolumn:name="LastModifyTime",type=date,JSONPath=`.status.lastModifyTime`
+
 // RemoteSubnet is a specification for a RemoteSubnet resource
 type RemoteSubnet struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -287,6 +329,14 @@ type RemoteSubnetList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
 
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="VtepMAC",type=string,JSONPath=`.spec.vtepMAC`
+// +kubebuilder:printcolumn:name="VtepIP",type=string,JSONPath=`.spec.vtepIP`
+// +kubebuilder:printcolumn:name="NodeName",type=string,JSONPath=`.spec.nodeName`
+// +kubebuilder:printcolumn:name="ClusterName",type=string,JSONPath=`.spec.clusterName`
+// +kubebuilder:printcolumn:name="LastModifyTime",type=date,JSONPath=`.status.lastModifyTime`
+
 // RemoteVtep is a specification for a RemoteVtep resource
 type RemoteVtep struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -301,7 +351,7 @@ type RemoteVtepSpec struct {
 	ClusterName    string   `json:"clusterName"`
 	NodeName       string   `json:"nodeName"`
 	VtepIP         string   `json:"vtepIP"`
-	VtepMAC        string   `json:"vtepMAC"`
+	VtepMAC        string   `json:"c"`
 	EndpointIPList []string `json:"endpointIPList"`
 }
 
