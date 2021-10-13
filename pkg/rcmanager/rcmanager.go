@@ -51,6 +51,9 @@ const (
 
 // Manager Those without the localCluster prefix are the resources of the remote cluster
 type Manager struct {
+	sync.Mutex
+	hasSynced bool
+
 	Meta
 	LocalClusterKubeClient      kubeclientset.Interface
 	LocalClusterHybridnetClient versioned.Interface
@@ -132,6 +135,8 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	stopCh := make(chan struct{})
 
 	rcMgr := &Manager{
+		Mutex:     sync.Mutex{},
+		hasSynced: false,
 		Meta: Meta{
 			ClusterName:      rc.Name,
 			RemoteClusterUID: rc.UID,
@@ -225,6 +230,13 @@ func (m *Manager) GetOverlayNetID() *uint32 {
 	return nil
 }
 
+func (m *Manager) GetSubnets() ([]*networkingv1.Subnet, error) {
+	if !m.hasSynced {
+		return nil, fmt.Errorf("informer cache has not synced yet")
+	}
+	return m.SubnetLister.List(labels.Everything())
+}
+
 func (m *Manager) Run() {
 	klog.Infof("Start single remote cluster manager. clusterName=%v", m.ClusterName)
 
@@ -234,6 +246,11 @@ func (m *Manager) Run() {
 			klog.Errorf("failed to wait for remote cluster caches to sync. clusterName=%v", m.ClusterName)
 			return
 		}
+
+		m.Lock()
+		m.hasSynced = true
+		m.Unlock()
+
 		go wait.Until(m.RunNodeWorker, 1*time.Second, managerCh)
 		go wait.Until(m.RunSubnetWorker, 1*time.Second, managerCh)
 		go wait.Until(m.RunIPInstanceWorker, 1*time.Second, managerCh)

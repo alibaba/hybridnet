@@ -46,6 +46,10 @@ var ConditionCheckers = []RegisteredChecker{
 		Name:    BidirectionalConnection,
 		Checker: BidirectionalConnectionChecker,
 	},
+	{
+		Name:    SubnetCheck,
+		Checker: SubnetChecker,
+	},
 }
 
 func Check(localObject, remoteObject interface{}, conditions []v1.ClusterCondition) v1.ClusterStatus {
