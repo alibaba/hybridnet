@@ -67,10 +67,9 @@ func updateSingleRemoteClusterStatus(c *Controller, manager *rcmanager.Manager, 
 	defer manager.IsReadyLock.Unlock()
 
 	newRemoteCluster := rc.DeepCopy()
-	clusterStatus := status.Check(c, manager, newRemoteCluster.Status.Conditions)
-	newRemoteCluster.Status.Status = clusterStatus
+	status.Check(c, manager, &newRemoteCluster.Status)
 
-	if !manager.IsReady && clusterStatus == networkingv1.ClusterReady {
+	if !manager.IsReady && newRemoteCluster.Status.Status == networkingv1.ClusterReady {
 		manager.IsReady = true
 		resumeReconcile(manager)
 	}

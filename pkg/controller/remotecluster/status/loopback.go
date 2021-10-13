@@ -27,31 +27,35 @@ import (
 const LoopbackCheck = CheckerName("LoopbackCheck")
 const ClusterLoopback = v1.ClusterConditionType("ClusterLoopback")
 
-func LoopbackChecker(localObject interface{}, remoteObject interface{}, conditions []v1.ClusterCondition) (goOn bool, clusterStatus v1.ClusterStatus) {
+func LoopbackChecker(localObject interface{}, remoteObject interface{}, status *v1.RemoteClusterStatus) (goOn bool) {
 	localUUIDInterface, ok := localObject.(LocalUUID)
 	if !ok {
-		fillCondition(conditions, loopbackError("BadLocalObject", "local object can not support getting UUID"))
-		return false, v1.ClusterOffline
+		fillCondition(status, loopbackError("BadLocalObject", "local object can not support getting UUID"))
+		fillStatus(status, v1.ClusterOffline)
+		return false
 	}
 	remoteUUIDInterface, ok := remoteObject.(RemoteUUID)
 	if !ok {
-		fillCondition(conditions, loopbackError("BadRemoteObject", "remote object can not support getting UUID"))
-		return false, v1.ClusterOffline
+		fillCondition(status, loopbackError("BadRemoteObject", "remote object can not support getting UUID"))
+		fillStatus(status, v1.ClusterOffline)
+		return false
 	}
 
 	localUUID, remoteUUID := localUUIDInterface.GetUUID(), remoteUUIDInterface.GetUUID()
 	if localUUID == "" || remoteUUID == "" {
-		fillCondition(conditions, loopbackError("InvalidUUID", fmt.Sprintf("invalid local UUID %s or remote UUID %s", localUUID, remoteUUID)))
-		return false, v1.ClusterNotReady
+		fillCondition(status, loopbackError("InvalidUUID", fmt.Sprintf("invalid local UUID %s or remote UUID %s", localUUID, remoteUUID)))
+		fillStatus(status, v1.ClusterNotReady)
+		return false
 	}
 
 	if localUUID == remoteUUID {
-		fillCondition(conditions, loopbackError("InvalidRemoteCluster", "remote cluster can not loopback to local cluster"))
-		return false, v1.ClusterNotReady
+		fillCondition(status, loopbackError("InvalidRemoteCluster", "remote cluster can not loopback to local cluster"))
+		fillStatus(status, v1.ClusterNotReady)
+		return false
 	}
 
-	fillCondition(conditions, loopbackOK("UniqueCluster", ""))
-	return true, ""
+	fillCondition(status, loopbackOK("UniqueCluster", ""))
+	return true
 }
 
 func loopbackError(reason, message string) *v1.ClusterCondition {

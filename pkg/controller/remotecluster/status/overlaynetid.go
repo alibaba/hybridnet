@@ -25,17 +25,19 @@ import (
 const OverlayNetIDCheck = CheckerName("OverlayNetIDCheck")
 const OverlayNetIDMismatch = v1.ClusterConditionType("OverlayNetIDMismatch")
 
-func OverlayNetIDChecker(localObject interface{}, remoteObject interface{}, conditions []v1.ClusterCondition) (goOn bool, clusterStatus v1.ClusterStatus) {
+func OverlayNetIDChecker(localObject interface{}, remoteObject interface{}, status *v1.RemoteClusterStatus) (goOn bool) {
 	localOverlayNetIDInterface, ok := localObject.(LocalOverlayNetID)
 	if !ok {
-		fillCondition(conditions, overlayNetIDError("BadLocalObject", "local object can not support getting overlay net ID"))
-		return false, v1.ClusterOffline
+		fillCondition(status, overlayNetIDError("BadLocalObject", "local object can not support getting overlay net ID"))
+		fillStatus(status, v1.ClusterOffline)
+		return false
 	}
 
 	remoteOverlayNetIDInterface, ok := remoteObject.(RemoteOverlayNetID)
 	if !ok {
-		fillCondition(conditions, overlayNetIDError("BadRemoteObject", "remote object can not support getting overlay net ID"))
-		return false, v1.ClusterOffline
+		fillCondition(status, overlayNetIDError("BadRemoteObject", "remote object can not support getting overlay net ID"))
+		fillStatus(status, v1.ClusterOffline)
+		return false
 	}
 
 	localOverlayNetID := localOverlayNetIDInterface.GetOverlayNetID()
@@ -43,17 +45,20 @@ func OverlayNetIDChecker(localObject interface{}, remoteObject interface{}, cond
 
 	switch {
 	case localOverlayNetID == nil:
-		fillCondition(conditions, overlayNetIDError("InvalidLocalOverlayNetID", "fail to fetch a valid one"))
-		return false, v1.ClusterNotReady
+		fillCondition(status, overlayNetIDError("InvalidLocalOverlayNetID", "fail to fetch a valid one"))
+		fillStatus(status, v1.ClusterNotReady)
+		return false
 	case remoteOverlayNetID == nil:
-		fillCondition(conditions, overlayNetIDError("InvalidRemoteOverlayNetID", "fail to fetch a valid one"))
-		return false, v1.ClusterNotReady
+		fillCondition(status, overlayNetIDError("InvalidRemoteOverlayNetID", "fail to fetch a valid one"))
+		fillStatus(status, v1.ClusterNotReady)
+		return false
 	case *localOverlayNetID != *remoteOverlayNetID:
-		fillCondition(conditions, overlayNetIDError("OverlayNetIDMismatch", "only support same overlay net ID among clusters"))
-		return false, v1.ClusterNotReady
+		fillCondition(status, overlayNetIDError("OverlayNetIDMismatch", "only support same overlay net ID among clusters"))
+		fillStatus(status, v1.ClusterNotReady)
+		return false
 	default:
-		fillCondition(conditions, overlayNetIDOK("OverlayNetIDCheckPass", ""))
-		return true, ""
+		fillCondition(status, overlayNetIDOK("OverlayNetIDCheckPass", ""))
+		return true
 	}
 }
 
