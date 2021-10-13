@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
+	v1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
 )
 
@@ -33,6 +34,14 @@ type LocalOverlayNetID interface {
 
 type RemoteOverlayNetID interface {
 	GetOverlayNetID() *uint32
+}
+
+type LocalSubnets interface {
+	GetSubnets() ([]*v1.Subnet, error)
+}
+
+type RemoteSubnets interface {
+	GetSubnets() ([]*v1.Subnet, error)
 }
 
 type RemoteHybridnetClient interface {

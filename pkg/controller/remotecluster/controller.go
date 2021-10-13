@@ -52,6 +52,9 @@ const (
 )
 
 type Controller struct {
+	sync.Mutex
+	hasSynced bool
+
 	// localCluster's UUID
 	UUID           types.UID
 	OverlayNetID   *uint32
@@ -99,6 +102,8 @@ func NewController(
 	}
 
 	c := &Controller{
+		Mutex:                     sync.Mutex{},
+		hasSynced:                 false,
 		rcManagerCache:            sync.Map{},
 		UUID:                      uuid,
 		kubeClient:                kubeClient,
@@ -167,6 +172,10 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	if ok := cache.WaitForCacheSync(stopCh, c.remoteClusterSynced, c.remoteSubnetSynced, c.remoteVtepSynced, c.localClusterSubnetSynced, c.localClusterNetworkSynced); !ok {
 		return fmt.Errorf("%s failed to wait for caches to sync", ControllerName)
 	}
+
+	c.Lock()
+	c.hasSynced = true
+	c.Unlock()
 
 	// start workers
 	klog.Info("Starting workers")
@@ -267,4 +276,11 @@ func (c *Controller) GetOverlayNetID() *uint32 {
 	defer c.overlayNetIDMU.RUnlock()
 
 	return c.OverlayNetID
+}
+
+func (c *Controller) GetSubnets() ([]*networkingv1.Subnet, error) {
+	if !c.hasSynced {
+		return nil, fmt.Errorf("informer cache has not synced yet")
+	}
+	return c.localClusterSubnetLister.List(labels.Everything())
 }
