@@ -101,12 +101,9 @@ spec:
               lastModifyTime:
                 format: date-time
                 type: string
-            required:
-            - lastModifyTime
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true

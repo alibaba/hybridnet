@@ -39,33 +39,51 @@ type IPInstance struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   IPInstanceSpec   `json:"spec"`
+	// +kubebuilder:validation:Required
+	Spec IPInstanceSpec `json:"spec"`
+	// +optional
 	Status IPInstanceStatus `json:"status"`
 }
 
 // IPInstanceSpec is the spec for a IPInstance resource
 type IPInstanceSpec struct {
-	Network string  `json:"network"`
-	Subnet  string  `json:"subnet"`
+	// +kubebuilder:validation:Required
+	Network string `json:"network"`
+
+	// +kubebuilder:validation:Required
+	Subnet string `json:"subnet"`
+
+	// +kubebuilder:validation:Required
 	Address Address `json:"address"`
 }
 
 type Address struct {
+	// +kubebuilder:validation:Required
 	Version IPVersion `json:"version"`
-	IP      string    `json:"ip"`
-	Gateway string    `json:"gateway"`
-	NetID   *uint32   `json:"netID"`
-	MAC     string    `json:"mac"`
+
+	// +kubebuilder:validation:Required
+	IP string `json:"ip"`
+	// +kubebuilder:validation:Required
+	Gateway string `json:"gateway"`
+	// +kubebuilder:validation:Required
+	NetID *uint32 `json:"netID"`
+	// +kubebuilder:validation:Required
+	MAC string `json:"mac"`
 }
 
 // IPInstanceStatus is the status for a IPInstance resource
 type IPInstanceStatus struct {
-	NodeName string  `json:"nodeName"`
-	Phase    IPPhase `json:"phase"`
+	// +optional
+	NodeName string `json:"nodeName"`
+	// +optional
+	Phase IPPhase `json:"phase"`
 
-	PodName      string `json:"podName"`
+	// +optional
+	PodName string `json:"podName"`
+	// +optional
 	PodNamespace string `json:"podNamespace"`
-	SandboxID    string `json:"sandboxID"`
+	// +optional
+	SandboxID string `json:"sandboxID"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -101,45 +119,74 @@ type Subnet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   SubnetSpec   `json:"spec"`
+	// +kubebuilder:validation:Required
+	Spec SubnetSpec `json:"spec"`
+	// +optional
 	Status SubnetStatus `json:"status"`
 }
 
 // SubnetSpec is the spec for a Subnet resource
 type SubnetSpec struct {
-	Range   AddressRange  `json:"range"`
-	NetID   *uint32       `json:"netID"`
-	Network string        `json:"network"`
-	Config  *SubnetConfig `json:"config"`
+	// +kubebuilder:validation:Required
+	Range AddressRange `json:"range"`
+
+	// +optional
+	NetID *uint32 `json:"netID"`
+
+	// +kubebuilder:validation:Required
+	Network string `json:"network"`
+
+	// +optional
+	Config *SubnetConfig `json:"config"`
 }
 
 // SubnetStatus is the status for a Subnet resource
 type SubnetStatus struct {
-	Count           `json:",inline"`
+	// +optional
+	Count `json:",inline"`
+	// +optional
 	LastAllocatedIP string `json:"lastAllocatedIP"`
 }
 
 type AddressRange struct {
-	Version     IPVersion `json:"version"`
-	Start       string    `json:"start,omitempty"`
-	End         string    `json:"end,omitempty"`
-	CIDR        string    `json:"cidr"`
-	Gateway     string    `json:"gateway"`
-	ReservedIPs []string  `json:"reservedIPs,omitempty"`
-	ExcludeIPs  []string  `json:"excludeIPs,omitempty"`
+	// +kubebuilder:validation:Required
+	Version IPVersion `json:"version"`
+
+	// +optional
+	Start string `json:"start,omitempty"`
+	// +optional
+	End string `json:"end,omitempty"`
+
+	// +kubebuilder:validation:Required
+	CIDR string `json:"cidr"`
+	// +kubebuilder:validation:Required
+	Gateway string `json:"gateway"`
+
+	// +optional
+	ReservedIPs []string `json:"reservedIPs,omitempty"`
+	// +optional
+	ExcludeIPs []string `json:"excludeIPs,omitempty"`
 }
 
 type SubnetConfig struct {
-	GatewayType     string   `json:"gatewayType"`
-	GatewayNode     string   `json:"gatewayNode"`
-	AutoNatOutgoing *bool    `json:"autoNatOutgoing"`
-	Private         *bool    `json:"private"`
-	AllowSubnets    []string `json:"allowSubnets"`
+	// +optional
+	GatewayType string `json:"gatewayType"`
+	// +optional
+	GatewayNode string `json:"gatewayNode"`
+	// +optional
+	AutoNatOutgoing *bool `json:"autoNatOutgoing"`
+	// +optional
+	Private *bool `json:"private"`
+	// +optional
+	AllowSubnets []string `json:"allowSubnets"`
 }
 
 type Count struct {
-	Total     uint32 `json:"total"`
-	Used      uint32 `json:"used"`
+	// +optional
+	Total uint32 `json:"total"`
+	// +optional
+	Used uint32 `json:"used"`
+	// +optional
 	Available uint32 `json:"available"`
 }
 
@@ -168,29 +215,42 @@ type Network struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   NetworkSpec   `json:"spec"`
+	// +kubebuilder:validation:Required
+	Spec NetworkSpec `json:"spec"`
+	// +optional
 	Status NetworkStatus `json:"status"`
 }
 
 // NetworkSpec is the spec for a Network resource
 type NetworkSpec struct {
+	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
-	NetID    *uint32 `json:"netID"`
-	SwitchID string  `json:"switchID"`
+	// +optional
+	NetID *uint32 `json:"netID"`
+	// +optional
+	SwitchID string `json:"switchID"`
 
+	// +optional
 	Type NetworkType `json:"type,omitempty"`
 }
 
 // NetworkStatus is the status for a Network resource
 type NetworkStatus struct {
-	LastAllocatedSubnet     string   `json:"lastAllocatedSubnet"`
-	LastAllocatedIPv6Subnet string   `json:"lastAllocatedIPv6Subnet,omitempty"`
-	SubnetList              []string `json:"subnetList"`
-	NodeList                []string `json:"nodeList"`
-	Statistics              *Count   `json:"statistics"`
-	IPv6Statistics          *Count   `json:"ipv6Statistics,omitempty"`
-	DualStackStatistics     *Count   `json:"dualStackStatistics,omitempty"`
+	// +optional
+	LastAllocatedSubnet string `json:"lastAllocatedSubnet"`
+	// +optional
+	LastAllocatedIPv6Subnet string `json:"lastAllocatedIPv6Subnet,omitempty"`
+	// +optional
+	SubnetList []string `json:"subnetList"`
+	// +optional
+	NodeList []string `json:"nodeList"`
+	// +optional
+	Statistics *Count `json:"statistics"`
+	// +optional
+	IPv6Statistics *Count `json:"ipv6Statistics,omitempty"`
+	// +optional
+	DualStackStatistics *Count `json:"dualStackStatistics,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -218,44 +278,65 @@ type RemoteCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   RemoteClusterSpec   `json:"spec"`
+	// +kubebuilder:validation:Required
+	Spec RemoteClusterSpec `json:"spec"`
+	// +optional
 	Status RemoteClusterStatus `json:"status"`
 }
 
 // RemoteClusterSpec is the spec for a RemoteCluster resource
 type RemoteClusterSpec struct {
+	// +kubebuilder:validation:Required
 	ConnConfig APIServerConnConfig `json:"connConfig"`
 }
 
 type APIServerConnConfig struct {
 	// apiServer address. Format: https://ip:port
-	Endpoint   string `json:"endpoint"`
-	CABundle   []byte `json:"caBundle"`
+	// +kubebuilder:validation:Required
+	Endpoint string `json:"endpoint"`
+
+	// +kubebuilder:validation:Required
+	CABundle []byte `json:"caBundle"`
+
+	// +kubebuilder:validation:Required
 	ClientCert []byte `json:"clientCert"`
-	ClientKey  []byte `json:"clientKey"`
+
+	// +kubebuilder:validation:Required
+	ClientKey []byte `json:"clientKey"`
+
 	// The maximum length of time to wait before giving up on a server
 	// request. A value of zero means no timeout. Default: zero second
+	// +optional
 	Timeout uint32 `json:"timeout"`
 }
 
 // RemoteClusterStatus is the status for a RemoteCluster resource
 type RemoteClusterStatus struct {
 	// Conditions is an array of current cluster conditions.
+	// +optional
 	Conditions []ClusterCondition `json:"conditions"`
+
 	// A globally unique identifier. Use for validating.
 	// Generated by directly using the corresponding remote cluster's namespace "kube-system" uid
 	// types.UID is also universally unique identifiers (also known as UUIDs).
+	// +optional
 	UUID types.UID `json:"uuid"`
 }
 
 // ClusterCondition describes current state of a cluster.
 type ClusterCondition struct {
 	// Type of cluster condition, Ready or Offline.
+	// +optional
 	Type ClusterConditionType `json:"type"`
+
 	// Status of the condition, one of True, False, Unknown.
+	// +optional
 	Status apiv1.ConditionStatus `json:"status"`
+
 	// Last time the condition was checked.
+	// +optional
 	LastProbeTime metav1.Time `json:"lastProbeTime"`
+
 	// Last time the condition transit from one status to another.
 	// +optional
 	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
@@ -298,19 +379,27 @@ type RemoteSubnet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   RemoteSubnetSpec   `json:"spec"`
+	// +kubebuilder:validation:Required
+	Spec RemoteSubnetSpec `json:"spec"`
+	// +optional
 	Status RemoteSubnetStatus `json:"status"`
 }
 
 // RemoteSubnetSpec is the spec for a RemoteSubnet resource
 type RemoteSubnetSpec struct {
-	Range       AddressRange `json:"range"`
-	Type        NetworkType  `json:"type"`
-	ClusterName string       `json:"clusterName"`
+	// +kubebuilder:validation:Required
+	Range AddressRange `json:"range"`
+
+	// +kubebuilder:validation:Required
+	Type NetworkType `json:"type"`
+
+	// +kubebuilder:validation:Required
+	ClusterName string `json:"clusterName"`
 }
 
 // RemoteSubnetStatus is the status for a RemoteSubnet resource
 type RemoteSubnetStatus struct {
+	// +optional
 	LastModifyTime metav1.Time `json:"lastModifyTime"`
 }
 
@@ -342,21 +431,33 @@ type RemoteVtep struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   RemoteVtepSpec   `json:"spec"`
+	// +kubebuilder:validation:Required
+	Spec RemoteVtepSpec `json:"spec"`
+	// +optional
 	Status RemoteVtepStatus `json:"status"`
 }
 
 // RemoteVtepSpec is the spec for a RemoteVtep resource
 type RemoteVtepSpec struct {
-	ClusterName    string   `json:"clusterName"`
-	NodeName       string   `json:"nodeName"`
-	VtepIP         string   `json:"vtepIP"`
-	VtepMAC        string   `json:"c"`
+	// +kubebuilder:validation:Required
+	ClusterName string `json:"clusterName"`
+
+	// +kubebuilder:validation:Required
+	NodeName string `json:"nodeName"`
+
+	// +kubebuilder:validation:Required
+	VtepIP string `json:"vtepIP"`
+
+	// +kubebuilder:validation:Required
+	VtepMAC string `json:"vtepMAC"`
+
+	// +optional
 	EndpointIPList []string `json:"endpointIPList"`
 }
 
 // RemoteVtepStatus is the status for a RemoteVtep resource
 type RemoteVtepStatus struct {
+	// +optional
 	LastModifyTime metav1.Time `json:"lastModifyTime"`
 }
 

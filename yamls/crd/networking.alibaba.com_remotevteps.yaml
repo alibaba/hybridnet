@@ -52,8 +52,6 @@ spec:
           spec:
             description: RemoteVtepSpec is the spec for a RemoteVtep resource
             properties:
-              c:
-                type: string
               clusterName:
                 type: string
               endpointIPList:
@@ -64,12 +62,13 @@ spec:
                 type: string
               vtepIP:
                 type: string
+              vtepMAC:
+                type: string
             required:
-            - c
             - clusterName
-            - endpointIPList
             - nodeName
             - vtepIP
+            - vtepMAC
             type: object
           status:
             description: RemoteVtepStatus is the status for a RemoteVtep resource
@@ -77,12 +76,9 @@ spec:
               lastModifyTime:
                 format: date-time
                 type: string
-            required:
-            - lastModifyTime
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true

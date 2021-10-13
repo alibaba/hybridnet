@@ -54,9 +54,6 @@ spec:
                 type: string
               type:
                 type: string
-            required:
-            - netID
-            - switchID
             type: object
           status:
             description: NetworkStatus is the status for a Network resource
@@ -72,10 +69,6 @@ spec:
                   used:
                     format: int32
                     type: integer
-                required:
-                - available
-                - total
-                - used
                 type: object
               ipv6Statistics:
                 properties:
@@ -88,10 +81,6 @@ spec:
                   used:
                     format: int32
                     type: integer
-                required:
-                - available
-                - total
-                - used
                 type: object
               lastAllocatedIPv6Subnet:
                 type: string
@@ -112,24 +101,14 @@ spec:
                   used:
                     format: int32
                     type: integer
-                required:
-                - available
-                - total
-                - used
                 type: object
               subnetList:
                 items:
                   type: string
                 type: array
-            required:
-            - lastAllocatedSubnet
-            - nodeList
-            - statistics
-            - subnetList
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true

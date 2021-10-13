@@ -196,16 +196,9 @@ spec:
                 type: string
               sandboxID:
                 type: string
-            required:
-            - nodeName
-            - phase
-            - podName
-            - podNamespace
-            - sandboxID
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true
@@ -273,9 +266,6 @@ spec:
                 type: string
               type:
                 type: string
-            required:
-            - netID
-            - switchID
             type: object
           status:
             description: NetworkStatus is the status for a Network resource
@@ -291,10 +281,6 @@ spec:
                   used:
                     format: int32
                     type: integer
-                required:
-                - available
-                - total
-                - used
                 type: object
               ipv6Statistics:
                 properties:
@@ -307,10 +293,6 @@ spec:
                   used:
                     format: int32
                     type: integer
-                required:
-                - available
-                - total
-                - used
                 type: object
               lastAllocatedIPv6Subnet:
                 type: string
@@ -331,24 +313,14 @@ spec:
                   used:
                     format: int32
                     type: integer
-                required:
-                - available
-                - total
-                - used
                 type: object
               subnetList:
                 items:
                   type: string
                 type: array
-            required:
-            - lastAllocatedSubnet
-            - nodeList
-            - statistics
-            - subnetList
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true
@@ -430,7 +402,6 @@ spec:
                 - clientCert
                 - clientKey
                 - endpoint
-                - timeout
                 type: object
             required:
             - connConfig
@@ -465,10 +436,6 @@ spec:
                     type:
                       description: Type of cluster condition, Ready or Offline.
                       type: string
-                  required:
-                  - lastProbeTime
-                  - status
-                  - type
                   type: object
                 type: array
               uuid:
@@ -477,13 +444,9 @@ spec:
                   uid types.UID is also universally unique identifiers (also known
                   as UUIDs).
                 type: string
-            required:
-            - conditions
-            - uuid
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true
@@ -598,12 +561,9 @@ spec:
               lastModifyTime:
                 format: date-time
                 type: string
-            required:
-            - lastModifyTime
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true
@@ -669,8 +629,6 @@ spec:
           spec:
             description: RemoteVtepSpec is the spec for a RemoteVtep resource
             properties:
-              c:
-                type: string
               clusterName:
                 type: string
               endpointIPList:
@@ -681,12 +639,13 @@ spec:
                 type: string
               vtepIP:
                 type: string
+              vtepMAC:
+                type: string
             required:
-            - c
             - clusterName
-            - endpointIPList
             - nodeName
             - vtepIP
+            - vtepMAC
             type: object
           status:
             description: RemoteVtepStatus is the status for a RemoteVtep resource
@@ -694,12 +653,9 @@ spec:
               lastModifyTime:
                 format: date-time
                 type: string
-            required:
-            - lastModifyTime
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true
@@ -794,12 +750,6 @@ spec:
                     type: string
                   private:
                     type: boolean
-                required:
-                - allowSubnets
-                - autoNatOutgoing
-                - gatewayNode
-                - gatewayType
-                - private
                 type: object
               netID:
                 format: int32
@@ -832,8 +782,6 @@ spec:
                 - version
                 type: object
             required:
-            - config
-            - netID
             - network
             - range
             type: object
@@ -851,15 +799,9 @@ spec:
               used:
                 format: int32
                 type: integer
-            required:
-            - available
-            - lastAllocatedIP
-            - total
-            - used
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true

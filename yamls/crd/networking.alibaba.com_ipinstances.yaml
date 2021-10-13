@@ -97,16 +97,9 @@ spec:
                 type: string
               sandboxID:
                 type: string
-            required:
-            - nodeName
-            - phase
-            - podName
-            - podNamespace
-            - sandboxID
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true

@@ -68,7 +68,6 @@ spec:
                 - clientCert
                 - clientKey
                 - endpoint
-                - timeout
                 type: object
             required:
             - connConfig
@@ -103,10 +102,6 @@ spec:
                     type:
                       description: Type of cluster condition, Ready or Offline.
                       type: string
-                  required:
-                  - lastProbeTime
-                  - status
-                  - type
                   type: object
                 type: array
               uuid:
@@ -115,13 +110,9 @@ spec:
                   uid types.UID is also universally unique identifiers (also known
                   as UUIDs).
                 type: string
-            required:
-            - conditions
-            - uuid
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true

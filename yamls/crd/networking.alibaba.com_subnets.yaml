@@ -81,12 +81,6 @@ spec:
                     type: string
                   private:
                     type: boolean
-                required:
-                - allowSubnets
-                - autoNatOutgoing
-                - gatewayNode
-                - gatewayType
-                - private
                 type: object
               netID:
                 format: int32
@@ -119,8 +113,6 @@ spec:
                 - version
                 type: object
             required:
-            - config
-            - netID
             - network
             - range
             type: object
@@ -138,15 +130,9 @@ spec:
               used:
                 format: int32
                 type: integer
-            required:
-            - available
-            - lastAllocatedIP
-            - total
-            - used
             type: object
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true
