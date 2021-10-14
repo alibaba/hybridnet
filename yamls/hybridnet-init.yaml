@@ -357,6 +357,9 @@ spec:
     - jsonPath: .status.uuid
       name: UUID
       type: string
+    - jsonPath: .status.status
+      name: Status
+      type: string
     name: v1
     schema:
       openAPIV3Schema:
@@ -438,6 +441,9 @@ spec:
                       type: string
                   type: object
                 type: array
+              status:
+                description: Status is the integrated status of the cluster.
+                type: string
               uuid:
                 description: A globally unique identifier. Use for validating. Generated
                   by directly using the corresponding remote cluster's namespace "kube-system"

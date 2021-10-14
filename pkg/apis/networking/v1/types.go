@@ -25,6 +25,7 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
 
+// +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.spec.address.ip`
 // +kubebuilder:printcolumn:name="Gateway",type=string,JSONPath=`.spec.address.gateway`
@@ -100,6 +101,7 @@ type IPInstanceList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
 
+// +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.range.version`
@@ -204,6 +206,7 @@ type SubnetList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
 
+// +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="NetID",type=integer,JSONPath=`.spec.netID`
@@ -267,10 +270,12 @@ type NetworkList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
 
+// +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.spec.connConfig.endpoint`
 // +kubebuilder:printcolumn:name="UUID",type=string,JSONPath=`.status.uuid`
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
 
 // RemoteCluster is a specification for a RemoteCluster resource
 type RemoteCluster struct {
@@ -366,6 +371,7 @@ type RemoteClusterList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
 
+// +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.range.version`
@@ -421,6 +427,7 @@ type RemoteSubnetList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true
 
+// +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="VtepMAC",type=string,JSONPath=`.spec.vtepMAC`
