@@ -39,12 +39,19 @@ const (
 )
 
 type SubnetInfo struct {
-	cidr              *net.IPNet
-	gateway           net.IP
+	cidr             *net.IPNet
+	gateway          net.IP
+	excludeIPs       []net.IP
+	includedIPRanges []*daemonutils.IPRange
+
+	// the virtual network interface (can be directly physical interface) for container to use
 	forwardNodeIfName string
-	autoNatOutgoing   bool
-	excludeIPs        []net.IP
-	includedIPRanges  []*daemonutils.IPRange
+
+	// if overlay pod outside traffic need to be NATed
+	autoNatOutgoing bool
+
+	// if underlay subnet is on this host node
+	isUnderlayOnHost bool
 }
 
 type SubnetInfoMap map[string]*SubnetInfo

@@ -101,19 +101,14 @@ func (c *Controller) reconcileSubnet() error {
 			return fmt.Errorf("failed to get network for subnet %v", subnet.Name)
 		}
 
+		isUnderlayOnHost := false
 		if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeUnderlay {
 			// check if this node belongs to the subnet
-			inSubnet := false
 			for _, n := range network.Status.NodeList {
 				if n == c.config.NodeName {
-					inSubnet = true
+					isUnderlayOnHost = true
 					break
 				}
-			}
-
-			if !inSubnet {
-				klog.Infof("Ignore reconciling underlay subnet %v", subnet.Name)
-				continue
 			}
 		}
 
@@ -136,9 +131,11 @@ func (c *Controller) reconcileSubnet() error {
 
 		switch networkingv1.GetNetworkType(network) {
 		case networkingv1.NetworkTypeUnderlay:
-			forwardNodeIfName, err = containernetwork.EnsureVlanIf(c.config.NodeVlanIfName, netID)
-			if err != nil {
-				return fmt.Errorf("ensure vlan forward node if failed: %v", err)
+			if isUnderlayOnHost {
+				forwardNodeIfName, err = containernetwork.EnsureVlanIf(c.config.NodeVlanIfName, netID)
+				if err != nil {
+					return fmt.Errorf("ensure vlan forward node if failed: %v", err)
+				}
 			}
 		case networkingv1.NetworkTypeOverlay:
 			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
@@ -152,7 +149,7 @@ func (c *Controller) reconcileSubnet() error {
 		// create policy route
 		routeManager := c.getRouterManager(subnet.Spec.Range.Version)
 		routeManager.AddSubnetInfo(subnetCidr, gatewayIP, startIP, endIP, excludeIPs,
-			forwardNodeIfName, autoNatOutgoing, isOverlay)
+			forwardNodeIfName, autoNatOutgoing, isOverlay, isUnderlayOnHost)
 	}
 
 	if feature.MultiClusterEnabled() {
