@@ -30,13 +30,13 @@ const HealthProbe = CheckerName("BidirectionalConnection")
 const ClusterUnhealthy = v1.ClusterConditionType("ClusterUnhealthy")
 
 func HealthProbeChecker(localObject interface{}, remoteObject interface{}, status *v1.RemoteClusterStatus) (goOn bool) {
-	clientInterface, ok := remoteObject.(RemoteHybridnetClient)
+	clientGetter, ok := remoteObject.(ClientGetter)
 	if !ok {
 		fillCondition(status, healthProbeError("BadRemoteObject", "fail to get hybridnet client from remote object"))
 		fillStatus(status, v1.ClusterOffline)
 		return false
 	}
-	var hybridnetClient = clientInterface.GetHybridnetClient()
+	var hybridnetClient = clientGetter.GetHybridnetClient()
 	body, err := hybridnetClient.Discovery().RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
 	if err != nil {
 		fillCondition(status, healthProbeError("FailedProbe", err.Error()))

@@ -221,6 +221,10 @@ func (m *Manager) GetHybridnetClient() versioned.Interface {
 	return m.HybridnetClient
 }
 
+func (m *Manager) GetKubeClient() kubeclientset.Interface {
+	return m.KubeClient
+}
+
 func (m *Manager) GetClusterName() string {
 	return m.Meta.ClusterName
 }
@@ -242,7 +246,7 @@ func (m *Manager) GetOverlayNetID() *uint32 {
 	return nil
 }
 
-func (m *Manager) GetSubnets() ([]*networkingv1.Subnet, error) {
+func (m *Manager) ListSubnet() ([]*networkingv1.Subnet, error) {
 	if !m.hasSynced {
 		return nil, fmt.Errorf("informer cache has not synced yet")
 	}

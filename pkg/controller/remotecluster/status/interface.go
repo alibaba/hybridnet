@@ -24,38 +24,19 @@ import (
 	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
 )
 
-type LocalUUID interface {
+type UUIDGetter interface {
 	GetUUID() types.UID
 }
 
-type LocalOverlayNetID interface {
+type OverlayNetIDGetter interface {
 	GetOverlayNetID() *uint32
 }
 
-type RemoteOverlayNetID interface {
-	GetOverlayNetID() *uint32
+type SubnetGetter interface {
+	ListSubnet() ([]*v1.Subnet, error)
 }
 
-type LocalSubnets interface {
-	GetSubnets() ([]*v1.Subnet, error)
-}
-
-type RemoteSubnets interface {
-	GetSubnets() ([]*v1.Subnet, error)
-}
-
-type RemoteHybridnetClient interface {
+type ClientGetter interface {
 	GetHybridnetClient() versioned.Interface
-}
-
-type RemoteKubeClient interface {
 	GetKubeClient() kubernetes.Interface
-}
-
-type RemoteUUID interface {
-	GetUUID() types.UID
-}
-
-type RemoteClusterName interface {
-	GetClusterName() string
 }

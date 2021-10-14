@@ -28,22 +28,22 @@ const BidirectionalConnection = CheckerName("BidirectionalConnection")
 const MissingPeer = v1.ClusterConditionType("MissingPeer")
 
 func BidirectionalConnectionChecker(localObject interface{}, remoteObject interface{}, status *v1.RemoteClusterStatus) (goOn bool) {
-	localUUID, ok := localObject.(LocalUUID)
+	uuidGetter, ok := localObject.(UUIDGetter)
 	if !ok {
 		fillCondition(status, bidirectionalConnectionError("BadLocalObject", "local object can not support getting uuid"))
 		fillStatus(status, v1.ClusterOffline)
 		return false
 	}
 
-	clientInterface, ok := remoteObject.(RemoteHybridnetClient)
+	clientGetter, ok := remoteObject.(ClientGetter)
 	if !ok {
-		fillCondition(status, bidirectionalConnectionError("BadRemoteObject", "remote object can not support getting hybridnet client"))
+		fillCondition(status, bidirectionalConnectionError("BadRemoteObject", "remote object can not support getting client"))
 		fillStatus(status, v1.ClusterOffline)
 		return false
 	}
 
-	var hybridnetClient = clientInterface.GetHybridnetClient()
-	var uuid = localUUID.GetUUID()
+	var hybridnetClient = clientGetter.GetHybridnetClient()
+	var uuid = uuidGetter.GetUUID()
 
 	remoteClusterList, err := hybridnetClient.NetworkingV1().RemoteClusters().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {

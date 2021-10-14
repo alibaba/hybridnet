@@ -28,20 +28,20 @@ const LoopbackCheck = CheckerName("LoopbackCheck")
 const ClusterLoopback = v1.ClusterConditionType("ClusterLoopback")
 
 func LoopbackChecker(localObject interface{}, remoteObject interface{}, status *v1.RemoteClusterStatus) (goOn bool) {
-	localUUIDInterface, ok := localObject.(LocalUUID)
+	localUUIDGetter, ok := localObject.(UUIDGetter)
 	if !ok {
 		fillCondition(status, loopbackError("BadLocalObject", "local object can not support getting UUID"))
 		fillStatus(status, v1.ClusterOffline)
 		return false
 	}
-	remoteUUIDInterface, ok := remoteObject.(RemoteUUID)
+	remoteUUIDGetter, ok := remoteObject.(UUIDGetter)
 	if !ok {
 		fillCondition(status, loopbackError("BadRemoteObject", "remote object can not support getting UUID"))
 		fillStatus(status, v1.ClusterOffline)
 		return false
 	}
 
-	localUUID, remoteUUID := localUUIDInterface.GetUUID(), remoteUUIDInterface.GetUUID()
+	localUUID, remoteUUID := localUUIDGetter.GetUUID(), remoteUUIDGetter.GetUUID()
 	if localUUID == "" || remoteUUID == "" {
 		fillCondition(status, loopbackError("InvalidUUID", fmt.Sprintf("invalid local UUID %s or remote UUID %s", localUUID, remoteUUID)))
 		fillStatus(status, v1.ClusterNotReady)
