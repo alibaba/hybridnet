@@ -17,14 +17,12 @@
 package rcmanager
 
 import (
-	"context"
 	"fmt"
 	"runtime/debug"
 	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -43,6 +41,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned/scheme"
 	"github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
 	listers "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
+	rctypes "github.com/alibaba/hybridnet/pkg/controller/remotecluster/types"
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
@@ -81,6 +80,8 @@ type Manager struct {
 	RemoteClusterNodeLister  corev1.NodeLister
 	RemoteClusterNodeSynced  cache.InformerSynced
 	Recorder                 record.EventRecorder
+
+	eventHub chan<- rctypes.Event
 }
 
 type Meta struct {
@@ -105,7 +106,8 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	localClusterHybridnetClient versioned.Interface,
 	remoteSubnetLister listers.RemoteSubnetLister,
 	localClusterSubnetLister listers.SubnetLister,
-	remoteVtepLister listers.RemoteVtepLister) (*Manager, error) {
+	remoteVtepLister listers.RemoteVtepLister,
+	eventHub chan<- rctypes.Event) (*Manager, error) {
 	defer func() {
 		if err := recover(); err != nil {
 			klog.Errorf("Panic hanppened. Can't new remote cluster manager. Maybe wrong kube config. "+
@@ -168,6 +170,7 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 		RemoteClusterNodeLister:     nodeInformer.Lister(),
 		RemoteClusterNodeSynced:     nodeInformer.Informer().HasSynced,
 		Recorder:                    recorder,
+		eventHub:                    eventHub,
 	}
 
 	nodeInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
@@ -201,19 +204,8 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 }
 
 func (m *Manager) GetUUID() types.UID {
-	if len(m.Meta.ClusterUUID) > 0 {
-		return m.Meta.ClusterUUID
-	}
-
-	ns, err := m.KubeClient.CoreV1().Namespaces().Get(context.TODO(), "kube-system", metav1.GetOptions{})
-	if err != nil {
-		return ""
-	}
-
 	m.Lock()
-	m.Meta.ClusterUUID = ns.UID
-	m.Unlock()
-
+	defer m.Unlock()
 	return m.Meta.ClusterUUID
 }
 
@@ -257,6 +249,27 @@ func (m *Manager) Run() {
 	klog.Infof("Start single remote cluster manager. clusterName=%v", m.ClusterName)
 
 	managerCh := m.StopCh
+
+	// try to loop fetching UUID, then store and event it
+	go func() {
+		_ = wait.PollImmediateUntil(5*time.Second, func() (done bool, err error) {
+			uuid, _ := utils.GetUUID(m.KubeClient)
+			if len(uuid) > 0 {
+				m.Lock()
+				m.Meta.ClusterUUID = uuid
+				m.Unlock()
+
+				m.eventHub <- rctypes.Event{
+					Type:        rctypes.EventRefreshUUID,
+					ClusterName: m.Meta.ClusterName,
+					Object:      uuid,
+				}
+				return true, nil
+			}
+			return false, nil
+		}, m.StopCh)
+	}()
+
 	go func() {
 		if ok := cache.WaitForCacheSync(managerCh, m.NodeSynced, m.SubnetSynced, m.IPSynced, m.NetworkSynced, m.RemoteClusterNodeSynced); !ok {
 			klog.Errorf("failed to wait for remote cluster caches to sync. clusterName=%v", m.ClusterName)
