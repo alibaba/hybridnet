@@ -24,6 +24,7 @@ import (
 	"k8s.io/klog"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/rcmanager"
 )
 
 // remote cluster is managed by admin, no need to full synchronize
@@ -33,12 +34,17 @@ func (c *Controller) reconcileRemoteCluster(clusterName string) error {
 	remoteCluster, err := c.remoteClusterLister.Get(clusterName)
 	if err != nil {
 		if k8serror.IsNotFound(err) {
-			c.rcManagerCache.Delete(clusterName)
+			if terminatingManagerObject, loaded := c.rcManagerCache.LoadAndDelete(clusterName); loaded {
+				terminatingManager, ok := terminatingManagerObject.(*rcmanager.Manager)
+				if ok {
+					terminatingManager.Close()
+				}
+			}
 			return nil
 		}
 		return err
 	}
-	return c.addOrUpdateRCMgr(remoteCluster)
+	return c.syncRemoteClusterManager(remoteCluster)
 }
 
 func (c *Controller) filterRemoteCluster(obj interface{}) bool {

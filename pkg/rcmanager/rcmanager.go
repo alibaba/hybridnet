@@ -17,12 +17,15 @@
 package rcmanager
 
 import (
+	"context"
 	"fmt"
 	"runtime/debug"
 	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -50,6 +53,9 @@ const (
 
 // Manager Those without the localCluster prefix are the resources of the remote cluster
 type Manager struct {
+	sync.Mutex
+	hasSynced bool
+
 	Meta
 	LocalClusterKubeClient      kubeclientset.Interface
 	LocalClusterHybridnetClient versioned.Interface
@@ -128,18 +134,14 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	subnetInformer := hybridnetInformerFactory.Networking().V1().Subnets()
 	ipInformer := hybridnetInformerFactory.Networking().V1().IPInstances()
 
-	uuid, err := utils.GetUUID(kubeClient)
-	if err != nil {
-		return nil, err
-	}
-
 	stopCh := make(chan struct{})
 
 	rcMgr := &Manager{
+		Mutex:     sync.Mutex{},
+		hasSynced: false,
 		Meta: Meta{
 			ClusterName:      rc.Name,
 			RemoteClusterUID: rc.UID,
-			ClusterUUID:      uuid,
 			StopCh:           stopCh,
 			IsReady:          false,
 		},
@@ -198,6 +200,59 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	return rcMgr, nil
 }
 
+func (m *Manager) GetUUID() types.UID {
+	if len(m.Meta.ClusterUUID) > 0 {
+		return m.Meta.ClusterUUID
+	}
+
+	ns, err := m.KubeClient.CoreV1().Namespaces().Get(context.TODO(), "kube-system", metav1.GetOptions{})
+	if err != nil {
+		return ""
+	}
+
+	m.Lock()
+	m.Meta.ClusterUUID = ns.UID
+	m.Unlock()
+
+	return m.Meta.ClusterUUID
+}
+
+func (m *Manager) GetHybridnetClient() versioned.Interface {
+	return m.HybridnetClient
+}
+
+func (m *Manager) GetKubeClient() kubeclientset.Interface {
+	return m.KubeClient
+}
+
+func (m *Manager) GetClusterName() string {
+	return m.Meta.ClusterName
+}
+
+func (m *Manager) GetOverlayNetID() *uint32 {
+	networks, err := m.NetworkLister.List(labels.Everything())
+	if err != nil {
+		return nil
+	}
+
+	for i := range networks {
+		if networks[i].Spec.Type == networkingv1.NetworkTypeOverlay {
+			if networks[i].Spec.NetID != nil {
+				netID := *networks[i].Spec.NetID
+				return &netID
+			}
+		}
+	}
+	return nil
+}
+
+func (m *Manager) ListSubnet() ([]*networkingv1.Subnet, error) {
+	if !m.hasSynced {
+		return nil, fmt.Errorf("informer cache has not synced yet")
+	}
+	return m.SubnetLister.List(labels.Everything())
+}
+
 func (m *Manager) Run() {
 	klog.Infof("Start single remote cluster manager. clusterName=%v", m.ClusterName)
 
@@ -207,6 +262,11 @@ func (m *Manager) Run() {
 			klog.Errorf("failed to wait for remote cluster caches to sync. clusterName=%v", m.ClusterName)
 			return
 		}
+
+		m.Lock()
+		m.hasSynced = true
+		m.Unlock()
+
 		go wait.Until(m.RunNodeWorker, 1*time.Second, managerCh)
 		go wait.Until(m.RunSubnetWorker, 1*time.Second, managerCh)
 		go wait.Until(m.RunIPInstanceWorker, 1*time.Second, managerCh)
