@@ -17,11 +17,13 @@
 package remotecluster
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
@@ -31,6 +33,7 @@ import (
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
@@ -39,6 +42,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
 	informers "github.com/alibaba/hybridnet/pkg/client/informers/externalversions/networking/v1"
 	listers "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
+	rctypes "github.com/alibaba/hybridnet/pkg/controller/remotecluster/types"
 	"github.com/alibaba/hybridnet/pkg/rcmanager"
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
@@ -76,6 +80,8 @@ type Controller struct {
 	localClusterSubnetSynced  cache.InformerSynced
 	localClusterNetworkLister listers.NetworkLister
 	localClusterNetworkSynced cache.InformerSynced
+
+	remoteClusterEvent chan rctypes.Event
 
 	recorder record.EventRecorder
 }
@@ -119,6 +125,7 @@ func NewController(
 		localClusterNetworkLister: localClusterNetworkInformer.Lister(),
 		localClusterNetworkSynced: localClusterNetworkInformer.Informer().HasSynced,
 		remoteClusterQueue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ControllerName),
+		remoteClusterEvent:        make(chan rctypes.Event, 10),
 		recorder:                  recorder,
 	}
 
@@ -181,6 +188,8 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	klog.Info("Starting workers")
 	go wait.Until(c.runRemoteClusterWorker, time.Second, stopCh)
 	go wait.Until(c.updateRemoteClusterStatus, HealthCheckPeriod, stopCh)
+	go wait.Until(c.handleEventFromRemoteClusters, time.Second, stopCh)
+
 	<-stopCh
 
 	c.closeAllRemoteClusterManager()
@@ -257,6 +266,39 @@ func (c *Controller) updateRemoteClusterStatus() {
 		}()
 	}
 	wg.Wait()
+}
+
+func (c *Controller) handleEventFromRemoteClusters() {
+	for event := range c.remoteClusterEvent {
+		switch event.Type {
+		case rctypes.EventRefreshUUID:
+			uuid, ok := event.Object.(types.UID)
+			if !ok {
+				klog.Warningf("invalid object of remote cluster event")
+				break
+			}
+			if len(event.ClusterName) == 0 {
+				klog.Warningf("invalid cluster name for remote cluster event")
+				break
+			}
+
+			_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				return c.patchUUIDtoRemoteCluster(event.ClusterName, uuid)
+			})
+			klog.Infof("receive and update UUID %s for cluster %s", uuid, event.ClusterName)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func (c *Controller) patchUUIDtoRemoteCluster(clusterName string, uuid types.UID) error {
+	patchBody := fmt.Sprintf(
+		`{"status":{"uuid":%q}}`,
+		uuid,
+	)
+
+	_, err := c.hybridnetClient.NetworkingV1().RemoteClusters().Patch(context.TODO(), clusterName, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
+	return err
 }
 
 func copyUint32Ptr(i *uint32) *uint32 {
