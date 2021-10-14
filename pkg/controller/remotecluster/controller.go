@@ -278,7 +278,7 @@ func (c *Controller) GetOverlayNetID() *uint32 {
 	return c.OverlayNetID
 }
 
-func (c *Controller) GetSubnets() ([]*networkingv1.Subnet, error) {
+func (c *Controller) ListSubnet() ([]*networkingv1.Subnet, error) {
 	if !c.hasSynced {
 		return nil, fmt.Errorf("informer cache has not synced yet")
 	}

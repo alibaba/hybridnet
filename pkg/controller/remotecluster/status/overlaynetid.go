@@ -26,22 +26,22 @@ const OverlayNetIDCheck = CheckerName("OverlayNetIDCheck")
 const OverlayNetIDMismatch = v1.ClusterConditionType("OverlayNetIDMismatch")
 
 func OverlayNetIDChecker(localObject interface{}, remoteObject interface{}, status *v1.RemoteClusterStatus) (goOn bool) {
-	localOverlayNetIDInterface, ok := localObject.(LocalOverlayNetID)
+	localOverlayNetIDGetter, ok := localObject.(OverlayNetIDGetter)
 	if !ok {
 		fillCondition(status, overlayNetIDError("BadLocalObject", "local object can not support getting overlay net ID"))
 		fillStatus(status, v1.ClusterOffline)
 		return false
 	}
 
-	remoteOverlayNetIDInterface, ok := remoteObject.(RemoteOverlayNetID)
+	remoteOverlayNetIDGetter, ok := remoteObject.(OverlayNetIDGetter)
 	if !ok {
 		fillCondition(status, overlayNetIDError("BadRemoteObject", "remote object can not support getting overlay net ID"))
 		fillStatus(status, v1.ClusterOffline)
 		return false
 	}
 
-	localOverlayNetID := localOverlayNetIDInterface.GetOverlayNetID()
-	remoteOverlayNetID := remoteOverlayNetIDInterface.GetOverlayNetID()
+	localOverlayNetID := localOverlayNetIDGetter.GetOverlayNetID()
+	remoteOverlayNetID := remoteOverlayNetIDGetter.GetOverlayNetID()
 
 	switch {
 	case localOverlayNetID == nil:

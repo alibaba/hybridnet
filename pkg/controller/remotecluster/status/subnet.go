@@ -29,26 +29,26 @@ const SubnetCheck = CheckerName("SubnetCheck")
 const SubnetOverlapped = v1.ClusterConditionType("SubnetOverlapped")
 
 func SubnetChecker(localObject interface{}, remoteObject interface{}, status *v1.RemoteClusterStatus) (goOn bool) {
-	localSubnetInterface, ok := localObject.(LocalSubnets)
+	localSubnetGetter, ok := localObject.(SubnetGetter)
 	if !ok {
 		fillCondition(status, subnetError("BadLocalObject", "local object can not support getting subnets"))
 		fillStatus(status, v1.ClusterOffline)
 		return false
 	}
-	remoteSubnetInterface, ok := remoteObject.(RemoteSubnets)
+	remoteSubnetGetter, ok := remoteObject.(SubnetGetter)
 	if !ok {
 		fillCondition(status, subnetError("BadRemoteObject", "remote object can not support getting subnets"))
 		fillStatus(status, v1.ClusterOffline)
 		return false
 	}
 
-	localSubnets, err := localSubnetInterface.GetSubnets()
+	localSubnets, err := localSubnetGetter.ListSubnet()
 	if err != nil {
 		fillCondition(status, subnetError("FetchFail", fmt.Sprintf("fail to fetch local subnets: %v", err)))
 		fillStatus(status, v1.ClusterNotReady)
 		return false
 	}
-	remoteSubnets, err := remoteSubnetInterface.GetSubnets()
+	remoteSubnets, err := remoteSubnetGetter.ListSubnet()
 	if err != nil {
 		fillCondition(status, subnetError("FetchFail", fmt.Sprintf("fail to fetch remote subnets: %v", err)))
 		fillStatus(status, v1.ClusterNotReady)
