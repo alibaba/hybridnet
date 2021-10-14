@@ -4,7 +4,7 @@ set -o errexit
 set -o errtrace
 set -o pipefail
 
-PACKAGE='rc-yaml-gen.sh'
+PACKAGE='generate-rc-yaml.sh'
 KUBE_CFG="$HOME/.kube/config"
 RC_NAME=''
 OUTPUT_FILE='rc.yaml'
