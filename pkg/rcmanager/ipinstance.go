@@ -43,6 +43,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		err      error
 		vtepName string
 	)
+
 	vtepName = utils.GenRemoteVtepName(m.ClusterName, nodeName)
 	node, err = m.NodeLister.Get(nodeName)
 	if err != nil {
@@ -76,9 +77,10 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		if err != nil {
 			return err
 		}
-	}
-	if !newVtep || !remoteVtepChanged {
-		return nil
+
+		if !remoteVtepChanged {
+			return nil
+		}
 	}
 
 	if newVtep {
@@ -92,8 +94,10 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 			return err
 		}
 	}
+
 	remoteVtep.Status.LastModifyTime = metav1.Now()
 	_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
+
 	return err
 }
 
@@ -181,8 +185,13 @@ func (m *Manager) filterIPInstance(obj interface{}) bool {
 	if !m.GetIsReady() {
 		return false
 	}
-	_, ok := obj.(*networkingv1.IPInstance)
-	return ok
+
+	ipInstance, ok := obj.(*networkingv1.IPInstance)
+	if !ok {
+		return false
+	}
+
+	return len(ipInstance.Status.Phase) > 0
 }
 
 func (m *Manager) addOrDelIPInstance(obj interface{}) {
@@ -200,20 +209,22 @@ func (m *Manager) updateIPInstance(oldObj, newObj interface{}) {
 	if oldInstance.ResourceVersion == newInstance.ResourceVersion {
 		return
 	}
-	if newInstance.Status.Phase == networkingv1.IPPhaseReserved && oldInstance.Status.Phase == networkingv1.IPPhaseReserved {
-		return
-	}
+
 	if newNodeName != oldNodeName {
 		m.enqueueIPInstance(oldNodeName)
 		m.enqueueIPInstance(newNodeName)
 		return
 	}
 
-	if newInstance.Spec.Address.IP != oldInstance.Spec.Address.IP {
+	if newInstance.Status.Phase != oldInstance.Status.Phase {
 		m.enqueueIPInstance(newNodeName)
 	}
 }
 
 func (m *Manager) enqueueIPInstance(nodeName string) {
+	if len(nodeName) == 0 {
+		return
+	}
+
 	m.IPQueue.Add(nodeName)
 }
