@@ -286,7 +286,7 @@ func (c *Controller) handleEventFromRemoteClusters() {
 				return c.patchUUIDtoRemoteCluster(event.ClusterName, uuid)
 			})
 			klog.Infof("[remote cluster] receive event and update UUID %s for cluster %s", uuid, event.ClusterName)
-      
+
 		case rctypes.EventUpdateStatus:
 			if len(event.ClusterName) == 0 {
 				klog.Warningf("invalid cluster for remote cluster event")
