@@ -101,17 +101,21 @@ func (m *Manager) RemoteVtepChanged(oldRemoteVtep *networkingv1.RemoteVtep, desi
 	if err != nil {
 		return false, oldRemoteVtep, err
 	}
-	if utils.DifferentSetFromStringSlice(endpointIPList, oldRemoteVtep.Spec.EndpointIPList) {
+
+	if utils.CheckStringSliceDifferent(endpointIPList, oldRemoteVtep.Spec.EndpointIPList) {
 		changed = true
 	}
+
 	desiredVtepIP := desiredNode.Annotations[constants.AnnotationNodeVtepIP]
 	desiredVtepMac := desiredNode.Annotations[constants.AnnotationNodeVtepMac]
 	if oldRemoteVtep.Spec.VtepIP != desiredVtepIP || oldRemoteVtep.Spec.VtepMAC != desiredVtepMac {
 		changed = true
 	}
+
 	if oldRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] != desiredNode.Annotations[constants.AnnotationNodeLocalVxlanIPList] {
 		changed = true
 	}
+
 	if changed {
 		newRemoteVtep = oldRemoteVtep.DeepCopy()
 		newRemoteVtep.Spec.VtepIP = desiredVtepIP
@@ -182,12 +186,15 @@ func (m *Manager) filterIPInstance(obj interface{}) bool {
 
 func (m *Manager) addOrDelIPInstance(obj interface{}) {
 	ipInstance, _ := obj.(*networkingv1.IPInstance)
-	m.enqueueIPInstance(ipInstance.Status.NodeName)
+	m.enqueueIPInstance(ipInstance.Labels[constants.LabelNode])
 }
 
 func (m *Manager) updateIPInstance(oldObj, newObj interface{}) {
 	oldInstance, _ := oldObj.(*networkingv1.IPInstance)
 	newInstance, _ := newObj.(*networkingv1.IPInstance)
+
+	oldNodeName := oldInstance.Labels[constants.LabelNode]
+	newNodeName := newInstance.Labels[constants.LabelNode]
 
 	if oldInstance.ResourceVersion == newInstance.ResourceVersion {
 		return
@@ -195,14 +202,14 @@ func (m *Manager) updateIPInstance(oldObj, newObj interface{}) {
 	if newInstance.Status.Phase == networkingv1.IPPhaseReserved && oldInstance.Status.Phase == networkingv1.IPPhaseReserved {
 		return
 	}
-	if newInstance.Status.NodeName != oldInstance.Status.NodeName {
-		m.enqueueIPInstance(oldInstance.Status.NodeName)
-		m.enqueueIPInstance(newInstance.Status.NodeName)
+	if newNodeName != oldNodeName {
+		m.enqueueIPInstance(oldNodeName)
+		m.enqueueIPInstance(newNodeName)
 		return
 	}
 
 	if newInstance.Spec.Address.IP != oldInstance.Spec.Address.IP {
-		m.enqueueIPInstance(newInstance.Status.NodeName)
+		m.enqueueIPInstance(newNodeName)
 	}
 }
 
