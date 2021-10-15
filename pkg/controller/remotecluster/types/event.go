@@ -25,5 +25,6 @@ type Event struct {
 }
 
 const (
-	EventRefreshUUID = EventType("RefreshUUID")
+	EventRefreshUUID  = EventType("RefreshUUID")
+	EventUpdateStatus = EventType("UpdateStatus")
 )

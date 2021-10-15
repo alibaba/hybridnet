@@ -187,7 +187,7 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	// start workers
 	klog.Info("Starting workers")
 	go wait.Until(c.runRemoteClusterWorker, time.Second, stopCh)
-	go wait.Until(c.updateRemoteClusterStatus, HealthCheckPeriod, stopCh)
+	go wait.Until(c.updateAllRemoteClusterStatus, HealthCheckPeriod, stopCh)
 	go wait.Until(c.handleEventFromRemoteClusters, time.Second, stopCh)
 
 	<-stopCh
@@ -239,7 +239,7 @@ func (c *Controller) syncLocalOverlayNetIDOnce() {
 
 // health checking and resync cache. remote cluster is managed by admin, it can be
 // treated as desired states
-func (c *Controller) updateRemoteClusterStatus() {
+func (c *Controller) updateAllRemoteClusterStatus() {
 	remoteClusters, err := c.remoteClusterLister.List(labels.Everything())
 	if err != nil {
 		klog.Errorf("Can't list remote cluster. err=%v", err)
@@ -285,7 +285,28 @@ func (c *Controller) handleEventFromRemoteClusters() {
 			_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				return c.patchUUIDtoRemoteCluster(event.ClusterName, uuid)
 			})
-			klog.Infof("[remote cluster] receive and update UUID %s for cluster %s", uuid, event.ClusterName)
+			klog.Infof("[remote cluster] receive event and update UUID %s for cluster %s", uuid, event.ClusterName)
+      
+		case rctypes.EventUpdateStatus:
+			if len(event.ClusterName) == 0 {
+				klog.Warningf("invalid cluster for remote cluster event")
+				break
+			}
+
+			remoteCluster, err := c.remoteClusterLister.Get(event.ClusterName)
+			if err != nil {
+				klog.Errorf("update status event fail on getting object: %v", err)
+				break
+			}
+			remoteCluster = remoteCluster.DeepCopy()
+
+			managerObject, ok := c.rcManagerCache.Load(event.ClusterName)
+			if !ok {
+				break
+			}
+
+			go updateSingleRemoteClusterStatus(c, managerObject.(*rcmanager.Manager), remoteCluster)
+			klog.Infof("[remote cluster] receive event and update status for cluster %s", event.ClusterName)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

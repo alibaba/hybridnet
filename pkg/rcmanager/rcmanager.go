@@ -280,6 +280,11 @@ func (m *Manager) Run() {
 		m.hasSynced = true
 		m.Unlock()
 
+		m.eventHub <- rctypes.Event{
+			Type:        rctypes.EventUpdateStatus,
+			ClusterName: m.Meta.ClusterName,
+		}
+
 		go wait.Until(m.RunNodeWorker, 1*time.Second, managerCh)
 		go wait.Until(m.RunSubnetWorker, 1*time.Second, managerCh)
 		go wait.Until(m.RunIPInstanceWorker, 1*time.Second, managerCh)
