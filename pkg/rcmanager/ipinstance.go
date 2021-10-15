@@ -33,7 +33,8 @@ import (
 // reconcile one single node, update/add/remove everything about it's
 // corresponding remote vtep.
 func (m *Manager) reconcileIPInstance(nodeName string) error {
-	klog.Infof("[remote cluster] Starting reconcile ipinstance from cluster %v, node name=%v", m.ClusterName, nodeName)
+	klog.Infof("[remote cluster ipinstance] Starting reconcile node %v from cluster=%v", m.ClusterName, nodeName)
+
 	if len(nodeName) == 0 {
 		return nil
 	}
@@ -162,11 +163,11 @@ func (m *Manager) processNextIPInstance() bool {
 			// TODO: use retry handler to
 			// Put the item back on the workqueue to handle any transient errors
 			m.IPQueue.AddRateLimited(key)
-			klog.Warningf("[RemoteCluster-IPInstance] failed to reconcileIPInstance. key=%v. err=%v", key, err)
-			return fmt.Errorf("[RemoteCluster-IPInstance] fail to sync '%s' for cluster id=%v: %v, requeuing", key, m.ClusterName, err)
+			klog.Warningf("[remote cluster ipinstance] failed to reconcileIPInstance. key=%v. err=%v", key, err)
+			return fmt.Errorf("[remote cluster ipinstance] fail to sync node %s for cluster=%v: %v, requeuing", key, m.ClusterName, err)
 		}
 		m.IPQueue.Forget(obj)
-		klog.Infof("[RemoteCluster-IPInstance] succeed to sync '%s', cluster=%v", key, m.ClusterName)
+		klog.Infof("[remote cluster ipinstance] succeed to sync node %s for cluster=%v", key, m.ClusterName)
 		return nil
 	}(obj)
 

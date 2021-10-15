@@ -41,7 +41,7 @@ const (
 )
 
 func (m *Manager) reconcileSubnet() error {
-	klog.Infof("[remote cluster] Starting reconcile subnet from cluster %v", m.ClusterName)
+	klog.Infof("[remote cluster subnet] Starting reconcile subnet from cluster=%v", m.ClusterName)
 
 	localClusterSubnets, err := m.LocalClusterSubnetLister.List(labels.Everything())
 	if err != nil {
@@ -308,10 +308,10 @@ func (m *Manager) processNextSubnet() bool {
 			// TODO: use retry handler to
 			// Put the item back on the workqueue to handle any transient errors
 			m.SubnetQueue.AddRateLimited(key)
-			return fmt.Errorf("[RemoteSubnet] fail to sync %s for cluster %v: %v, requeuing", key, m.ClusterName, err)
+			return fmt.Errorf("[remote cluster subnet] fail to sync subnet for cluster=%v: %v, requeuing", m.ClusterName, err)
 		}
 		m.SubnetQueue.Forget(obj)
-		klog.Infof("[RemoteSubnet] succeed to sync %s, cluster=%v", key, m.ClusterName)
+		klog.Infof("[remote cluster subnet] succeed to sync subnet for cluster=%v", m.ClusterName)
 		return nil
 	}(obj)
 

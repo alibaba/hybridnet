@@ -213,7 +213,7 @@ func (c *Controller) syncLocalOverlayNetIDOnce() {
 
 	networks, err := c.localClusterNetworkLister.List(labels.Everything())
 	if err != nil {
-		klog.Warningf("failed to list networks: %v", err)
+		klog.Warningf("[remote cluster] failed to list networks: %v", err)
 		return
 	}
 
@@ -274,18 +274,18 @@ func (c *Controller) handleEventFromRemoteClusters() {
 		case rctypes.EventRefreshUUID:
 			uuid, ok := event.Object.(types.UID)
 			if !ok {
-				klog.Warningf("invalid object of remote cluster event")
+				klog.Warningf("[remote cluster] invalid object of remote cluster event")
 				break
 			}
 			if len(event.ClusterName) == 0 {
-				klog.Warningf("invalid cluster name for remote cluster event")
+				klog.Warningf("[remote cluster] invalid cluster name for remote cluster event")
 				break
 			}
 
 			_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				return c.patchUUIDtoRemoteCluster(event.ClusterName, uuid)
 			})
-			klog.Infof("receive and update UUID %s for cluster %s", uuid, event.ClusterName)
+			klog.Infof("[remote cluster] receive and update UUID %s for cluster %s", uuid, event.ClusterName)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
