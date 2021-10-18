@@ -68,7 +68,7 @@ func (c *Controller) updateRemoteCluster(oldObj, newObj interface{}) {
 	if !remoteClusterSpecChanged(&oldRC.Spec, &newRC.Spec) {
 		return
 	}
-	c.enqueueRemoteCluster(newRC.ClusterName)
+	c.enqueueRemoteCluster(newRC.Name)
 }
 
 func (c *Controller) enqueueRemoteCluster(clusterName string) {
