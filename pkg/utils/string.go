@@ -35,11 +35,11 @@ func ToJSONString(i interface{}) string {
 	return s
 }
 
-// DifferentSetFromStringSlice returns if two string slice contains different item
-// True for two different string slice
-func DifferentSetFromStringSlice(a, b []string) bool {
+// CheckStringSliceDifferent returns if two string slice contains different item,
+// return true for two string slices are different.
+func CheckStringSliceDifferent(a, b []string) bool {
 	if len(a) != len(b) {
-		return false
+		return true
 	}
 	aSet := gset.NewStrSetFrom(a)
 	bSet := gset.NewStrSetFrom(b)

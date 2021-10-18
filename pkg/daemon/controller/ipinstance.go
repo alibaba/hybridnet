@@ -45,7 +45,7 @@ func (c *Controller) enqueueUpdateIPInstance(oldObj, newObj interface{}) {
 	oldIPInstance := oldObj.(*networkingv1.IPInstance)
 	newIPInstance := newObj.(*networkingv1.IPInstance)
 
-	if oldIPInstance.Status.NodeName != newIPInstance.Status.NodeName {
+	if oldIPInstance.Labels[constants.LabelNode] != newIPInstance.Labels[constants.LabelNode] {
 		c.ipInstanceQueue.Add(ActionReconcileIPInstance)
 	}
 }

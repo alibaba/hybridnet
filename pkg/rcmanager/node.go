@@ -36,7 +36,8 @@ const ReconcileNode = "ReconcileNode"
 
 // Full update. Update remote vtep expect status
 func (m *Manager) reconcileNode() error {
-	klog.Infof("[RemoteCluster] Starting reconcile node from cluster %v", m.ClusterName)
+	klog.Infof("[remote cluster node] Starting reconcile nodes from cluster=%v", m.ClusterName)
+
 	nodes, err := m.NodeLister.List(labels.Everything())
 	if err != nil {
 		return err
@@ -178,10 +179,10 @@ func (m *Manager) processNextNode() bool {
 			// TODO: use retry handler to
 			// Put the item back on the workqueue to handle any transient errors
 			m.NodeQueue.AddRateLimited(key)
-			return fmt.Errorf("[RemoteCluster-Node] fail to sync '%s' for cluster=%v: %v, requeuing", key, m.ClusterName, err)
+			return fmt.Errorf("[remote cluster node] fail to sync nodes for cluster=%v: %v, requeuing", m.ClusterName, err)
 		}
 		m.NodeQueue.Forget(obj)
-		klog.Infof("[RemoteCluster-Node] succeed to sync '%s', cluster=%v", key, m.ClusterName)
+		klog.Infof("[remote cluster node] succeed to sync nodes for cluster=%v", m.ClusterName)
 		return nil
 	}(obj)
 

@@ -33,7 +33,8 @@ import (
 // reconcile one single node, update/add/remove everything about it's
 // corresponding remote vtep.
 func (m *Manager) reconcileIPInstance(nodeName string) error {
-	klog.Infof("[remote cluster] Starting reconcile ipinstance from cluster %v, node name=%v", m.ClusterName, nodeName)
+	klog.Infof("[remote cluster ipinstance] Starting reconcile node %v from cluster=%v", m.ClusterName, nodeName)
+
 	if len(nodeName) == 0 {
 		return nil
 	}
@@ -42,6 +43,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		err      error
 		vtepName string
 	)
+
 	vtepName = utils.GenRemoteVtepName(m.ClusterName, nodeName)
 	node, err = m.NodeLister.Get(nodeName)
 	if err != nil {
@@ -75,9 +77,10 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		if err != nil {
 			return err
 		}
-	}
-	if !newVtep || !remoteVtepChanged {
-		return nil
+
+		if !remoteVtepChanged {
+			return nil
+		}
 	}
 
 	if newVtep {
@@ -91,8 +94,10 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 			return err
 		}
 	}
+
 	remoteVtep.Status.LastModifyTime = metav1.Now()
 	_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
+
 	return err
 }
 
@@ -101,17 +106,21 @@ func (m *Manager) RemoteVtepChanged(oldRemoteVtep *networkingv1.RemoteVtep, desi
 	if err != nil {
 		return false, oldRemoteVtep, err
 	}
-	if utils.DifferentSetFromStringSlice(endpointIPList, oldRemoteVtep.Spec.EndpointIPList) {
+
+	if utils.CheckStringSliceDifferent(endpointIPList, oldRemoteVtep.Spec.EndpointIPList) {
 		changed = true
 	}
+
 	desiredVtepIP := desiredNode.Annotations[constants.AnnotationNodeVtepIP]
 	desiredVtepMac := desiredNode.Annotations[constants.AnnotationNodeVtepMac]
 	if oldRemoteVtep.Spec.VtepIP != desiredVtepIP || oldRemoteVtep.Spec.VtepMAC != desiredVtepMac {
 		changed = true
 	}
+
 	if oldRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] != desiredNode.Annotations[constants.AnnotationNodeLocalVxlanIPList] {
 		changed = true
 	}
+
 	if changed {
 		newRemoteVtep = oldRemoteVtep.DeepCopy()
 		newRemoteVtep.Spec.VtepIP = desiredVtepIP
@@ -158,11 +167,11 @@ func (m *Manager) processNextIPInstance() bool {
 			// TODO: use retry handler to
 			// Put the item back on the workqueue to handle any transient errors
 			m.IPQueue.AddRateLimited(key)
-			klog.Warningf("[RemoteCluster-IPInstance] failed to reconcileIPInstance. key=%v. err=%v", key, err)
-			return fmt.Errorf("[RemoteCluster-IPInstance] fail to sync '%s' for cluster id=%v: %v, requeuing", key, m.ClusterName, err)
+			klog.Warningf("[remote cluster ipinstance] failed to reconcileIPInstance. key=%v. err=%v", key, err)
+			return fmt.Errorf("[remote cluster ipinstance] fail to sync node %s for cluster=%v: %v, requeuing", key, m.ClusterName, err)
 		}
 		m.IPQueue.Forget(obj)
-		klog.Infof("[RemoteCluster-IPInstance] succeed to sync '%s', cluster=%v", key, m.ClusterName)
+		klog.Infof("[remote cluster ipinstance] succeed to sync node %s for cluster=%v", key, m.ClusterName)
 		return nil
 	}(obj)
 
@@ -176,36 +185,46 @@ func (m *Manager) filterIPInstance(obj interface{}) bool {
 	if !m.GetIsReady() {
 		return false
 	}
-	_, ok := obj.(*networkingv1.IPInstance)
-	return ok
+
+	ipInstance, ok := obj.(*networkingv1.IPInstance)
+	if !ok {
+		return false
+	}
+
+	return len(ipInstance.Status.Phase) > 0
 }
 
 func (m *Manager) addOrDelIPInstance(obj interface{}) {
 	ipInstance, _ := obj.(*networkingv1.IPInstance)
-	m.enqueueIPInstance(ipInstance.Status.NodeName)
+	m.enqueueIPInstance(ipInstance.Labels[constants.LabelNode])
 }
 
 func (m *Manager) updateIPInstance(oldObj, newObj interface{}) {
 	oldInstance, _ := oldObj.(*networkingv1.IPInstance)
 	newInstance, _ := newObj.(*networkingv1.IPInstance)
 
+	oldNodeName := oldInstance.Labels[constants.LabelNode]
+	newNodeName := newInstance.Labels[constants.LabelNode]
+
 	if oldInstance.ResourceVersion == newInstance.ResourceVersion {
 		return
 	}
-	if newInstance.Status.Phase == networkingv1.IPPhaseReserved && oldInstance.Status.Phase == networkingv1.IPPhaseReserved {
-		return
-	}
-	if newInstance.Status.NodeName != oldInstance.Status.NodeName {
-		m.enqueueIPInstance(oldInstance.Status.NodeName)
-		m.enqueueIPInstance(newInstance.Status.NodeName)
+
+	if newNodeName != oldNodeName {
+		m.enqueueIPInstance(oldNodeName)
+		m.enqueueIPInstance(newNodeName)
 		return
 	}
 
-	if newInstance.Spec.Address.IP != oldInstance.Spec.Address.IP {
-		m.enqueueIPInstance(newInstance.Status.NodeName)
+	if newInstance.Status.Phase != oldInstance.Status.Phase {
+		m.enqueueIPInstance(newNodeName)
 	}
 }
 
 func (m *Manager) enqueueIPInstance(nodeName string) {
+	if len(nodeName) == 0 {
+		return
+	}
+
 	m.IPQueue.Add(nodeName)
 }
