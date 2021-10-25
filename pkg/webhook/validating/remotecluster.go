@@ -18,7 +18,6 @@ package validating
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"regexp"
 	"sync"
@@ -26,7 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 var (
@@ -76,25 +74,5 @@ func validate(ctx context.Context, rc *networkingv1.RemoteCluster, handler *Hand
 		return admission.Denied("endpoint format: https://server:address, please check")
 	}
 
-	// get unique key of remote cluster
-	uuid, err := utils.GetUUIDFromRemoteCluster(rc)
-	if err != nil {
-		return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to get UUID of remote cluster: %v", err))
-	}
-
-	// ensure the uniqueness of cluster config
-	rcs := &networkingv1.RemoteClusterList{}
-	if err = handler.Client.List(ctx, rcs); err != nil {
-		return admission.Errored(http.StatusInternalServerError, err)
-	}
-	for i := range rcs.Items {
-		if rc.Name == rcs.Items[i].Name {
-			// self skip
-			continue
-		}
-		if uuid == rcs.Items[i].Status.UUID {
-			return admission.Denied(fmt.Sprintf("duplicated UUID with another remote cluster %s", rcs.Items[i].Name))
-		}
-	}
 	return admission.Allowed("validation pass")
 }
