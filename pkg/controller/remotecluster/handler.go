@@ -40,6 +40,7 @@ func (c *Controller) reconcileRemoteCluster(clusterName string) error {
 					terminatingManager.Close()
 				}
 			}
+			c.remoteClusterUUIDLock.DropByOwner(clusterName)
 			return nil
 		}
 		return err
