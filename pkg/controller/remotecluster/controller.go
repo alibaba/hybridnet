@@ -184,19 +184,19 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 		return fmt.Errorf("%s failed to wait for caches to sync", ControllerName)
 	}
 
-	c.Lock()
+	c.Mutex.Lock()
 	c.hasSynced = true
-	c.Unlock()
+	c.Mutex.Unlock()
 
 	// init UUID lock
-	if remoteClusterList, err := c.hybridnetClient.NetworkingV1().RemoteClusters().List(context.TODO(), metav1.ListOptions{}); err != nil {
+	remoteClusterList, err := c.hybridnetClient.NetworkingV1().RemoteClusters().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
 		return err
-	} else {
-		for i := range remoteClusterList.Items {
-			var remoteCluster = remoteClusterList.Items[i]
-			if len(remoteCluster.Status.UUID) > 0 {
-				_ = c.remoteClusterUUIDLock.LockByOwner(remoteCluster.Status.UUID, remoteCluster.Name)
-			}
+	}
+	for i := range remoteClusterList.Items {
+		var remoteCluster = remoteClusterList.Items[i]
+		if len(remoteCluster.Status.UUID) > 0 {
+			_ = c.remoteClusterUUIDLock.LockByOwner(remoteCluster.Status.UUID, remoteCluster.Name)
 		}
 	}
 
