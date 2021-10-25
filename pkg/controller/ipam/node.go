@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"reflect"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -34,12 +34,12 @@ import (
 )
 
 func (c *Controller) filterNode(obj interface{}) bool {
-	_, ok := obj.(*v1.Node)
+	_, ok := obj.(*corev1.Node)
 	return ok
 }
 
 func (c *Controller) addNode(obj interface{}) {
-	n, ok := obj.(*v1.Node)
+	n, ok := obj.(*corev1.Node)
 	if !ok {
 		return
 	}
@@ -51,11 +51,11 @@ func (c *Controller) addNode(obj interface{}) {
 }
 
 func (c *Controller) updateNode(oldObj, newObj interface{}) {
-	old, ok := oldObj.(*v1.Node)
+	old, ok := oldObj.(*corev1.Node)
 	if !ok {
 		return
 	}
-	new, ok := newObj.(*v1.Node)
+	new, ok := newObj.(*corev1.Node)
 	if !ok {
 		return
 	}
@@ -83,7 +83,7 @@ func (c *Controller) updateNode(oldObj, newObj interface{}) {
 }
 
 func (c *Controller) delNode(obj interface{}) {
-	n, ok := obj.(*v1.Node)
+	n, ok := obj.(*corev1.Node)
 	if !ok {
 		return
 	}
@@ -127,7 +127,7 @@ func (c *Controller) reconcileNode(name string) error {
 }
 
 // updateNodeQuotaLabels only works on dual stack mode
-func (c *Controller) updateNodeQuotaLabels(node *v1.Node) error {
+func (c *Controller) updateNodeQuotaLabels(node *corev1.Node) error {
 	var networkName string
 	if networkName = c.ipamCache.SelectNetworkByLabels(node.Labels); len(networkName) > 0 {
 		var v4Quota, v6Quota, dualStackQuota = constants.QuotaEmpty, constants.QuotaEmpty, constants.QuotaEmpty
@@ -148,49 +148,28 @@ func (c *Controller) updateNodeQuotaLabels(node *v1.Node) error {
 	return c.setNodeQuotaLabels(node.Name, constants.QuotaEmpty, constants.QuotaEmpty, constants.QuotaEmpty)
 }
 
-func (c *Controller) updateNodeNetworkAttachment(node *v1.Node) error {
-	// priority:
-	// 1. underlay
-	// 2. overlay (global)
-	var networkName = c.ipamCache.SelectNetworkByLabels(node.Labels)
-	if len(networkName) == 0 {
-		networkName = c.ipamCache.GetGlobalNetwork()
+func (c *Controller) updateNodeNetworkAttachment(node *corev1.Node) error {
+	var underlayNetworkAttached = len(c.ipamCache.SelectNetworkByLabels(node.Labels)) > 0
+	var overlayNetworkAttached = len(c.ipamCache.GetGlobalNetwork()) > 0
+
+	var expectedTaints = node.Spec.DeepCopy().Taints
+	if underlayNetworkAttached {
+		expectedTaints = removeSpecificTaint(expectedTaints, constants.TaintUnderlayNetworkUnattached)
+	} else {
+		expectedTaints = ensureSpecificTaint(expectedTaints, constants.TaintUnderlayNetworkUnattached)
 	}
 
-	if len(networkName) > 0 {
-		return c.setNodeCondition(node.Name, v1.NodeCondition{
-			Type:               v1.NodeNetworkUnavailable,
-			Status:             v1.ConditionFalse,
-			Reason:             "HybridnetNetworkAttached",
-			Message:            fmt.Sprintf("Node belong to network %s", networkName),
-			LastTransitionTime: metav1.Now(),
-		})
+	if overlayNetworkAttached {
+		expectedTaints = removeSpecificTaint(expectedTaints, constants.TaintOverlayNetworkUnattached)
+	} else {
+		expectedTaints = ensureSpecificTaint(expectedTaints, constants.TaintOverlayNetworkUnattached)
 	}
 
-	return c.setNodeCondition(node.Name, v1.NodeCondition{
-		Type:               v1.NodeNetworkUnavailable,
-		Status:             v1.ConditionTrue,
-		Reason:             "HybridnetNetworkDetached",
-		Message:            "Node has no related hybridnet network",
-		LastTransitionTime: metav1.Now(),
-	})
-}
+	if reflect.DeepEqual(node.Spec.Taints, expectedTaints) {
+		return nil
+	}
 
-func (c *Controller) setNodeCondition(nodeName string, condition v1.NodeCondition) error {
-	generatePatch := func(condition v1.NodeCondition) ([]byte, error) {
-		raw, err := json.Marshal(&[]v1.NodeCondition{condition})
-		if err != nil {
-			return nil, err
-		}
-		return []byte(fmt.Sprintf(`{"status":{"conditions":%s}}`, raw)), nil
-	}
-	condition.LastHeartbeatTime = metav1.Now()
-	patch, err := generatePatch(condition)
-	if err != nil {
-		return err
-	}
-	_, err = c.kubeClientSet.CoreV1().Nodes().PatchStatus(context.TODO(), nodeName, patch)
-	return err
+	return c.patchNodeTaints(node.Name, expectedTaints)
 }
 
 func (c *Controller) setNodeQuotaLabels(nodeName string, ipv4, ipv6, dualStack string) error {
@@ -211,4 +190,58 @@ func (c *Controller) setNodeQuotaLabels(nodeName string, ipv4, ipv6, dualStack s
 		)
 		return err
 	})
+}
+
+func (c *Controller) patchNodeTaints(nodeName string, taints []corev1.Taint) error {
+	taintBytes, err := json.Marshal(taints)
+	if err != nil {
+		return err
+	}
+
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		_, err := c.kubeClientSet.CoreV1().Nodes().Patch(context.TODO(),
+			nodeName,
+			types.MergePatchType,
+			[]byte(fmt.Sprintf(
+				`{"spec":{"taints":%q}}`,
+				string(taintBytes),
+			)),
+			metav1.PatchOptions{},
+		)
+		return err
+	})
+}
+
+func removeSpecificTaint(taints []corev1.Taint, taintKey string) []corev1.Taint {
+	var idx = -1
+	for i := range taints {
+		if taints[i].Key == taintKey {
+			idx = i
+			break
+		}
+	}
+
+	if idx < 0 {
+		return taints
+	}
+
+	return append(taints[:idx], taints[idx+1:]...)
+}
+
+func ensureSpecificTaint(taints []corev1.Taint, taintKey string) []corev1.Taint {
+	var idx = -1
+	for i := range taints {
+		if taints[i].Key == taintKey {
+			idx = i
+			break
+		}
+	}
+
+	if idx < 0 {
+		return append(taints, corev1.Taint{
+			Key:    taintKey,
+			Effect: corev1.TaintEffectNoSchedule,
+		})
+	}
+	return taints
 }

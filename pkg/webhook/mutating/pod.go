@@ -56,11 +56,23 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 
 	if pod.Spec.HostNetwork {
 		// make sure host-networking pod will not be affected by taint from hybridnet
-		return generatePatchResponseFromPod(req.Object.Raw, ensureTolerationInPod(pod, &corev1.Toleration{
-			Key:      TaintNodeNetworkUnavailable,
-			Operator: corev1.TolerationOpExists,
-			Effect:   corev1.TaintEffectNoSchedule,
-		}))
+		return generatePatchResponseFromPod(req.Object.Raw, ensureTolerationInPod(pod,
+			&corev1.Toleration{
+				Key:      TaintNodeNetworkUnavailable,
+				Operator: corev1.TolerationOpExists,
+				Effect:   corev1.TaintEffectNoSchedule,
+			},
+			&corev1.Toleration{
+				Key:      constants.TaintUnderlayNetworkUnattached,
+				Operator: corev1.TolerationOpExists,
+				Effect:   corev1.TaintEffectNoSchedule,
+			},
+			&corev1.Toleration{
+				Key:      constants.TaintOverlayNetworkUnattached,
+				Operator: corev1.TolerationOpExists,
+				Effect:   corev1.TaintEffectNoSchedule,
+			},
+		))
 	}
 
 	var mutated = false
@@ -129,10 +141,23 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		case ipamtypes.Underlay:
 			klog.Infof("[mutating] patch pod %s/%s with selector of network %s", req.Namespace, req.Name, networkName)
 			pod = patchSelectorToPod(pod, network.Spec.NodeSelector)
+			klog.Infof("[mutating] patch underlay pod %s/%s tolerate overlay unattached", req.Namespace, req.Name)
+			pod = ensureTolerationInPod(pod, &corev1.Toleration{
+				Key:      constants.TaintOverlayNetworkUnattached,
+				Operator: corev1.TolerationOpExists,
+				Effect:   corev1.TaintEffectNoSchedule,
+			})
 			mutated = true
 		case ipamtypes.Overlay:
 			// overlay network has a wide scheduling domain over the whole cluster
 			// no more selectors should be patched
+			klog.Infof("[mutating] patch overlay pod %s/%s tolerate underlay unattached", req.Namespace, req.Name)
+			pod = ensureTolerationInPod(pod, &corev1.Toleration{
+				Key:      constants.TaintUnderlayNetworkUnattached,
+				Operator: corev1.TolerationOpExists,
+				Effect:   corev1.TaintEffectNoSchedule,
+			})
+			mutated = true
 		default:
 			return admission.Errored(http.StatusBadRequest, fmt.Errorf("unknown network type %s", networkType))
 		}
@@ -188,14 +213,15 @@ func patchSelectorToPod(pod *corev1.Pod, selector map[string]string) *corev1.Pod
 	return pod
 }
 
-func ensureTolerationInPod(pod *corev1.Pod, toleration *corev1.Toleration) *corev1.Pod {
-	for i := range pod.Spec.Tolerations {
-		if tolerationMatch(&pod.Spec.Tolerations[i], toleration) {
-			return pod
+func ensureTolerationInPod(pod *corev1.Pod, tolerations ...*corev1.Toleration) *corev1.Pod {
+	for _, toleration := range tolerations {
+		for i := range pod.Spec.Tolerations {
+			if !tolerationMatch(&pod.Spec.Tolerations[i], toleration) {
+				pod.Spec.Tolerations = append(pod.Spec.Tolerations, *toleration)
+			}
 		}
 	}
 
-	pod.Spec.Tolerations = append(pod.Spec.Tolerations, *toleration)
 	return pod
 }
 
