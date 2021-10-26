@@ -29,7 +29,6 @@ require (
 	golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	gopkg.in/DATA-DOG/go-sqlmock.v1 v1.3.0 // indirect
-	gopkg.in/errgo.v2 v2.1.0
 	k8s.io/api v0.18.15
 	k8s.io/apimachinery v0.20.4
 	k8s.io/apiserver v0.20.4
