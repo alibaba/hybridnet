@@ -42,6 +42,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
 	informers "github.com/alibaba/hybridnet/pkg/client/informers/externalversions/networking/v1"
 	listers "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/controller/remotecluster/lock"
 	rctypes "github.com/alibaba/hybridnet/pkg/controller/remotecluster/types"
 	"github.com/alibaba/hybridnet/pkg/rcmanager"
 	"github.com/alibaba/hybridnet/pkg/utils"
@@ -80,6 +81,8 @@ type Controller struct {
 	localClusterSubnetSynced  cache.InformerSynced
 	localClusterNetworkLister listers.NetworkLister
 	localClusterNetworkSynced cache.InformerSynced
+
+	remoteClusterUUIDLock lock.UUIDLock
 
 	remoteClusterEvent chan rctypes.Event
 
@@ -125,6 +128,7 @@ func NewController(
 		localClusterNetworkLister: localClusterNetworkInformer.Lister(),
 		localClusterNetworkSynced: localClusterNetworkInformer.Informer().HasSynced,
 		remoteClusterQueue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ControllerName),
+		remoteClusterUUIDLock:     lock.NewUUIDLock(),
 		remoteClusterEvent:        make(chan rctypes.Event, 10),
 		recorder:                  recorder,
 	}
@@ -180,9 +184,21 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 		return fmt.Errorf("%s failed to wait for caches to sync", ControllerName)
 	}
 
-	c.Lock()
+	c.Mutex.Lock()
 	c.hasSynced = true
-	c.Unlock()
+	c.Mutex.Unlock()
+
+	// init UUID lock
+	remoteClusterList, err := c.hybridnetClient.NetworkingV1().RemoteClusters().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	for i := range remoteClusterList.Items {
+		var remoteCluster = remoteClusterList.Items[i]
+		if len(remoteCluster.Status.UUID) > 0 {
+			_ = c.remoteClusterUUIDLock.LockByOwner(remoteCluster.Status.UUID, remoteCluster.Name)
+		}
+	}
 
 	// start workers
 	klog.Info("Starting workers")
@@ -281,6 +297,10 @@ func (c *Controller) handleEventFromRemoteClusters() {
 				klog.Warningf("[remote cluster] invalid cluster name for remote cluster event")
 				break
 			}
+			if err := c.remoteClusterUUIDLock.LockByOwner(uuid, event.ClusterName); err != nil {
+				klog.Errorf("[remote cluster] uuid lock failed: %v", err)
+				continue
+			}
 
 			_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				return c.patchUUIDtoRemoteCluster(event.ClusterName, uuid)
@@ -332,6 +352,10 @@ func copyUint32Ptr(i *uint32) *uint32 {
 
 func (c *Controller) GetUUID() types.UID {
 	return c.UUID
+}
+
+func (c *Controller) Lock(uuid types.UID, clusterName string) error {
+	return c.remoteClusterUUIDLock.LockByOwner(uuid, clusterName)
 }
 
 func (c *Controller) GetOverlayNetID() *uint32 {

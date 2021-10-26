@@ -28,6 +28,14 @@ type UUIDGetter interface {
 	GetUUID() types.UID
 }
 
+type UUIDLocker interface {
+	Lock(uuid types.UID, clusterName string) error
+}
+
+type ClusterNameGetter interface {
+	GetClusterName() string
+}
+
 type OverlayNetIDGetter interface {
 	GetOverlayNetID() *uint32
 }
