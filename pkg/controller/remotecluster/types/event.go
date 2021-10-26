@@ -27,4 +27,11 @@ type Event struct {
 const (
 	EventRefreshUUID  = EventType("RefreshUUID")
 	EventUpdateStatus = EventType("UpdateStatus")
+	EventRecordEvent  = EventType("RecordEvent")
 )
+
+type EventBody struct {
+	EventType string
+	Reason    string
+	Message   string
+}

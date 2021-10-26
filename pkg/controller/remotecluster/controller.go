@@ -327,6 +327,25 @@ func (c *Controller) handleEventFromRemoteClusters() {
 
 			go updateSingleRemoteClusterStatus(c, managerObject.(*rcmanager.Manager), remoteCluster)
 			klog.Infof("[remote cluster] receive event and update status for cluster %s", event.ClusterName)
+		case rctypes.EventRecordEvent:
+			if len(event.ClusterName) == 0 {
+				klog.Warningf("invalid cluster for record event event")
+				break
+			}
+
+			eventBody, ok := event.Object.(rctypes.EventBody)
+			if !ok {
+				break
+			}
+
+			remoteCluster, err := c.remoteClusterLister.Get(event.ClusterName)
+			if err != nil {
+				klog.Errorf("record event fail on getting object: %v", err)
+				break
+			}
+
+			c.recorder.Event(remoteCluster, eventBody.EventType, eventBody.Reason, eventBody.Message)
+			klog.Infof("[remote cluster] record event %v for cluster %s", eventBody, event.ClusterName)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
