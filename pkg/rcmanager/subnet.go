@@ -249,7 +249,7 @@ func (m *Manager) filterSubnet(obj interface{}) bool {
 }
 
 func (m *Manager) addOrDelSubnet(_ interface{}) {
-	m.EnqueueSubnet(ReconcileSubnet)
+	m.EnqueueAllSubnet()
 }
 
 func (m *Manager) updateSubnet(oldObj, newObj interface{}) {
@@ -259,11 +259,11 @@ func (m *Manager) updateSubnet(oldObj, newObj interface{}) {
 	if oldRC.ResourceVersion == newRC.ResourceVersion {
 		return
 	}
-	m.EnqueueSubnet(ReconcileSubnet)
+	m.EnqueueAllSubnet()
 }
 
-func (m *Manager) EnqueueSubnet(subnetName string) {
-	m.SubnetQueue.Add(subnetName)
+func (m *Manager) EnqueueAllSubnet() {
+	m.SubnetQueue.Add(ReconcileSubnet)
 }
 
 func (m *Manager) processNextSubnet() bool {

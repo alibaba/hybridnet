@@ -82,6 +82,6 @@ func updateSingleRemoteClusterStatus(c *Controller, manager *rcmanager.Manager, 
 }
 
 func resumeReconcile(manager *rcmanager.Manager) {
-	manager.EnqueueSubnet(rcmanager.ReconcileSubnet)
-	manager.EnqueueNode(rcmanager.ReconcileNode)
+	manager.EnqueueAllSubnet()
+	manager.EnqueueAllNode()
 }

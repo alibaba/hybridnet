@@ -208,7 +208,7 @@ func (m *Manager) filterNode(obj interface{}) bool {
 }
 
 func (m *Manager) addOrDelNode(_ interface{}) {
-	m.EnqueueNode(ReconcileNode)
+	m.EnqueueAllNode()
 }
 
 func (m *Manager) updateNode(oldObj, newObj interface{}) {
@@ -225,9 +225,9 @@ func (m *Manager) updateNode(oldObj, newObj interface{}) {
 		newNodeAnnotations[constants.AnnotationNodeLocalVxlanIPList] == oldNodeAnnotations[constants.AnnotationNodeLocalVxlanIPList] {
 		return
 	}
-	m.EnqueueNode(ReconcileNode)
+	m.EnqueueAllNode()
 }
 
-func (m *Manager) EnqueueNode(nodeName string) {
-	m.NodeQueue.Add(nodeName)
+func (m *Manager) EnqueueAllNode() {
+	m.NodeQueue.Add(ReconcileNode)
 }
