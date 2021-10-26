@@ -22,58 +22,44 @@ import (
 	"reflect"
 	"sync"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/utils"
-	"gopkg.in/errgo.v2/fmt/errors"
 	v1 "k8s.io/api/core/v1"
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/klog"
 	"k8s.io/utils/pointer"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/controller/remotecluster/types"
+	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 const (
-	ReasonSubnetConflict = "SubnetConflict"
-
 	ReconcileSubnet = "ReconcileSubnet"
 )
 
 func (m *Manager) reconcileSubnet() error {
 	klog.Infof("[remote cluster subnet] Starting reconcile subnet from cluster=%v", m.ClusterName)
 
-	localClusterSubnets, err := m.LocalClusterSubnetLister.List(labels.Everything())
-	if err != nil {
-		return err
-	}
+	// list remote subnet of local cluster
 	localClusterRemoteSubnets, err := m.RemoteSubnetLister.List(labels.Everything())
 	if err != nil {
 		return err
 	}
+	// list subnet of remote cluster
 	remoteClusterSubnets, err := m.SubnetLister.List(labels.Everything())
 	if err != nil {
 		return err
 	}
+	// list network of remote cluster
 	networks, err := m.NetworkLister.List(labels.Everything())
 	if err != nil {
 		return err
 	}
 
-	checkOverlap := func(remoteClusterSubnets []*networkingv1.Subnet) []*networkingv1.Subnet {
-		subnets := make([]*networkingv1.Subnet, 0)
-		for _, subnet := range remoteClusterSubnets {
-			err1 := m.checkRemoteSubnetOverlap(subnet, localClusterRemoteSubnets)
-			err2 := m.checkLocalClusterOverlap(subnet, localClusterSubnets)
-			if err1 != nil || err2 != nil {
-				continue
-			}
-			subnets = append(subnets, subnet)
-		}
-		return subnets
-	}
-	remoteClusterSubnets = checkOverlap(remoteClusterSubnets)
-
+	// transfer network slice into map
 	networkMap := func() map[string]*networkingv1.Network {
 		networkMap := make(map[string]*networkingv1.Network)
 		for _, network := range networks {
@@ -81,33 +67,34 @@ func (m *Manager) reconcileSubnet() error {
 		}
 		return networkMap
 	}()
+
+	// diff expected subnets and existing subnets
 	add, update, remove := m.diffSubnetAndRCSubnet(remoteClusterSubnets, localClusterRemoteSubnets, networkMap)
+
+	// modify existing subnets to expectation
 	var (
-		wg        sync.WaitGroup
-		cur       = metav1.Now()
-		errHappen bool
+		wg      sync.WaitGroup
+		errChan = make(chan error)
+		errList []error
 	)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for _, v := range add {
-			rcSubnet, err := m.convertSubnet2RemoteSubnet(v, networkMap[v.Spec.Network])
+		for _, toAdd := range add {
+			rcSubnet, err := m.convertSubnet2RemoteSubnet(toAdd, networkMap[toAdd.Spec.Network])
 			if err != nil {
-				errHappen = true
-				klog.Warningf("convertSubnet2RemoteSubnet error. err=%v. subnet name=%v. ClusterID=%v", err, v.Name, m.ClusterName)
+				errChan <- fmt.Errorf("convert to remote subnet fail: %v, subnet=%v", err, toAdd.Name)
 				continue
 			}
 			newSubnet, err := m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().Create(context.TODO(), rcSubnet, metav1.CreateOptions{})
 			if err != nil {
-				errHappen = true
-				klog.Warningf("Can't create remote subnet. err=%v. remote subnet name=%v", err, rcSubnet.Name)
+				errChan <- fmt.Errorf("create remote subnet fail: %v, subnet=%v", err, toAdd.Name)
 				continue
 			}
-			newSubnet.Status.LastModifyTime = cur
+			newSubnet.Status.LastModifyTime = metav1.Now()
 			_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), newSubnet, metav1.UpdateOptions{})
 			if err != nil {
-				errHappen = true
-				klog.Warningf("Can't update remote subnet status. err=%v. remote subnet name=%v", err, rcSubnet.Name)
+				errChan <- fmt.Errorf("update remote subnet status fail: %v, subnet=%v", err, toAdd.Name)
 			}
 		}
 	}()
@@ -115,18 +102,16 @@ func (m *Manager) reconcileSubnet() error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for _, v := range update {
-			remoteSubnet, err := m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().Update(context.TODO(), v, metav1.UpdateOptions{})
+		for _, toUpdate := range update {
+			remoteSubnet, err := m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().Update(context.TODO(), toUpdate, metav1.UpdateOptions{})
 			if err != nil {
-				errHappen = true
-				klog.Warningf("Can't update remote subnet. err=%v. remote subnet name=%v", err, remoteSubnet.Name)
+				errChan <- fmt.Errorf("update remote subnet fail: %v, subnet=%v", err, toUpdate.Name)
 				continue
 			}
-			remoteSubnet.Status.LastModifyTime = cur
+			remoteSubnet.Status.LastModifyTime = metav1.Now()
 			_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), remoteSubnet, metav1.UpdateOptions{})
 			if err != nil {
-				errHappen = true
-				klog.Warningf("Can't update remote subnet status. err=%v. remote subnet name=%v", err, remoteSubnet.Name)
+				errChan <- fmt.Errorf("update remote subnet status fail: %v, subnet=%v", err, toUpdate.Name)
 			}
 		}
 	}()
@@ -134,18 +119,43 @@ func (m *Manager) reconcileSubnet() error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for _, v := range remove {
-			_ = m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().Delete(context.TODO(), v.Name, metav1.DeleteOptions{})
+		for _, toRemove := range remove {
+			_ = m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().Delete(context.TODO(), toRemove.Name, metav1.DeleteOptions{})
 			if err != nil && !k8serror.IsNotFound(err) {
-				errHappen = true
-				klog.Warningf("Can't delete remote subnet. remote subnet name=%v", v.Name)
+				errChan <- fmt.Errorf("remove remote subnet fail: %v, subnet=%v", err, toRemove.Name)
 			}
 		}
 	}()
-	wg.Wait()
 
-	if errHappen {
-		return errors.New("some error happened in add/update/remove function")
+	go func() {
+		for err := range errChan {
+			errList = append(errList, err)
+		}
+	}()
+
+	wg.Wait()
+	close(errChan)
+
+	if aggregatedError := errors.NewAggregate(errList); aggregatedError != nil {
+		m.eventHub <- types.Event{
+			Type:        types.EventRecordEvent,
+			ClusterName: m.ClusterName,
+			Object: types.EventBody{
+				EventType: v1.EventTypeWarning,
+				Reason:    "SubnetReconciliationFail",
+				Message:   aggregatedError.Error(),
+			},
+		}
+		return fmt.Errorf("fail to reconcile remote subnets: %v, cluster=%v", aggregatedError, m.ClusterName)
+	}
+
+	m.eventHub <- types.Event{
+		Type:        types.EventRecordEvent,
+		ClusterName: m.ClusterName,
+		Object: types.EventBody{
+			EventType: v1.EventTypeNormal,
+			Reason:    "SubnetReconciliationSucceed",
+		},
 	}
 	return nil
 }
@@ -153,38 +163,6 @@ func (m *Manager) reconcileSubnet() error {
 func (m *Manager) RunSubnetWorker() {
 	for m.processNextSubnet() {
 	}
-}
-
-// validate only in local cluster
-func (m *Manager) checkLocalClusterOverlap(subnet *networkingv1.Subnet, subnets []*networkingv1.Subnet) error {
-	for _, s := range subnets {
-		if utils.Intersect(&subnet.Spec.Range, &s.Spec.Range) {
-			err := errors.Newf("Two subnet intersect. One is from cluster %v, cidr=%v. Another is from lcoal cluster, cidr=%v",
-				m.ClusterName, subnet.Spec.Range.CIDR, s.Spec.Range.CIDR)
-			klog.Error(err.Error())
-			m.Recorder.Event(subnet, v1.EventTypeWarning, ReasonSubnetConflict, err.Error())
-			return errors.Newf("Overlap network. overlap with other local cluster subnet")
-		}
-	}
-	return nil
-}
-
-// validate whether the subnet to be added is conflict with remoteSubnet in localCluster
-// validate between all connected domain expect local cluster
-func (m *Manager) checkRemoteSubnetOverlap(subnet *networkingv1.Subnet, rcSubnets []*networkingv1.RemoteSubnet) error {
-	for _, rc := range rcSubnets {
-		if rc.Name == utils.GenRemoteSubnetName(m.ClusterName, subnet.Name) {
-			continue
-		}
-		if utils.Intersect(&rc.Spec.Range, &subnet.Spec.Range) {
-			err := errors.Newf("Two subnet intersect. One is from cluster %v, cidr=%v. Another is from cluster %v, cidr=%v",
-				m.ClusterName, subnet.Spec.Range.CIDR, rc.Spec.ClusterName, rc.Spec.Range.CIDR)
-			klog.Error(err.Error())
-			m.Recorder.Event(subnet, v1.EventTypeWarning, ReasonSubnetConflict, err.Error())
-			return errors.Newf("Overlap network. overlap with other remoteSubnet")
-		}
-	}
-	return nil
 }
 
 // Reconcile local cluster *networkingv1.RemoteSubnet based on remote cluster's subnet.
@@ -234,7 +212,7 @@ func (m *Manager) diffSubnetAndRCSubnet(subnets []*networkingv1.Subnet, rcSubnet
 
 func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet, network *networkingv1.Network) (*networkingv1.RemoteSubnet, error) {
 	if network == nil {
-		return nil, errors.Newf("Subnet corresponding Network is nil. Subnet=%v, Cluster=%v", subnet.Name, m.ClusterName)
+		return nil, fmt.Errorf("subnet corresponding Network is nil. Subnet=%v, Cluster=%v", subnet.Name, m.ClusterName)
 	}
 	rs := &networkingv1.RemoteSubnet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -271,7 +249,7 @@ func (m *Manager) filterSubnet(obj interface{}) bool {
 }
 
 func (m *Manager) addOrDelSubnet(_ interface{}) {
-	m.EnqueueSubnet(ReconcileSubnet)
+	m.EnqueueAllSubnet()
 }
 
 func (m *Manager) updateSubnet(oldObj, newObj interface{}) {
@@ -281,11 +259,11 @@ func (m *Manager) updateSubnet(oldObj, newObj interface{}) {
 	if oldRC.ResourceVersion == newRC.ResourceVersion {
 		return
 	}
-	m.EnqueueSubnet(ReconcileSubnet)
+	m.EnqueueAllSubnet()
 }
 
-func (m *Manager) EnqueueSubnet(subnetName string) {
-	m.SubnetQueue.Add(subnetName)
+func (m *Manager) EnqueueAllSubnet() {
+	m.SubnetQueue.Add(ReconcileSubnet)
 }
 
 func (m *Manager) processNextSubnet() bool {

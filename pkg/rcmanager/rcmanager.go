@@ -60,7 +60,6 @@ type Manager struct {
 	LocalClusterHybridnetClient versioned.Interface
 	RemoteSubnetLister          listers.RemoteSubnetLister
 	RemoteVtepLister            listers.RemoteVtepLister
-	LocalClusterSubnetLister    listers.SubnetLister
 
 	KubeClient               *kubeclientset.Clientset
 	HybridnetClient          *versioned.Clientset
@@ -105,7 +104,6 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	localClusterKubeClient kubeclientset.Interface,
 	localClusterHybridnetClient versioned.Interface,
 	remoteSubnetLister listers.RemoteSubnetLister,
-	localClusterSubnetLister listers.SubnetLister,
 	remoteVtepLister listers.RemoteVtepLister,
 	eventHub chan<- rctypes.Event) (*Manager, error) {
 	defer func() {
@@ -150,7 +148,6 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 		LocalClusterKubeClient:      localClusterKubeClient,
 		LocalClusterHybridnetClient: localClusterHybridnetClient,
 		RemoteSubnetLister:          remoteSubnetLister,
-		LocalClusterSubnetLister:    localClusterSubnetLister,
 		RemoteVtepLister:            remoteVtepLister,
 		KubeClient:                  kubeClient,
 		HybridnetClient:             hybridnetClient,

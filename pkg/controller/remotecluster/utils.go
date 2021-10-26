@@ -43,7 +43,7 @@ func (c *Controller) syncRemoteClusterManager(remoteCluster *networkingv1.Remote
 	}
 
 	manager, err := rcmanager.NewRemoteClusterManager(remoteCluster, c.kubeClient, c.hybridnetClient, c.remoteSubnetLister,
-		c.localClusterSubnetLister, c.remoteVtepLister, c.remoteClusterEvent)
+		c.remoteVtepLister, c.remoteClusterEvent)
 	if err != nil {
 		klog.Errorf("fail to create remote cluster manager: %v", err)
 		c.recorder.Event(remoteCluster, corev1.EventTypeWarning, "ErrNewRemoteClusterManager", err.Error())
@@ -82,6 +82,6 @@ func updateSingleRemoteClusterStatus(c *Controller, manager *rcmanager.Manager, 
 }
 
 func resumeReconcile(manager *rcmanager.Manager) {
-	manager.EnqueueSubnet(rcmanager.ReconcileSubnet)
-	manager.EnqueueNode(rcmanager.ReconcileNode)
+	manager.EnqueueAllSubnet()
+	manager.EnqueueAllNode()
 }
