@@ -19,6 +19,7 @@ package rcmanager
 import (
 	"context"
 	"fmt"
+	"net"
 
 	corev1 "k8s.io/api/core/v1"
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
@@ -172,7 +173,24 @@ func (m *Manager) pickEndpointListFromNode(node *corev1.Node) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	return utils.PickUsingIPList(instances), nil
+	return m.pickUsingIPList(instances), nil
+}
+
+func (m *Manager) pickUsingIPList(instances []*networkingv1.IPInstance) []string {
+	ipList := make([]string, 0)
+	for _, v := range instances {
+		// only ip of recognized subnets will be picked
+		if !m.subnetSet.Recognize(v.Spec.Subnet) {
+			continue
+		}
+		// pick using ips
+		if v == nil || v.Status.Phase != networkingv1.IPPhaseUsing {
+			continue
+		}
+		usingIP, _, _ := net.ParseCIDR(v.Spec.Address.IP)
+		ipList = append(ipList, usingIP.String())
+	}
+	return ipList
 }
 
 func (m *Manager) RunIPInstanceWorker() {
