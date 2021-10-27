@@ -20,31 +20,57 @@ import (
 	"context"
 	"fmt"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/utils"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/controller/remotecluster/types"
+	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 // reconcile one single node, update/add/remove everything about it's
 // corresponding remote vtep.
-func (m *Manager) reconcileIPInstance(nodeName string) error {
+func (m *Manager) reconcileIPInstance(nodeName string) (err error) {
 	klog.Infof("[remote cluster ipinstance] Starting reconcile node %v from cluster=%v", m.ClusterName, nodeName)
 
 	if len(nodeName) == 0 {
 		return nil
 	}
 	var (
-		node     *v1.Node
-		err      error
-		vtepName string
+		node     *corev1.Node
+		vtepName = utils.GenRemoteVtepName(m.ClusterName, nodeName)
 	)
 
-	vtepName = utils.GenRemoteVtepName(m.ClusterName, nodeName)
+	defer func() {
+		if err != nil {
+			m.eventHub <- types.Event{
+				Type:        types.EventRecordEvent,
+				ClusterName: m.ClusterName,
+				Object: types.EventBody{
+					EventType: corev1.EventTypeWarning,
+					Reason:    "IPReconciliationFail",
+					Message:   err.Error(),
+				},
+			}
+			klog.Errorf("[remote cluster ipinstance] reconcile node %s fail: %v, cluster=%v", nodeName, err, m.ClusterName)
+			return
+		}
+
+		m.eventHub <- types.Event{
+			Type:        types.EventRecordEvent,
+			ClusterName: m.ClusterName,
+			Object: types.EventBody{
+				EventType: corev1.EventTypeNormal,
+				Reason:    "IPReconciliationSucceed",
+			},
+		}
+		klog.Infof("[remote cluster ipinstance] reconcile node %s successfully, cluster=%v", nodeName, m.ClusterName)
+	}()
+
 	node, err = m.NodeLister.Get(nodeName)
 	if err != nil {
 		if k8serror.IsNotFound(err) {
@@ -52,56 +78,63 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 			if k8serror.IsNotFound(err) {
 				return nil
 			}
+			return fmt.Errorf("delete vtep fail: %v, vtep=%v", err, vtepName)
 		}
-		return err
+		return fmt.Errorf("get node fail: %v, node=%v", err, nodeName)
 	}
 
 	var (
-		newVtep           bool
-		remoteVtepChanged bool
-		remoteVtep        *networkingv1.RemoteVtep
+		remoteVtep *networkingv1.RemoteVtep
 	)
-
 	remoteVtep, err = m.RemoteVtepLister.Get(vtepName)
 	if err != nil {
 		if !k8serror.IsNotFound(err) {
-			return err
+			return fmt.Errorf("get vtep fail: %v, vtep=%v", err, vtepName)
+		}
+
+		// create vtep if not existing
+		var endpointIPList []string
+		if endpointIPList, err = m.pickEndpointListFromNode(node); err != nil {
+			return fmt.Errorf("list endpoint ip fail: %v, vtep=%v", err, vtepName)
 		}
 		remoteVtep = utils.NewRemoteVtep(m.ClusterName, m.RemoteClusterUID, node.Annotations[constants.AnnotationNodeVtepIP],
-			node.Annotations[constants.AnnotationNodeVtepMac], node.Annotations[constants.AnnotationNodeLocalVxlanIPList], node.Name, nil)
-		newVtep = true
+			node.Annotations[constants.AnnotationNodeVtepMac], node.Annotations[constants.AnnotationNodeLocalVxlanIPList], node.Name, endpointIPList)
+
+		if remoteVtep, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{}); err != nil {
+			return fmt.Errorf("create vtep fail: %v, vtep=%v", err, vtepName)
+		}
+
+		remoteVtep.Status.LastModifyTime = metav1.Now()
+		if _, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{}); err != nil {
+			return fmt.Errorf("update vtep status fail: %v, vtep=%v", err, vtepName)
+		}
+
+		return nil
 	}
 
-	if !newVtep {
-		remoteVtepChanged, remoteVtep, err = m.RemoteVtepChanged(remoteVtep, node)
-		if err != nil {
-			return err
-		}
-
-		if !remoteVtepChanged {
-			return nil
-		}
+	// update vtep if changed
+	var shouldUpdate bool
+	shouldUpdate, remoteVtep, err = m.RemoteVtepChanged(remoteVtep, node)
+	if err != nil {
+		return fmt.Errorf("judge if vtep changed fail: %v, vtep=%v", err, vtepName)
+	}
+	if !shouldUpdate {
+		return nil
 	}
 
-	if newVtep {
-		remoteVtep, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{})
-		if err != nil {
-			return err
-		}
-	} else {
-		remoteVtep, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Update(context.TODO(), remoteVtep, metav1.UpdateOptions{})
-		if err != nil {
-			return err
-		}
+	if remoteVtep, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Update(context.TODO(), remoteVtep, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("update vtep fail: %v, vtep=%v", err, vtepName)
 	}
 
 	remoteVtep.Status.LastModifyTime = metav1.Now()
-	_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
+	if _, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("update vtep status fail: %v, vtep=%v", err, vtepName)
+	}
 
-	return err
+	return nil
 }
 
-func (m *Manager) RemoteVtepChanged(oldRemoteVtep *networkingv1.RemoteVtep, desiredNode *v1.Node) (changed bool, newRemoteVtep *networkingv1.RemoteVtep, err error) {
+func (m *Manager) RemoteVtepChanged(oldRemoteVtep *networkingv1.RemoteVtep, desiredNode *corev1.Node) (changed bool, newRemoteVtep *networkingv1.RemoteVtep, err error) {
 	endpointIPList, err := m.pickEndpointListFromNode(desiredNode)
 	if err != nil {
 		return false, oldRemoteVtep, err
@@ -134,7 +167,7 @@ func (m *Manager) RemoteVtepChanged(oldRemoteVtep *networkingv1.RemoteVtep, desi
 	return
 }
 
-func (m *Manager) pickEndpointListFromNode(node *v1.Node) ([]string, error) {
+func (m *Manager) pickEndpointListFromNode(node *corev1.Node) ([]string, error) {
 	instances, err := m.IPLister.List(labels.SelectorFromSet(labels.Set{constants.LabelNode: node.Name}))
 	if err != nil {
 		return nil, err

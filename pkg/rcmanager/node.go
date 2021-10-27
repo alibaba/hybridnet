@@ -18,18 +18,20 @@ package rcmanager
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/utils"
-	apiv1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/klog"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/controller/remotecluster/types"
+	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 const ReconcileNode = "ReconcileNode"
@@ -38,36 +40,40 @@ const ReconcileNode = "ReconcileNode"
 func (m *Manager) reconcileNode() error {
 	klog.Infof("[remote cluster node] Starting reconcile nodes from cluster=%v", m.ClusterName)
 
+	// list node of remote cluster
 	nodes, err := m.NodeLister.List(labels.Everything())
 	if err != nil {
 		return err
 	}
+
+	// list remote vtep of local cluster
 	vteps, err := m.RemoteVtepLister.List(utils.SelectorClusterName(m.ClusterName))
 	if err != nil {
 		return err
 	}
 
+	// diff
 	add, update, remove := m.diffNodeAndVtep(nodes, vteps)
+
+	// actions
 	var (
-		wg        sync.WaitGroup
-		cur       = metav1.Now()
-		errHappen bool
+		wg      sync.WaitGroup
+		errChan = make(chan error)
+		errList []error
 	)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for _, v := range add {
-			vtep, err := m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Create(context.TODO(), v, metav1.CreateOptions{})
+		for _, toAdd := range add {
+			vtep, err := m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Create(context.TODO(), toAdd, metav1.CreateOptions{})
 			if err != nil {
-				errHappen = true
-				klog.Warningf("Can't create remote vtep in local cluster. err=%v. remote vtep name=%v", err, v.Name)
+				errChan <- fmt.Errorf("create remote vtep fail: %v, vtep=%v", err, toAdd.Name)
 				continue
 			}
-			vtep.Status.LastModifyTime = cur
+			vtep.Status.LastModifyTime = metav1.Now()
 			_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
 			if err != nil {
-				errHappen = true
-				klog.Warningf("Can't update remote vtep status in local cluster. err=%v. remote vtep name=%v", err, v.Name)
+				errChan <- fmt.Errorf("update remote vtep status fail: %v, vtep=%v", err, toAdd.Name)
 			}
 		}
 	}()
@@ -75,18 +81,16 @@ func (m *Manager) reconcileNode() error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for _, v := range update {
-			vtep, err := m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Update(context.TODO(), v, metav1.UpdateOptions{})
+		for _, toUpdate := range update {
+			vtep, err := m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Update(context.TODO(), toUpdate, metav1.UpdateOptions{})
 			if err != nil {
-				errHappen = true
-				klog.Warningf("Can't update remote vtep in local cluster. err=%v. name=%v", err, v.Name)
+				errChan <- fmt.Errorf("update remote vtep fail: %v, vtep=%v", err, toUpdate.Name)
 				continue
 			}
-			vtep.Status.LastModifyTime = cur
+			vtep.Status.LastModifyTime = metav1.Now()
 			_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
 			if err != nil {
-				errHappen = true
-				klog.Warningf("Can't update remote vtep status in local cluster. err=%v. name=%v", err, v.Name)
+				errChan <- fmt.Errorf("update remote vtep status fail: %v, vtep=%v", err, toUpdate.Name)
 			}
 		}
 	}()
@@ -94,26 +98,50 @@ func (m *Manager) reconcileNode() error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for _, v := range remove {
-			_ = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), v, metav1.DeleteOptions{})
+		for _, toRemove := range remove {
+			_ = m.LocalClusterHybridnetClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), toRemove, metav1.DeleteOptions{})
 			if err != nil && !k8serror.IsNotFound(err) {
-				errHappen = true
-				klog.Warningf("Can't delete remote vtep in local cluster. remote vtep name=%v", v)
+				errChan <- fmt.Errorf("remove remote vtep fail: %v, vtep=%v", err, toRemove)
 			}
+		}
+	}()
+
+	go func() {
+		for err := range errChan {
+			errList = append(errList, err)
 		}
 	}()
 
 	wg.Wait()
-	if errHappen {
-		return errors.New("some error happened in add/update/remove function")
+	close(errChan)
+
+	if aggregatedError := errors.NewAggregate(errList); aggregatedError != nil {
+		m.eventHub <- types.Event{
+			Type:        types.EventRecordEvent,
+			ClusterName: m.ClusterName,
+			Object: types.EventBody{
+				EventType: corev1.EventTypeWarning,
+				Reason:    "NodeReconciliationFail",
+				Message:   aggregatedError.Error(),
+			},
+		}
+		return fmt.Errorf("fail to reconcile remote nodes: %v, cluster=%v", aggregatedError, m.ClusterName)
+	}
+
+	m.eventHub <- types.Event{
+		Type:        types.EventRecordEvent,
+		ClusterName: m.ClusterName,
+		Object: types.EventBody{
+			EventType: corev1.EventTypeNormal,
+			Reason:    "NodeReconciliationSucceed",
+		},
 	}
 	return nil
 }
 
-func (m *Manager) diffNodeAndVtep(nodes []*apiv1.Node, vteps []*networkingv1.RemoteVtep) (
-	add []*networkingv1.RemoteVtep, update []*networkingv1.RemoteVtep, remove []string) {
-	nodeMap := func() map[string]*apiv1.Node {
-		nodeMap := make(map[string]*apiv1.Node)
+func (m *Manager) diffNodeAndVtep(nodes []*corev1.Node, vteps []*networkingv1.RemoteVtep) (add []*networkingv1.RemoteVtep, update []*networkingv1.RemoteVtep, remove []string) {
+	nodeMap := func() map[string]*corev1.Node {
+		nodeMap := make(map[string]*corev1.Node)
 		for _, node := range nodes {
 			nodeMap[node.Name] = node
 		}
@@ -203,7 +231,7 @@ func (m *Manager) filterNode(obj interface{}) bool {
 	if !m.GetIsReady() {
 		return false
 	}
-	_, ok := obj.(*apiv1.Node)
+	_, ok := obj.(*corev1.Node)
 	return ok
 }
 
@@ -212,8 +240,8 @@ func (m *Manager) addOrDelNode(_ interface{}) {
 }
 
 func (m *Manager) updateNode(oldObj, newObj interface{}) {
-	oldNode, _ := oldObj.(*apiv1.Node)
-	newNode, _ := newObj.(*apiv1.Node)
+	oldNode, _ := oldObj.(*corev1.Node)
+	newNode, _ := newObj.(*corev1.Node)
 	newNodeAnnotations := newNode.Annotations
 	oldNodeAnnotations := oldNode.Annotations
 
