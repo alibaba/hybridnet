@@ -18,9 +18,10 @@ package utils
 import (
 	"net"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/gogf/gf/container/gset"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 )
 
 func StringToIPNet(in string) *net.IPNet {
@@ -91,18 +92,6 @@ func Intersect(rangeA *networkingv1.AddressRange, rangeB *networkingv1.AddressRa
 		}
 	}
 	return false
-}
-
-func PickUsingIPList(instances []*networkingv1.IPInstance) []string {
-	ipList := make([]string, 0)
-	for _, v := range instances {
-		if v == nil || v.Status.Phase != networkingv1.IPPhaseUsing {
-			continue
-		}
-		usingIP, _, _ := net.ParseCIDR(v.Spec.Address.IP)
-		ipList = append(ipList, usingIP.String())
-	}
-	return ipList
 }
 
 // LastIP Determine the last IP of a subnet, excluding the broadcast if IPv4

@@ -95,7 +95,10 @@ func (m *Manager) reconcileSubnet() error {
 			_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), newSubnet, metav1.UpdateOptions{})
 			if err != nil {
 				errChan <- fmt.Errorf("update remote subnet status fail: %v, subnet=%v", err, toAdd.Name)
+				continue
 			}
+
+			m.subnetSet.Remember(toAdd.Name)
 		}
 	}()
 
@@ -112,7 +115,10 @@ func (m *Manager) reconcileSubnet() error {
 			_, err = m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), remoteSubnet, metav1.UpdateOptions{})
 			if err != nil {
 				errChan <- fmt.Errorf("update remote subnet status fail: %v, subnet=%v", err, toUpdate.Name)
+				continue
 			}
+
+			m.subnetSet.Remember(toUpdate.Labels[constants.LabelSubnet])
 		}
 	}()
 
@@ -123,7 +129,10 @@ func (m *Manager) reconcileSubnet() error {
 			_ = m.LocalClusterHybridnetClient.NetworkingV1().RemoteSubnets().Delete(context.TODO(), toRemove.Name, metav1.DeleteOptions{})
 			if err != nil && !k8serror.IsNotFound(err) {
 				errChan <- fmt.Errorf("remove remote subnet fail: %v, subnet=%v", err, toRemove.Name)
+				continue
 			}
+
+			m.subnetSet.Forget(toRemove.Labels[constants.LabelSubnet])
 		}
 	}()
 

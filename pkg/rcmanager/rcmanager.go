@@ -80,6 +80,8 @@ type Manager struct {
 	RemoteClusterNodeSynced  cache.InformerSynced
 	Recorder                 record.EventRecorder
 
+	subnetSet SubnetSet
+
 	eventHub chan<- rctypes.Event
 }
 
@@ -169,6 +171,7 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 		Recorder:                    recorder,
 		eventHub:                    eventHub,
 	}
+	rcMgr.subnetSet = NewSubnetSet(rcMgr.EnqueueAllNode)
 
 	nodeInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: rcMgr.filterNode,
