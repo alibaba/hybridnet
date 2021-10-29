@@ -236,6 +236,25 @@ func TestIntersect(t *testing.T) {
 			},
 			true,
 		},
+		{
+			"same cidr, overlap start end not in excludedIPs, the same start and end",
+			[]v1.AddressRange{
+				{
+					Version:    "4",
+					CIDR:       "192.168.1.5/24",
+					Start:      "192.168.1.49",
+					End:        "192.168.1.100",
+					ExcludeIPs: []string{"192.168.1.100"},
+				},
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+					Start:   "192.168.1.50",
+					End:     "192.168.1.50",
+				},
+			},
+			true,
+		},
 	}
 
 	for _, test := range testCase {

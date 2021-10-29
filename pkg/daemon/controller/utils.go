@@ -20,6 +20,10 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/utils"
+	"k8s.io/apimachinery/pkg/labels"
+
 	"github.com/gogf/gf/container/gset"
 	"github.com/vishvananda/netlink"
 
@@ -85,7 +89,40 @@ func (c *Controller) getRemoteVtepByEndpointAddress(address net.IP) (*networking
 	}
 
 	if len(remoteVtepList) > 1 {
-		return nil, fmt.Errorf("get more than one remote vtep for ip %v", address.String())
+		// pick up valid remoteVtep
+		for _, remoteVtep := range remoteVtepList {
+			vtep, ok := remoteVtep.(*networkingv1.RemoteVtep)
+			if !ok {
+				return nil, fmt.Errorf("transform obj to remote vtep failed")
+			}
+
+			clusterSelector := labels.SelectorFromSet(labels.Set{
+				constants.LabelCluster: vtep.Spec.ClusterName,
+			})
+
+			remoteSubnetList, err := c.remoteSubnetLister.List(clusterSelector)
+			if err != nil {
+				return nil, fmt.Errorf("failed to list remoteSubnet %v", err)
+			}
+
+			for _, remoteSubnet := range remoteSubnetList {
+				_, cidr, _ := net.ParseCIDR(remoteSubnet.Spec.Range.CIDR)
+
+				if !cidr.Contains(address) {
+					continue
+				}
+
+				if utils.Intersect(&remoteSubnet.Spec.Range, &networkingv1.AddressRange{
+					CIDR:  remoteSubnet.Spec.Range.CIDR,
+					Start: address.String(),
+					End:   address.String(),
+				}) {
+					return vtep, nil
+				}
+			}
+		}
+
+		return nil, fmt.Errorf("get more than one remote vtep for ip %v and cannot find valid one", address.String())
 	}
 
 	if len(remoteVtepList) == 1 {
