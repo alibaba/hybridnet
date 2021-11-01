@@ -47,3 +47,15 @@ All notable changes to this project will be documented in this file.
 ## v0.2.1
 ### Fixed Issues
 - Fix daemon iptables-restore execute error on CentOS 8 
+
+## v0.3.0
+### New features
+- Support multicluster feature, which can connect the network between the two clusters (pod ip only)
+
+### Improvements
+- Recycle IP instances for Completed or Evicted pods
+- Use controller-gen to generate crd ini yaml file
+
+### Fixed Issues
+- Fix masquerade error sometimes overlay pod access to underlay pod
+
