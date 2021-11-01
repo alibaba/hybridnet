@@ -13,7 +13,7 @@ scheduled to Node *A*, it can be scheduled to any Node belongs to the same Netwo
 
 Network is extremely important if you need an underlay container network, as taking care of Node's network environment
 is always needed. For Hybridnet, which only provides a vlan type container network for now, a Network usually refers to a
-series of Nodes with the same ASW or TOR.
+series of Nodes with the same ASW or TOR. A Node can only exist in one underlay Network at the same time.
 
 Here is a yaml of a Network CR for underlay container network:
 
@@ -34,8 +34,8 @@ spec:
   
   switchID: "switch1"           # Optional. For visibility.
   
-  nodeSelector:                 # Required. Underlay or Overlay
-    network: "s1"               # Label to select taget Nodes, which means every node blongs to 
+  nodeSelector:                 # Required only for underlay Network.
+    network: "s1"               # Label to select target Nodes, which means every node blongs to 
                                 # this network should be patched with this label.
 ```
 
@@ -60,10 +60,11 @@ spec:
   switchID: "switch1"           # Optional. For visibility.
   
                                 # For an overlay Network, .spec.nodeSelector need not to be set, which
-                                # means every Node of the Kubernetes cluster wiil be added to it automatically.
+                                # means every Node of the Kubernetes cluster will be added to it automatically.
 ```
 
 Overlay and Underlay type Network can exist in one Kubernetes cluster at the same time, which we called a **Hybrid** mode.
+While the maximum number of overlay Network is 1 for every cluster, and no limit for underlay Network.  
 
 For Hybridnet, every Node of Kubernetes cluster should belong to at least one Network. If a Node does not belong to any
 Network yet, it will be patched with a *taint* of *network-unavailable* automatically, which makes this node unschedulable.
