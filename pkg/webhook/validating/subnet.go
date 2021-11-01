@@ -1,17 +1,17 @@
 /*
-  Copyright 2021 The Hybridnet Authors.
+ Copyright 2021 The Hybridnet Authors.
 
-  Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-      http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package validating
@@ -25,6 +25,8 @@ import (
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/utils"
 	"github.com/alibaba/hybridnet/pkg/utils/transform"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -113,6 +115,18 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 		// we assume that all existing subnets all have been canonicalized
 		if err = comparedSubnet.Canonicalize(); err == nil && comparedSubnet.Overlap(ipamSubnet) {
 			return admission.Denied(fmt.Sprintf("overlap with existing subnet %s", comparedSubnet.Name))
+		}
+	}
+
+	if feature.MultiClusterEnabled() {
+		rcSubnetList := &networkingv1.RemoteSubnetList{}
+		if err = handler.Client.List(ctx, rcSubnetList); err != nil {
+			return admission.Errored(http.StatusInternalServerError, err)
+		}
+		for _, rcSubnet := range rcSubnetList.Items {
+			if utils.Intersect(&subnet.Spec.Range, &rcSubnet.Spec.Range) {
+				return admission.Denied(fmt.Sprintf("overlap with existing RemoteSubnet %s", rcSubnet.Name))
+			}
 		}
 	}
 

@@ -29,6 +29,18 @@ type IPInstanceNamespaceListerExpansion interface{}
 // NetworkLister.
 type NetworkListerExpansion interface{}
 
+// RemoteClusterListerExpansion allows custom methods to be added to
+// RemoteClusterLister.
+type RemoteClusterListerExpansion interface{}
+
+// RemoteSubnetListerExpansion allows custom methods to be added to
+// RemoteSubnetLister.
+type RemoteSubnetListerExpansion interface{}
+
+// RemoteVtepListerExpansion allows custom methods to be added to
+// RemoteVtepLister.
+type RemoteVtepListerExpansion interface{}
+
 // SubnetListerExpansion allows custom methods to be added to
 // SubnetLister.
 type SubnetListerExpansion interface{}

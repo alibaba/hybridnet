@@ -1,19 +1,18 @@
 /*
-  Copyright 2021 The Hybridnet Authors.
+ Copyright 2021 The Hybridnet Authors.
 
-  Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-      http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
-
 package ipam
 
 import (
@@ -35,23 +34,13 @@ func (c *Controller) filterNetwork(obj interface{}) bool {
 }
 
 func (c *Controller) addNetwork(obj interface{}) {
-	n, ok := obj.(*v1.Network)
-	if !ok {
-		return
-	}
-
+	n, _ := obj.(*v1.Network)
 	c.enqueueNetwork(n.Name)
 }
 
 func (c *Controller) updateNetwork(oldObj, newObj interface{}) {
-	old, ok := oldObj.(*v1.Network)
-	if !ok {
-		return
-	}
-	new, ok := newObj.(*v1.Network)
-	if !ok {
-		return
-	}
+	old, _ := oldObj.(*v1.Network)
+	new, _ := newObj.(*v1.Network)
 
 	if old.ResourceVersion == new.ResourceVersion {
 		return
@@ -69,11 +58,7 @@ func (c *Controller) updateNetwork(oldObj, newObj interface{}) {
 }
 
 func (c *Controller) delNetwork(obj interface{}) {
-	n, ok := obj.(*v1.Network)
-	if !ok {
-		return
-	}
-
+	n, _ := obj.(*v1.Network)
 	c.enqueueNetwork(n.Name)
 }
 

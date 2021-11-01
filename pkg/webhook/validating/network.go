@@ -1,17 +1,17 @@
 /*
-  Copyright 2021 The Hybridnet Authors.
+ Copyright 2021 The Hybridnet Authors.
 
-  Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-      http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package validating
@@ -23,6 +23,7 @@ import (
 	"reflect"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/feature"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -124,5 +125,16 @@ func NetworkDeleteValidation(ctx context.Context, req *admission.Request, handle
 			return admission.Denied(fmt.Sprintf("still have child subnet %s", subnet.Name))
 		}
 	}
+
+	if network.Spec.Type == networkingv1.NetworkTypeOverlay && feature.MultiClusterEnabled() {
+		remoteClusterList := &networkingv1.RemoteClusterList{}
+		if err = handler.Client.List(ctx, remoteClusterList); err != nil {
+			return admission.Errored(http.StatusInternalServerError, err)
+		}
+		if len(remoteClusterList.Items) != 0 {
+			return admission.Denied(fmt.Sprintf("still have remote cluster. number=%v", len(remoteClusterList.Items)))
+		}
+	}
+
 	return admission.Allowed("validation pass")
 }

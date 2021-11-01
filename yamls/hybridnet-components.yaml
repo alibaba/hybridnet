@@ -203,6 +203,9 @@ spec:
             - /hybridnet/hybridnet-webhook
           args:
             - --port=9898
+          env:
+            - name: DEFAULT_NETWORK_TYPE
+              value: Overlay
           ports:
             - containerPort: 9898
               name: webhook-port
@@ -252,7 +255,7 @@ webhooks:
       - apiGroups: ["networking.alibaba.com"]
         apiVersions: ["v1"]
         operations: ["CREATE", "DELETE", "UPDATE"]
-        resources: ["networks", "subnets"]
+        resources: ["networks", "subnets", "remoteclusters", "remotesubnets"]
     sideEffects: None
     timeoutSeconds: 10
   - admissionReviewVersions: ["v1beta1", "v1"]

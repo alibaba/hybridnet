@@ -1,17 +1,17 @@
 /*
-Copyright 2021 The Hybridnet Authors.
+ Copyright 2021 The Hybridnet Authors.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package controller
@@ -45,7 +45,7 @@ func (c *Controller) enqueueUpdateIPInstance(oldObj, newObj interface{}) {
 	oldIPInstance := oldObj.(*networkingv1.IPInstance)
 	newIPInstance := newObj.(*networkingv1.IPInstance)
 
-	if oldIPInstance.Status.NodeName != newIPInstance.Status.NodeName {
+	if oldIPInstance.Labels[constants.LabelNode] != newIPInstance.Labels[constants.LabelNode] {
 		c.ipInstanceQueue.Add(ActionReconcileIPInstance)
 	}
 }
@@ -295,6 +295,10 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 			klog.Errorf("get pod addresses and host link index error: %v", err)
 		}
 
+		if hostLinkIndex == 0 {
+			continue
+		}
+
 		hostLink, err := netlink.LinkByIndex(hostLinkIndex)
 		if err != nil {
 			return fmt.Errorf("get host link by index %v failed: %v", hostLinkIndex, err)
@@ -308,11 +312,11 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 		if hostLink.Attrs().MasterIndex != 0 {
 			bridge, err := netlink.LinkByIndex(hostLink.Attrs().MasterIndex)
 			if err != nil {
-				return fmt.Errorf("get rama bridge by index %v failed: %v", hostLink.Attrs().MasterIndex, err)
+				return fmt.Errorf("get bridge by index %v failed: %v", hostLink.Attrs().MasterIndex, err)
 			}
 
 			if err := netlink.LinkDel(bridge); err != nil {
-				return fmt.Errorf("delete rama bridge %v failed: %v", bridge.Attrs().Name, err)
+				return fmt.Errorf("delete bridge %v failed: %v", bridge.Attrs().Name, err)
 			}
 		}
 

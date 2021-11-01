@@ -1,17 +1,17 @@
 /*
-Copyright 2021 The Hybridnet Authors.
+ Copyright 2021 The Hybridnet Authors.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package controller
@@ -20,6 +20,11 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/utils"
+	"k8s.io/apimachinery/pkg/labels"
+
+	"github.com/gogf/gf/container/gset"
 	"github.com/vishvananda/netlink"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
@@ -74,6 +79,62 @@ func (c *Controller) getIPInstanceByAddress(address net.IP) (*networkingv1.IPIns
 	}
 
 	return nil, fmt.Errorf("ip instance for address %v not found", address.String())
+}
+
+func (c *Controller) getRemoteVtepByEndpointAddress(address net.IP) (*networkingv1.RemoteVtep, error) {
+	// try to find remote pod ip
+	remoteVtepList, err := c.remoteVtepIndexer.ByIndex(ByEndpointIPIndexer, address.String())
+	if err != nil {
+		return nil, fmt.Errorf("get remote vtep by ip %v indexer failed: %v", address.String(), err)
+	}
+
+	if len(remoteVtepList) > 1 {
+		// pick up valid remoteVtep
+		for _, remoteVtep := range remoteVtepList {
+			vtep, ok := remoteVtep.(*networkingv1.RemoteVtep)
+			if !ok {
+				return nil, fmt.Errorf("transform obj to remote vtep failed")
+			}
+
+			clusterSelector := labels.SelectorFromSet(labels.Set{
+				constants.LabelCluster: vtep.Spec.ClusterName,
+			})
+
+			remoteSubnetList, err := c.remoteSubnetLister.List(clusterSelector)
+			if err != nil {
+				return nil, fmt.Errorf("failed to list remoteSubnet %v", err)
+			}
+
+			for _, remoteSubnet := range remoteSubnetList {
+				_, cidr, _ := net.ParseCIDR(remoteSubnet.Spec.Range.CIDR)
+
+				if !cidr.Contains(address) {
+					continue
+				}
+
+				if utils.Intersect(&remoteSubnet.Spec.Range, &networkingv1.AddressRange{
+					CIDR:  remoteSubnet.Spec.Range.CIDR,
+					Start: address.String(),
+					End:   address.String(),
+				}) {
+					return vtep, nil
+				}
+			}
+		}
+
+		return nil, fmt.Errorf("get more than one remote vtep for ip %v and cannot find valid one", address.String())
+	}
+
+	if len(remoteVtepList) == 1 {
+		vtep, ok := remoteVtepList[0].(*networkingv1.RemoteVtep)
+		if !ok {
+			return nil, fmt.Errorf("transform obj to remote vtep failed")
+		}
+
+		return vtep, nil
+	}
+
+	return nil, nil
 }
 
 func initErrorMessageWrapper(prefix string) func(string, ...interface{}) string {
@@ -137,4 +198,16 @@ func parseSubnetSpecRangeMeta(addressRange *networkingv1.AddressRange) (cidr *ne
 	}
 
 	return
+}
+
+func isIPListEqual(a, b []string) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+
+	return gset.NewStrSetFrom(a).Equal(gset.NewStrSetFrom(b))
 }

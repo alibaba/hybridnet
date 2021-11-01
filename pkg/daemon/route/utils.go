@@ -1,17 +1,17 @@
 /*
-Copyright 2021 The Hybridnet Authors.
+ Copyright 2021 The Hybridnet Authors.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package route
@@ -39,12 +39,19 @@ const (
 )
 
 type SubnetInfo struct {
-	cidr              *net.IPNet
-	gateway           net.IP
+	cidr             *net.IPNet
+	gateway          net.IP
+	excludeIPs       []net.IP
+	includedIPRanges []*daemonutils.IPRange
+
+	// the virtual network interface (can be directly physical interface) for container to use
 	forwardNodeIfName string
-	autoNatOutgoing   bool
-	excludeIPs        []net.IP
-	includedIPRanges  []*daemonutils.IPRange
+
+	// if overlay pod outside traffic need to be NATed
+	autoNatOutgoing bool
+
+	// if underlay subnet is on this host node
+	isUnderlayOnHost bool
 }
 
 type SubnetInfoMap map[string]*SubnetInfo
@@ -459,7 +466,7 @@ func ensureExcludedIPBlockRoutes(excludeIPBlockMap map[string]*net.IPNet, table,
 	}
 
 	for _, route := range excludedRouteList {
-		if _, exist := excludeIPBlockMap[route.Dst.String()]; !exist {
+		if _, exists := excludeIPBlockMap[route.Dst.String()]; !exists {
 			if err := netlink.RouteDel(&route); err != nil {
 				return fmt.Errorf("delete excluded route %v failed: %v", route, err)
 			}
@@ -501,4 +508,36 @@ func isExcludeRoute(route *netlink.Route) bool {
 		return false
 	}
 	return route.Type == unix.RTN_THROW
+}
+
+func combineLocalAndRemoteSubnetInfoMap(local, remote SubnetInfoMap) SubnetInfoMap {
+	if len(remote) == 0 {
+		return local
+	}
+
+	res := make(map[string]*SubnetInfo, len(local)+len(remote))
+	for cidr, info := range local {
+		res[cidr] = info
+	}
+	for cidr, info := range remote {
+		res[cidr] = info
+	}
+
+	return res
+}
+
+func combineLocalAndRemoteExcludeIPBlockMap(local, remote map[string]*net.IPNet) map[string]*net.IPNet {
+	if len(remote) == 0 {
+		return local
+	}
+
+	res := make(map[string]*net.IPNet, len(local)+len(remote))
+	for s, block := range local {
+		res[s] = block
+	}
+	for s, block := range remote {
+		res[s] = block
+	}
+
+	return res
 }

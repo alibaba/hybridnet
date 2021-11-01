@@ -1,17 +1,17 @@
 /*
-Copyright 2021 The Hybridnet Authors.
+ Copyright 2021 The Hybridnet Authors.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package config
@@ -77,13 +77,13 @@ type Configuration struct {
 	IptablesCheckDuration  time.Duration
 	VxlanBaseReachableTime time.Duration
 
-	// Use fixed table num to mark "local pod direct rule"
+	// Use fixed table num to mark "local-pod-direct rule"
 	LocalDirectTableNum int
 
-	// Use fixed table num to mark "to overlay pod subnet rule"
+	// Use fixed table num to mark "to-overlay-pod-subnet rule"
 	ToOverlaySubnetTableNum int
 
-	// Use fixed table num to mark "overlay mark table rule"
+	// Use fixed table num to mark "overlay-mark-table rule"
 	OverlayMarkTableNum int
 
 	KubeClient      kubernetes.Interface
@@ -103,10 +103,10 @@ func ParseFlags() (*Configuration, error) {
 		argBindSocket                 = pflag.String("bind-socket", "/var/run/hybridnet.sock", "The socket daemon bind to.")
 		argKubeConfigFile             = pflag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information. If not set use the inCluster token.")
 		argBindPort                   = pflag.Int("healthy-server-port", DefaultBindPort, "The port which daemon server bind")
-		argLocalDirectTableNum        = pflag.Int("local-direct-table", DefaultLocalDirectTableNum, "The number of local direct routing table")
+		argLocalDirectTableNum        = pflag.Int("local-direct-table", DefaultLocalDirectTableNum, "The number of local-pod-direct route table")
 		argIptableCheckDuration       = pflag.Duration("iptables-check-duration", DefaultIptablesCheckDuration, "The time period for iptables manager to check iptables rules")
-		argToOverlaySubnetTableNum    = pflag.Int("to-overlay-table", DefaultToOverlaySubnetTableNum, "The number of to overlay subnet routing table")
-		argOverlayMarkTableNum        = pflag.Int("overlay-mark-table", DefaultOverlayMarkTableNum, "The number of overlay mark routing table")
+		argToOverlaySubnetTableNum    = pflag.Int("to-overlay-table", DefaultToOverlaySubnetTableNum, "The number of to-overlay-pod-subnet route table")
+		argOverlayMarkTableNum        = pflag.Int("overlay-mark-table", DefaultOverlayMarkTableNum, "The number of overlay-mark routing table")
 		argVlanCheckTimeout           = pflag.Duration("vlan-check-timeout", DefaultVlanCheckTimeout, "The timeout of vlan network environment check while pod creating")
 		argVxlanUDPPort               = pflag.Int("vxlan-udp-port", DefaultVxlanUDPPort, "The local udp port which vxlan tunnel use")
 		argVxlanBaseReachableTime     = pflag.Duration("vxlan-base-reachable-time", DefaultVxlanBaseReachableTime, "The time for neigh caches of vxlan device to get STALE from REACHABLE")

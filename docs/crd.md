@@ -40,7 +40,7 @@ spec:
 ```
 
 But if you just need a overlay container network, things get easier. Because we don't even care about how the Node's
-network going on,  every node seems to get the same network properties. For such an overlay Network, every Node of the
+network going on, every node seems to get the same network properties. For such an overlay Network, every Node of the
 Kubernetes cluster will be added to it automatically, and you don't need to configure it like applying an underlay
 Network.
 

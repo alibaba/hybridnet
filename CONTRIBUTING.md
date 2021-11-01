@@ -126,13 +126,13 @@ To put forward a PR, we assume you have registered a GitHub ID. Then you could f
 
 Right now we assume every contribution via pull request is for [branch master](https://github.com/alibaba/hybridnet/tree/main) in Hybridnet. Before contributing, be aware of branch definition would help a lot.
 
-As a contributor, keep in mind again that every contribution via pull request is for branch master. While in project Hybridnet, there are several other branches, we generally call them rc branches, release branches and backport branches.
+As a contributor, keep in mind again that every contribution via pull request is for branch `main`. While in project Hybridnet, there will be several release branches except `main` branch.
 
-Before officially releasing a version, we will checkout a rc(release candidate) branch. In this branch, we will test more than branch main.
+During a `rc.0` release, we will create a new release branch named `release-x.y`, where `x` and `y` are the major and minor versions of the next release, respectively. And this every release branch will be marked protected.
 
-When officially releasing a version, there will be a release branch before tagging. After tagging, we will delete the release branch.
+When officially releasing a `rc.0` version, there will be a new tag `rc.0` (for example `v0.3.0`) created on corresponding branch. After releasing the `rc.0` version, this branch will be considered freeze, and for the post-release patch management process, commits are cherry picked from master.
 
-When backporting some fixes to existing released version, we will checkout backport branches. After backporting, the backporting effects will be in PATCH number in MAJOR.MINOR.PATCH of [SemVer](http://semver.org/).
+When backporting some fixes to existing released version, we will fix it on `main` branch and then cherry picks them to the released branch. After backporting, the backporting effects will be in PATCH number in MAJOR.MINOR.PATCH of [SemVer](http://semver.org/), and a corresponding `rc.z` tag (for example `v0.3.1`) will be created, where `z` is the patch number.
 
 ### Commit Rules
 
@@ -178,7 +178,7 @@ PR is the only way to make change to Hybridnet project files. To help reviewers 
 As a contributor, if you want to make any contribution to Hybridnet project, we should reach an agreement on the version of tools used in the development environment.
 Here are some dependents with specific version:
 
-* golang : v1.13.8
+* golang : v1.15.7
 * golangci-lint: 1.39.0
 
 When you develop the Hybridnet project at the local environment, you should use subcommands of Makefile to help yourself to check and build the latest version of Hybridnet. For the convenience of developers, we use the docker to build Hybridnet. It can reduce problems of the developing environment.

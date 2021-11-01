@@ -1,17 +1,17 @@
 /*
-Copyright 2021 The Hybridnet Authors.
+ Copyright 2021 The Hybridnet Authors.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package iptables
@@ -76,6 +76,11 @@ type Manager struct {
 	c chan struct{}
 
 	upgradeWorkDone bool
+
+	// add cluster-mesh remote ips
+	remoteOverlaySubnet  []*net.IPNet
+	remoteUnderlaySubnet []*net.IPNet
+	remoteNodeIPList     []net.IP
 }
 
 func (mgr *Manager) lock() {
@@ -122,6 +127,10 @@ func CreateIPtablesManager(protocol Protocol) (*Manager, error) {
 
 		protocol: protocol,
 		c:        make(chan struct{}, 1),
+
+		remoteOverlaySubnet:  []*net.IPNet{},
+		remoteUnderlaySubnet: []*net.IPNet{},
+		remoteNodeIPList:     []net.IP{},
 	}
 
 	return mgr, nil
@@ -132,6 +141,10 @@ func (mgr *Manager) Reset() {
 	mgr.underlaySubnet = []*net.IPNet{}
 	mgr.nodeIPList = []net.IP{}
 	mgr.overlayIfName = ""
+
+	mgr.remoteOverlaySubnet = []*net.IPNet{}
+	mgr.remoteUnderlaySubnet = []*net.IPNet{}
+	mgr.remoteNodeIPList = []net.IP{}
 }
 
 func (mgr *Manager) RecordNodeIP(nodeIP net.IP) {
@@ -146,6 +159,18 @@ func (mgr *Manager) RecordSubnet(subnetCidr *net.IPNet, isOverlay bool) {
 	}
 }
 
+func (mgr *Manager) RecordRemoteNodeIP(nodeIP net.IP) {
+	mgr.remoteNodeIPList = append(mgr.remoteNodeIPList, nodeIP)
+}
+
+func (mgr *Manager) RecordRemoteSubnet(subnetCidr *net.IPNet, isOverlay bool) {
+	if isOverlay {
+		mgr.remoteOverlaySubnet = append(mgr.remoteOverlaySubnet, subnetCidr)
+	} else {
+		mgr.remoteUnderlaySubnet = append(mgr.remoteUnderlaySubnet, subnetCidr)
+	}
+}
+
 func (mgr *Manager) SetOverlayIfName(overlayIfName string) {
 	mgr.overlayIfName = overlayIfName
 }
@@ -153,10 +178,6 @@ func (mgr *Manager) SetOverlayIfName(overlayIfName string) {
 func (mgr *Manager) SyncRules() error {
 	mgr.lock()
 	defer mgr.unlock()
-
-	if mgr.overlayIfName == "" {
-		return fmt.Errorf("cannot sync iptables rules with empty overlay interface name")
-	}
 
 	var overlayIPNets []string
 	var nodeIPs []string
@@ -171,6 +192,17 @@ func (mgr *Manager) SyncRules() error {
 	}
 
 	for _, ip := range mgr.nodeIPList {
+		nodeIPs = append(nodeIPs, ip.String())
+	}
+
+	// remote subnets & nodes
+	for _, cidr := range mgr.remoteOverlaySubnet {
+		overlayIPNets = append(overlayIPNets, cidr.String())
+	}
+	for _, cidr := range mgr.remoteUnderlaySubnet {
+		allIPNets = append(allIPNets, cidr.String())
+	}
+	for _, ip := range mgr.remoteNodeIPList {
 		nodeIPs = append(nodeIPs, ip.String())
 	}
 
@@ -215,12 +247,20 @@ func (mgr *Manager) SyncRules() error {
 	writeLine(mangleChains, utiliptables.MakeChainLine(ChainHybridnetPreRouting))
 	writeLine(mangleChains, utiliptables.MakeChainLine(ChainHybridnetPostRouting))
 
-	// Append rules.
-	writeLine(natRules, generateSkipMasqueradeRuleSpec()...)
-	writeLine(natRules, generateMasqueradeRuleSpec(mgr.overlayIfName, mgr.protocol)...)
-	writeLine(filterRules, generateVxlanFilterRuleSpec(mgr.overlayIfName, mgr.protocol)...)
-	writeLine(mangleRules, generateVxlanPodToNodeReplyMarkRuleSpec(mgr.protocol)...)
-	writeLine(mangleRules, generateVxlanPodToNodeReplyRemoveMarkRuleSpec(mgr.protocol)...)
+	if mgr.overlayIfName != "" {
+		// There might be two scenarios where overlayIfName is nil
+		// 1. overlay network never exists
+		// 2. overlay network deleted after running for a period
+		//
+		// Keep iptables chains empty for both two scenarios.
+		//
+		// Append rules.
+		writeLine(natRules, generateSkipMasqueradeRuleSpec()...)
+		writeLine(natRules, generateMasqueradeRuleSpec(mgr.overlayIfName, mgr.protocol)...)
+		writeLine(filterRules, generateVxlanFilterRuleSpec(mgr.overlayIfName, mgr.protocol)...)
+		writeLine(mangleRules, generateVxlanPodToNodeReplyMarkRuleSpec(mgr.protocol)...)
+		writeLine(mangleRules, generateVxlanPodToNodeReplyRemoveMarkRuleSpec(mgr.protocol)...)
+	}
 
 	// Write the end-of-table markers
 	writeLine(natRules, "COMMIT")

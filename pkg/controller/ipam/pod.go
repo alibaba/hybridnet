@@ -1,17 +1,17 @@
 /*
-  Copyright 2021 The Hybridnet Authors.
+ Copyright 2021 The Hybridnet Authors.
 
-  Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-      http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package ipam
@@ -23,18 +23,18 @@ import (
 	"strings"
 	"time"
 
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog"
+
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/metrics"
 	"github.com/alibaba/hybridnet/pkg/utils"
-
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/klog"
 )
 
 const (
@@ -124,6 +124,11 @@ func (c *Controller) reconcilePod(key string) (err error) {
 	// IP recycle rely on garbage collection, just ignore this
 	if pod.DeletionTimestamp != nil {
 		return nil
+	}
+
+	// Pre decouple ip instances for completed or evicted pods
+	if podIsEvicted(pod) || podIsCompleted(pod) {
+		return c.decouple(pod)
 	}
 
 	// To avoid IP duplicate allocation in high-frequent pod updates scenario because of
@@ -367,11 +372,27 @@ func (c *Controller) release(pod *v1.Pod, allocatedIPs []*types.IP) (err error) 
 
 	for _, ip := range allocatedIPs {
 		if err = recycleFunc(pod.Namespace, ip); err != nil {
-			return fmt.Errorf("fail to recycle ip %v for pod %s", ip, pod.Name)
+			return fmt.Errorf("fail to recycle ip %v for pod %s: %v", ip, pod.Name, err)
 		}
 	}
 
 	c.recorder.Eventf(pod, v1.EventTypeNormal, ReasonIPReleaseSucceed, "release IPs %v successfully", squashIPSliceToIPs(allocatedIPs))
+	return nil
+}
+
+func (c *Controller) decouple(pod *v1.Pod) (err error) {
+	var decoupleFunc func(pod *v1.Pod) (err error)
+	if feature.DualStackEnabled() {
+		decoupleFunc = c.dualStackIPAMStroe.DeCouple
+	} else {
+		decoupleFunc = c.ipamStore.DeCouple
+	}
+
+	if err = decoupleFunc(pod); err != nil {
+		return fmt.Errorf("fail to decouple ips for pod %s: %v", pod.Name, err)
+	}
+
+	c.recorder.Event(pod, v1.EventTypeNormal, ReasonIPReleaseSucceed, "pre decouple all IPs successfully")
 	return nil
 }
 
@@ -443,4 +464,29 @@ func squashIPSliceToSubnets(ips []*types.IP) (ret []string) {
 		ret = append(ret, ip.Subnet)
 	}
 	return
+}
+
+func podIsEvicted(pod *v1.Pod) bool {
+	return pod.Status.Phase == v1.PodFailed && pod.Status.Reason == "Evicted"
+}
+
+func podIsCompleted(pod *v1.Pod) bool {
+	var unknownContainerCount = 0
+
+	hasMatchedStatus := func(name string) bool {
+		for i := range pod.Status.ContainerStatuses {
+			if pod.Status.ContainerStatuses[i].Name == name {
+				return true
+			}
+		}
+		return false
+	}
+
+	for i := range pod.Spec.Containers {
+		if !hasMatchedStatus(pod.Spec.Containers[i].Name) {
+			unknownContainerCount++
+		}
+	}
+
+	return pod.Status.Phase == v1.PodSucceeded && unknownContainerCount == 0
 }

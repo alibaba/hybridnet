@@ -27,6 +27,9 @@ type NetworkingV1Interface interface {
 	RESTClient() rest.Interface
 	IPInstancesGetter
 	NetworksGetter
+	RemoteClustersGetter
+	RemoteSubnetsGetter
+	RemoteVtepsGetter
 	SubnetsGetter
 }
 
@@ -41,6 +44,18 @@ func (c *NetworkingV1Client) IPInstances(namespace string) IPInstanceInterface {
 
 func (c *NetworkingV1Client) Networks() NetworkInterface {
 	return newNetworks(c)
+}
+
+func (c *NetworkingV1Client) RemoteClusters() RemoteClusterInterface {
+	return newRemoteClusters(c)
+}
+
+func (c *NetworkingV1Client) RemoteSubnets() RemoteSubnetInterface {
+	return newRemoteSubnets(c)
+}
+
+func (c *NetworkingV1Client) RemoteVteps() RemoteVtepInterface {
+	return newRemoteVteps(c)
 }
 
 func (c *NetworkingV1Client) Subnets() SubnetInterface {
