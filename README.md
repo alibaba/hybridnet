@@ -12,6 +12,7 @@
 
 Hybridnet is an open source container networking solution, integrated with Kubernetes and used officially by following well-known PaaS platforms,
 
+- ACK Distro of Alibaba Cloud
 - AECP of Alibaba Cloud
 - SOFAStack of Ant Financial Co.
 
