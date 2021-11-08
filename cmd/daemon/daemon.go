@@ -17,8 +17,6 @@
 package main
 
 import (
-	_ "net/http/pprof"
-
 	hybridnetinformer "github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/controller"
