@@ -31,9 +31,17 @@ const (
 	LabelDualStackAddressQuota = "networking.alibaba.com/dualstack-address-quota"
 
 	LabelNetworkType = "networking.alibaba.com/network-type"
+
+	LabelUnderlayNetworkAttachment = "networking.alibaba.com/underlay-network-attachment"
+	LabelOverlayNetworkAttachment  = "networking.alibaba.com/overlay-network-attachment"
 )
 
 const (
 	QuotaNonEmpty = "nonempty"
 	QuotaEmpty    = "empty"
+)
+
+const (
+	Attached   = "true"
+	Unattached = "false"
 )
