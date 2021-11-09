@@ -58,6 +58,11 @@ const (
 
 	ByInstanceIPIndexer = "instanceIP"
 	ByEndpointIPIndexer = "endpointIP"
+
+	// to reduce channel block times while neigh netlink update increase.
+	NeighUpdateChanSize = 2000
+	LinkUpdateChainSize = 200
+	AddrUpdateChainSize = 200
 )
 
 // Controller is a set of kubernetes controllers
@@ -311,14 +316,13 @@ func (c *Controller) GetIPInstanceSynced() cache.InformerSynced {
 //
 // Restart of vxlan interface will also trigger subnet and ip instance reconcile loop.
 func (c *Controller) handleLocalNetworkDeviceEvent() error {
-	linkCh := make(chan netlink.LinkUpdate)
+	linkCh := make(chan netlink.LinkUpdate, LinkUpdateChainSize)
 	if err := netlink.LinkSubscribe(linkCh, nil); err != nil {
 		return fmt.Errorf("subscribe link update event failed %v", err)
 	}
 
 	go func() {
-		for {
-			update := <-linkCh
+		for update := range linkCh {
 			if (update.IfInfomsg.Flags&unix.IFF_UP != 0) &&
 				!containernetwork.CheckIfContainerNetworkLink(update.Link.Attrs().Name) {
 
@@ -329,14 +333,13 @@ func (c *Controller) handleLocalNetworkDeviceEvent() error {
 		}
 	}()
 
-	addrCh := make(chan netlink.AddrUpdate)
+	addrCh := make(chan netlink.AddrUpdate, AddrUpdateChainSize)
 	if err := netlink.AddrSubscribe(addrCh, nil); err != nil {
 		return fmt.Errorf("subscribe address update event failed %v", err)
 	}
 
 	go func() {
-		for {
-			update := <-addrCh
+		for update := range addrCh {
 			if containernetwork.CheckIPIsGlobalUnicast(update.LinkAddress.IP) {
 				// Create event to update node configuration.
 				c.nodeQueue.Add(ActionReconcileNode)
@@ -422,7 +425,7 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 		}
 	}
 
-	ch := make(chan netlink.NeighUpdate)
+	ch := make(chan netlink.NeighUpdate, NeighUpdateChanSize)
 
 	// clear stale neigh entries for vxlan interface at the first time
 	linkList, err := netlink.LinkList()
@@ -451,8 +454,7 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 	go func() {
 		errorMessageWrapper := initErrorMessageWrapper("handle vxlan interface neigh event failed: ")
 
-		for {
-			update := <-ch
+		for update := range ch {
 			if isNeighResolving(update.State) {
 				if update.Type == syscall.RTM_DELNEIGH {
 					continue
