@@ -61,28 +61,14 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 				Key:      TaintNodeNetworkUnavailable,
 				Operator: corev1.TolerationOpExists,
 				Effect:   corev1.TaintEffectNoSchedule,
-			},
-			&corev1.Toleration{
-				Key:      constants.TaintUnderlayNetworkUnattached,
-				Operator: corev1.TolerationOpExists,
-				Effect:   corev1.TaintEffectNoSchedule,
-			},
-			&corev1.Toleration{
-				Key:      constants.TaintOverlayNetworkUnattached,
-				Operator: corev1.TolerationOpExists,
-				Effect:   corev1.TaintEffectNoSchedule,
-			},
-		))
+			}))
 	}
-
-	var mutated = false
 
 	// Remove unexpected annotation
 	// 1. pod IP annotation
 	if _, exist := pod.Annotations[constants.AnnotationIP]; exist {
 		klog.Infof("[mutating] remove IP annotation for pod %s/%s", req.Namespace, req.Name)
 		delete(pod.Annotations, constants.AnnotationIP)
-		mutated = true
 	}
 
 	// Select specific network for pod
@@ -125,6 +111,7 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 
 	var networkTypeFromPod = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType])
 	var networkType = ipamtypes.ParseNetworkTypeFromString(networkTypeFromPod)
+	var networkNodeSelector map[string]string
 	if len(networkName) > 0 {
 		network := &networkingv1.Network{}
 		if err = handler.Client.Get(ctx, types.NamespacedName{Name: networkName}, network); err != nil {
@@ -137,30 +124,27 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 			networkType = ipamtypes.ParseNetworkTypeFromString(string(networkingv1.GetNetworkType(network)))
 		}
 
-		switch networkType {
-		case ipamtypes.Underlay:
+		networkNodeSelector = network.Spec.NodeSelector
+	}
+
+	switch networkType {
+	case ipamtypes.Underlay:
+		if len(networkName) > 0 {
 			klog.Infof("[mutating] patch pod %s/%s with selector of network %s", req.Namespace, req.Name, networkName)
-			pod = patchSelectorToPod(pod, network.Spec.NodeSelector)
-			klog.Infof("[mutating] patch underlay pod %s/%s tolerate overlay unattached", req.Namespace, req.Name)
-			pod = ensureTolerationInPod(pod, &corev1.Toleration{
-				Key:      constants.TaintOverlayNetworkUnattached,
-				Operator: corev1.TolerationOpExists,
-				Effect:   corev1.TaintEffectNoSchedule,
+			pod = patchSelectorToPod(pod, networkNodeSelector)
+		} else {
+			klog.Infof("[mutating] patch pod %s/%s with underlay attachment selector", req.Namespace, req.Name)
+			pod = patchSelectorToPod(pod, map[string]string{
+				constants.LabelUnderlayNetworkAttachment: constants.Attached,
 			})
-			mutated = true
-		case ipamtypes.Overlay:
-			// overlay network has a wide scheduling domain over the whole cluster
-			// no more selectors should be patched
-			klog.Infof("[mutating] patch overlay pod %s/%s tolerate underlay unattached", req.Namespace, req.Name)
-			pod = ensureTolerationInPod(pod, &corev1.Toleration{
-				Key:      constants.TaintUnderlayNetworkUnattached,
-				Operator: corev1.TolerationOpExists,
-				Effect:   corev1.TaintEffectNoSchedule,
-			})
-			mutated = true
-		default:
-			return admission.Errored(http.StatusBadRequest, fmt.Errorf("unknown network type %s", networkType))
 		}
+	case ipamtypes.Overlay:
+		klog.Infof("[mutating] patch pod %s/%s with overlay attachment selector", req.Namespace, req.Name)
+		pod = patchSelectorToPod(pod, map[string]string{
+			constants.LabelOverlayNetworkAttachment: constants.Attached,
+		})
+	default:
+		return admission.Errored(http.StatusBadRequest, fmt.Errorf("unknown network type %s", networkType))
 	}
 
 	// Patch extra node selectors for pod when dual stack mode,
@@ -181,14 +165,9 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 				constants.LabelDualStackAddressQuota: constants.QuotaNonEmpty,
 			})
 		}
-		mutated = true
 	}
 
-	if mutated {
-		return generatePatchResponseFromPod(req.Object.Raw, pod)
-	}
-
-	return admission.Patched("no need to patch without specific network")
+	return generatePatchResponseFromPod(req.Object.Raw, pod)
 }
 
 func generatePatchResponseFromPod(original []byte, pod *corev1.Pod) admission.Response {
@@ -215,10 +194,12 @@ func patchSelectorToPod(pod *corev1.Pod, selector map[string]string) *corev1.Pod
 
 func ensureTolerationInPod(pod *corev1.Pod, tolerations ...*corev1.Toleration) *corev1.Pod {
 	for _, toleration := range tolerations {
+		var found = false
 		for i := range pod.Spec.Tolerations {
-			if !tolerationMatch(&pod.Spec.Tolerations[i], toleration) {
-				pod.Spec.Tolerations = append(pod.Spec.Tolerations, *toleration)
-			}
+			found = found || tolerationMatch(&pod.Spec.Tolerations[i], toleration)
+		}
+		if !found {
+			pod.Spec.Tolerations = append(pod.Spec.Tolerations, *toleration)
 		}
 	}
 

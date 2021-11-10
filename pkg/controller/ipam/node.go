@@ -18,7 +18,6 @@ package ipam
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"reflect"
 
@@ -149,27 +148,22 @@ func (c *Controller) updateNodeQuotaLabels(node *corev1.Node) error {
 }
 
 func (c *Controller) updateNodeNetworkAttachment(node *corev1.Node) error {
-	var underlayNetworkAttached = len(c.ipamCache.SelectNetworkByLabels(node.Labels)) > 0
-	var overlayNetworkAttached = len(c.ipamCache.GetGlobalNetwork()) > 0
+	var underlayNetworkAttached string
+	var overlayNetworkAttached string
 
-	var expectedTaints = node.Spec.DeepCopy().Taints
-	if underlayNetworkAttached {
-		expectedTaints = removeSpecificTaint(expectedTaints, constants.TaintUnderlayNetworkUnattached)
+	if len(c.ipamCache.SelectNetworkByLabels(node.Labels)) > 0 {
+		underlayNetworkAttached = constants.Attached
 	} else {
-		expectedTaints = ensureSpecificTaint(expectedTaints, constants.TaintUnderlayNetworkUnattached)
+		underlayNetworkAttached = constants.Unattached
 	}
 
-	if overlayNetworkAttached {
-		expectedTaints = removeSpecificTaint(expectedTaints, constants.TaintOverlayNetworkUnattached)
+	if len(c.ipamCache.GetGlobalNetwork()) > 0 {
+		overlayNetworkAttached = constants.Attached
 	} else {
-		expectedTaints = ensureSpecificTaint(expectedTaints, constants.TaintOverlayNetworkUnattached)
+		overlayNetworkAttached = constants.Unattached
 	}
 
-	if reflect.DeepEqual(node.Spec.Taints, expectedTaints) {
-		return nil
-	}
-
-	return c.patchNodeTaints(node.Name, expectedTaints)
+	return c.setNodeNetworkAttachmentLabels(node.Name, underlayNetworkAttached, overlayNetworkAttached)
 }
 
 func (c *Controller) setNodeQuotaLabels(nodeName string, ipv4, ipv6, dualStack string) error {
@@ -192,56 +186,20 @@ func (c *Controller) setNodeQuotaLabels(nodeName string, ipv4, ipv6, dualStack s
 	})
 }
 
-func (c *Controller) patchNodeTaints(nodeName string, taints []corev1.Taint) error {
-	taintBytes, err := json.Marshal(taints)
-	if err != nil {
-		return err
-	}
-
+func (c *Controller) setNodeNetworkAttachmentLabels(nodeName string, underlayAttached, overlayAttached string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		_, err := c.kubeClientSet.CoreV1().Nodes().Patch(context.TODO(),
 			nodeName,
 			types.MergePatchType,
 			[]byte(fmt.Sprintf(
-				`{"spec":{"taints":%q}}`,
-				string(taintBytes),
+				`{"metadata":{"labels":{"%s":%q,"%s":%q}}}`,
+				constants.LabelUnderlayNetworkAttachment,
+				underlayAttached,
+				constants.LabelOverlayNetworkAttachment,
+				overlayAttached,
 			)),
 			metav1.PatchOptions{},
 		)
 		return err
 	})
-}
-
-func removeSpecificTaint(taints []corev1.Taint, taintKey string) []corev1.Taint {
-	var idx = -1
-	for i := range taints {
-		if taints[i].Key == taintKey {
-			idx = i
-			break
-		}
-	}
-
-	if idx < 0 {
-		return taints
-	}
-
-	return append(taints[:idx], taints[idx+1:]...)
-}
-
-func ensureSpecificTaint(taints []corev1.Taint, taintKey string) []corev1.Taint {
-	var idx = -1
-	for i := range taints {
-		if taints[i].Key == taintKey {
-			idx = i
-			break
-		}
-	}
-
-	if idx < 0 {
-		return append(taints, corev1.Taint{
-			Key:    taintKey,
-			Effect: corev1.TaintEffectNoSchedule,
-		})
-	}
-	return taints
 }
