@@ -58,4 +58,6 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed Issues
 - Fix masquerade error sometimes overlay pod access to underlay pod
+- Fix high CPU cost of hybridnet daemon in large scale cluster
+- Fix wrong underlay pod scheduling if not all the nodes belong to an underlay network while an overlay network exists
 
