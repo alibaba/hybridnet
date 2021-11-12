@@ -44,9 +44,10 @@ const (
 	DefaultBindPort     = 11021
 	DefaultVxlanUDPPort = 8472
 
-	DefaultVlanCheckTimeout       = 3 * time.Second
-	DefaultIptablesCheckDuration  = 5 * time.Second
-	DefaultVxlanBaseReachableTime = 5 * time.Second
+	DefaultVlanCheckTimeout                     = 3 * time.Second
+	DefaultIptablesCheckDuration                = 5 * time.Second
+	DefaultVxlanBaseReachableTime               = 5 * time.Second
+	DefaultVxlanExpiredNeighCachesClearInterval = 1 * time.Hour
 
 	DefaultNeighGCThresh1 = 1024
 	DefaultNeighGCThresh2 = 2048
@@ -73,9 +74,10 @@ type Configuration struct {
 	BindPort     int
 	VxlanUDPPort int
 
-	VlanCheckTimeout       time.Duration
-	IptablesCheckDuration  time.Duration
-	VxlanBaseReachableTime time.Duration
+	VlanCheckTimeout                     time.Duration
+	IptablesCheckDuration                time.Duration
+	VxlanBaseReachableTime               time.Duration
+	VxlanExpiredNeighCachesClearInterval time.Duration
 
 	// Use fixed table num to mark "local-pod-direct rule"
 	LocalDirectTableNum int
@@ -97,23 +99,24 @@ type Configuration struct {
 // ParseFlags will parse cmd args then init kubeClient and configuration
 func ParseFlags() (*Configuration, error) {
 	var (
-		argPreferInterfaces           = pflag.String("prefer-interfaces", "", "[deprecated]The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
-		argPreferVlanInterfaces       = pflag.String("prefer-vlan-interfaces", "", "The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
-		argPreferVxlanInterfaces      = pflag.String("prefer-vxlan-interfaces", "", "The preferred vxlan interfaces used to inter-host pod communication, default: the default route interface")
-		argBindSocket                 = pflag.String("bind-socket", "/var/run/hybridnet.sock", "The socket daemon bind to.")
-		argKubeConfigFile             = pflag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information. If not set use the inCluster token.")
-		argBindPort                   = pflag.Int("healthy-server-port", DefaultBindPort, "The port which daemon server bind")
-		argLocalDirectTableNum        = pflag.Int("local-direct-table", DefaultLocalDirectTableNum, "The number of local-pod-direct route table")
-		argIptableCheckDuration       = pflag.Duration("iptables-check-duration", DefaultIptablesCheckDuration, "The time period for iptables manager to check iptables rules")
-		argToOverlaySubnetTableNum    = pflag.Int("to-overlay-table", DefaultToOverlaySubnetTableNum, "The number of to-overlay-pod-subnet route table")
-		argOverlayMarkTableNum        = pflag.Int("overlay-mark-table", DefaultOverlayMarkTableNum, "The number of overlay-mark routing table")
-		argVlanCheckTimeout           = pflag.Duration("vlan-check-timeout", DefaultVlanCheckTimeout, "The timeout of vlan network environment check while pod creating")
-		argVxlanUDPPort               = pflag.Int("vxlan-udp-port", DefaultVxlanUDPPort, "The local udp port which vxlan tunnel use")
-		argVxlanBaseReachableTime     = pflag.Duration("vxlan-base-reachable-time", DefaultVxlanBaseReachableTime, "The time for neigh caches of vxlan device to get STALE from REACHABLE")
-		argNeighGCThresh1             = pflag.Int("neigh-gc-thresh1", DefaultNeighGCThresh1, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh1")
-		argNeighGCThresh2             = pflag.Int("neigh-gc-thresh2", DefaultNeighGCThresh2, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh2")
-		argNeighGCThresh3             = pflag.Int("neigh-gc-thresh3", DefaultNeighGCThresh3, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh3")
-		argExtraNodeLocalVxlanIPCidrs = pflag.String("extra-node-local-vxlan-ip-cidrs", "", "Cidrs to select node extra local vxlan ip, e.g., \"192.168.10.0/24,10.2.3.0/24\"")
+		argPreferInterfaces                     = pflag.String("prefer-interfaces", "", "[deprecated]The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
+		argPreferVlanInterfaces                 = pflag.String("prefer-vlan-interfaces", "", "The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
+		argPreferVxlanInterfaces                = pflag.String("prefer-vxlan-interfaces", "", "The preferred vxlan interfaces used to inter-host pod communication, default: the default route interface")
+		argBindSocket                           = pflag.String("bind-socket", "/var/run/hybridnet.sock", "The socket daemon bind to.")
+		argKubeConfigFile                       = pflag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information. If not set use the inCluster token.")
+		argBindPort                             = pflag.Int("healthy-server-port", DefaultBindPort, "The port which daemon server bind")
+		argLocalDirectTableNum                  = pflag.Int("local-direct-table", DefaultLocalDirectTableNum, "The number of local-pod-direct route table")
+		argIptableCheckDuration                 = pflag.Duration("iptables-check-duration", DefaultIptablesCheckDuration, "The time period for iptables manager to check iptables rules")
+		argToOverlaySubnetTableNum              = pflag.Int("to-overlay-table", DefaultToOverlaySubnetTableNum, "The number of to-overlay-pod-subnet route table")
+		argOverlayMarkTableNum                  = pflag.Int("overlay-mark-table", DefaultOverlayMarkTableNum, "The number of overlay-mark routing table")
+		argVlanCheckTimeout                     = pflag.Duration("vlan-check-timeout", DefaultVlanCheckTimeout, "The timeout of vlan network environment check while pod creating")
+		argVxlanUDPPort                         = pflag.Int("vxlan-udp-port", DefaultVxlanUDPPort, "The local udp port which vxlan tunnel use")
+		argVxlanBaseReachableTime               = pflag.Duration("vxlan-base-reachable-time", DefaultVxlanBaseReachableTime, "The time for neigh caches of vxlan device to get STALE from REACHABLE")
+		argVxlanExpiredNeighCachesClearInterval = pflag.Duration("vxlan-expired-neigh-caches-clear-interval", DefaultVxlanExpiredNeighCachesClearInterval, "The interval for daemon to clear STALE and FAILED neigh caches of vxlan device")
+		argNeighGCThresh1                       = pflag.Int("neigh-gc-thresh1", DefaultNeighGCThresh1, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh1")
+		argNeighGCThresh2                       = pflag.Int("neigh-gc-thresh2", DefaultNeighGCThresh2, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh2")
+		argNeighGCThresh3                       = pflag.Int("neigh-gc-thresh3", DefaultNeighGCThresh3, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh3")
+		argExtraNodeLocalVxlanIPCidrs           = pflag.String("extra-node-local-vxlan-ip-cidrs", "", "Cidrs to select node extra local vxlan ip, e.g., \"192.168.10.0/24,10.2.3.0/24\"")
 	)
 
 	// mute info log for ipset lib
@@ -143,22 +146,23 @@ func ParseFlags() (*Configuration, error) {
 	}
 
 	config := &Configuration{
-		BindSocket:              *argBindSocket,
-		KubeConfigFile:          *argKubeConfigFile,
-		NodeName:                nodeName,
-		NodeVlanIfName:          *argPreferVlanInterfaces,
-		NodeVxlanIfName:         *argPreferVxlanInterfaces,
-		BindPort:                *argBindPort,
-		LocalDirectTableNum:     *argLocalDirectTableNum,
-		ToOverlaySubnetTableNum: *argToOverlaySubnetTableNum,
-		OverlayMarkTableNum:     *argOverlayMarkTableNum,
-		VlanCheckTimeout:        *argVlanCheckTimeout,
-		VxlanUDPPort:            *argVxlanUDPPort,
-		IptablesCheckDuration:   *argIptableCheckDuration,
-		VxlanBaseReachableTime:  *argVxlanBaseReachableTime,
-		NeighGCThresh1:          *argNeighGCThresh1,
-		NeighGCThresh2:          *argNeighGCThresh2,
-		NeighGCThresh3:          *argNeighGCThresh3,
+		BindSocket:                           *argBindSocket,
+		KubeConfigFile:                       *argKubeConfigFile,
+		NodeName:                             nodeName,
+		NodeVlanIfName:                       *argPreferVlanInterfaces,
+		NodeVxlanIfName:                      *argPreferVxlanInterfaces,
+		BindPort:                             *argBindPort,
+		LocalDirectTableNum:                  *argLocalDirectTableNum,
+		ToOverlaySubnetTableNum:              *argToOverlaySubnetTableNum,
+		OverlayMarkTableNum:                  *argOverlayMarkTableNum,
+		VlanCheckTimeout:                     *argVlanCheckTimeout,
+		VxlanUDPPort:                         *argVxlanUDPPort,
+		IptablesCheckDuration:                *argIptableCheckDuration,
+		VxlanBaseReachableTime:               *argVxlanBaseReachableTime,
+		NeighGCThresh1:                       *argNeighGCThresh1,
+		NeighGCThresh2:                       *argNeighGCThresh2,
+		NeighGCThresh3:                       *argNeighGCThresh3,
+		VxlanExpiredNeighCachesClearInterval: *argVxlanExpiredNeighCachesClearInterval,
 	}
 
 	if *argPreferVlanInterfaces == "" {
