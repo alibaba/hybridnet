@@ -46,7 +46,7 @@ func ClearStaleNeighEntryByIP(linkIndex int, ip net.IP) error {
 	return nil
 }
 
-func ClearStaleNeighEntries(linkIndex int) error {
+func ClearStaleAddFailedNeighEntries(linkIndex int) error {
 	for _, family := range []int{netlink.FAMILY_V4, netlink.FAMILY_V6} {
 		neighList, err := netlink.NeighList(linkIndex, family)
 		if err != nil {
@@ -54,7 +54,7 @@ func ClearStaleNeighEntries(linkIndex int) error {
 		}
 
 		for _, neigh := range neighList {
-			if neigh.State == netlink.NUD_STALE {
+			if neigh.State == netlink.NUD_STALE || neigh.State == netlink.NUD_FAILED {
 				if err := netlink.NeighDel(&neigh); err != nil {
 					return fmt.Errorf("del neigh cache %v error: %v", neigh.String(), err)
 				}

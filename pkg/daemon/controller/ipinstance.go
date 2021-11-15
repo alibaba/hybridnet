@@ -37,6 +37,16 @@ import (
 	"k8s.io/klog"
 )
 
+func (c *Controller) filterIPInstance(obj interface{}) bool {
+	p, ok := obj.(*networkingv1.IPInstance)
+	if !ok {
+		return false
+	}
+
+	// only ip on this node
+	return p.Labels[constants.LabelNode] == c.config.NodeName
+}
+
 func (c *Controller) enqueueAddOrDeleteIPInstance(obj interface{}) {
 	c.ipInstanceQueue.Add(ActionReconcileIPInstance)
 }
