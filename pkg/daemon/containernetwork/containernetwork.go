@@ -465,3 +465,47 @@ func ensureNeighGCThresh(family int, neighGCThresh1, neighGCThresh2, neighGCThre
 
 	return nil
 }
+
+func CheckIPv6GlobalDisabled() (bool, error) {
+	moduleDisableVar, err := daemonutils.GetSysctl(IPv6DisableModuleParameter)
+	if err != nil {
+		return false, err
+	}
+
+	if moduleDisableVar == 1 {
+		return true, nil
+	}
+
+	sysctlGlobalDisableVar, err := daemonutils.GetSysctl(fmt.Sprintf(IPv6DisableSysctl, "all"))
+	if err != nil {
+		return false, err
+	}
+
+	if sysctlGlobalDisableVar == 1 {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func CheckIPv6Disabled(nicName string) (bool, error) {
+	globalDisabled, err := CheckIPv6GlobalDisabled()
+	if err != nil {
+		return false, err
+	}
+
+	if globalDisabled {
+		return true, nil
+	}
+
+	sysctlDisableVar, err := daemonutils.GetSysctl(fmt.Sprintf(IPv6DisableSysctl, nicName))
+	if err != nil {
+		return false, err
+	}
+
+	if sysctlDisableVar == 1 {
+		return true, nil
+	}
+
+	return false, nil
+}

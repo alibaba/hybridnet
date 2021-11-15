@@ -615,8 +615,15 @@ func (c *Controller) iptablesSyncLoop() {
 			return fmt.Errorf("sync v4 iptables rule failed: %v", err)
 		}
 
-		if err := c.iptablesV6Manager.SyncRules(); err != nil {
-			return fmt.Errorf("sync v6 iptables rule failed: %v", err)
+		globalDisabled, err := containernetwork.CheckIPv6GlobalDisabled()
+		if err != nil {
+			return fmt.Errorf("check ipv6 global disabled failed: %v", err)
+		}
+
+		if !globalDisabled {
+			if err := c.iptablesV6Manager.SyncRules(); err != nil {
+				return fmt.Errorf("sync v6 iptables rule failed: %v", err)
+			}
 		}
 
 		return nil

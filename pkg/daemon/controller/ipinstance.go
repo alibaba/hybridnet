@@ -182,8 +182,15 @@ func (c *Controller) reconcileIPInfo() error {
 		return fmt.Errorf("sync ipv4 neighs failed: %v", err)
 	}
 
-	if err := c.neighV6Manager.SyncNeighs(); err != nil {
-		return fmt.Errorf("sync ipv6 neighs failed: %v", err)
+	globalDisabled, err := containernetwork.CheckIPv6GlobalDisabled()
+	if err != nil {
+		return fmt.Errorf("check ipv6 global disabled failed: %v", err)
+	}
+
+	if !globalDisabled {
+		if err := c.neighV6Manager.SyncNeighs(); err != nil {
+			return fmt.Errorf("sync ipv6 neighs failed: %v", err)
+		}
 	}
 
 	if err := c.addrV4Manager.SyncAddresses(c.getIPInstanceByAddress); err != nil {
