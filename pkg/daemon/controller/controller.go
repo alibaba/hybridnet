@@ -63,6 +63,8 @@ const (
 	NeighUpdateChanSize = 2000
 	LinkUpdateChainSize = 200
 	AddrUpdateChainSize = 200
+
+	NetlinkSubscribeRetryInterval = 10 * time.Second
 )
 
 // Controller is a set of kubernetes controllers
@@ -213,10 +215,13 @@ func NewController(config *daemonconfig.Configuration,
 		UpdateFunc: controller.enqueueUpdateSubnet,
 	})
 
-	ipInstanceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    controller.enqueueAddOrDeleteIPInstance,
-		UpdateFunc: controller.enqueueUpdateIPInstance,
-		DeleteFunc: controller.enqueueAddOrDeleteIPInstance,
+	ipInstanceInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
+		FilterFunc: controller.filterIPInstance,
+		Handler: cache.ResourceEventHandlerFuncs{
+			AddFunc:    controller.enqueueAddOrDeleteIPInstance,
+			UpdateFunc: controller.enqueueUpdateIPInstance,
+			DeleteFunc: controller.enqueueAddOrDeleteIPInstance,
+		},
 	})
 
 	nodeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -316,33 +321,78 @@ func (c *Controller) GetIPInstanceSynced() cache.InformerSynced {
 //
 // Restart of vxlan interface will also trigger subnet and ip instance reconcile loop.
 func (c *Controller) handleLocalNetworkDeviceEvent() error {
-	linkCh := make(chan netlink.LinkUpdate, LinkUpdateChainSize)
-	if err := netlink.LinkSubscribe(linkCh, nil); err != nil {
-		return fmt.Errorf("subscribe link update event failed %v", err)
+	hostNetNs, err := netns.Get()
+	if err != nil {
+		return fmt.Errorf("get root netns failed: %v", err)
 	}
 
 	go func() {
-		for update := range linkCh {
-			if (update.IfInfomsg.Flags&unix.IFF_UP != 0) &&
-				!containernetwork.CheckIfContainerNetworkLink(update.Link.Attrs().Name) {
+		for {
+			linkCh := make(chan netlink.LinkUpdate, LinkUpdateChainSize)
+			exitCh := make(chan struct{})
 
-				// Create event to flush routes and neigh caches.
-				c.subnetQueue.Add(ActionReconcileSubnet)
-				c.ipInstanceQueue.Add(ActionReconcileIPInstance)
+			errorCallback := func(err error) {
+				klog.Errorf("subscribe netlink link event exit with error: %v", err)
+				close(exitCh)
+			}
+
+			if err := netlink.LinkSubscribeWithOptions(linkCh, nil, netlink.LinkSubscribeOptions{
+				Namespace:     &hostNetNs,
+				ErrorCallback: errorCallback,
+			}); err != nil {
+				klog.Errorf("subscribe link update event failed %v", err)
+				time.Sleep(NetlinkSubscribeRetryInterval)
+				continue
+			}
+
+		linkLoop:
+			for {
+				select {
+				case update := <-linkCh:
+					if (update.IfInfomsg.Flags&unix.IFF_UP != 0) &&
+						!containernetwork.CheckIfContainerNetworkLink(update.Link.Attrs().Name) {
+
+						// Create event to flush routes and neigh caches.
+						c.subnetQueue.Add(ActionReconcileSubnet)
+						c.ipInstanceQueue.Add(ActionReconcileIPInstance)
+					}
+				case <-exitCh:
+					break linkLoop
+				}
 			}
 		}
 	}()
 
-	addrCh := make(chan netlink.AddrUpdate, AddrUpdateChainSize)
-	if err := netlink.AddrSubscribe(addrCh, nil); err != nil {
-		return fmt.Errorf("subscribe address update event failed %v", err)
-	}
-
 	go func() {
-		for update := range addrCh {
-			if containernetwork.CheckIPIsGlobalUnicast(update.LinkAddress.IP) {
-				// Create event to update node configuration.
-				c.nodeQueue.Add(ActionReconcileNode)
+		for {
+			addrCh := make(chan netlink.AddrUpdate, AddrUpdateChainSize)
+			exitCh := make(chan struct{})
+
+			errorCallback := func(err error) {
+				klog.Errorf("subscribe netlink addr event exit with error: %v", err)
+				close(exitCh)
+			}
+
+			if err := netlink.AddrSubscribeWithOptions(addrCh, nil, netlink.AddrSubscribeOptions{
+				Namespace:     &hostNetNs,
+				ErrorCallback: errorCallback,
+			}); err != nil {
+				klog.Errorf("subscribe address update event failed %v", err)
+				time.Sleep(NetlinkSubscribeRetryInterval)
+				continue
+			}
+
+		addrLoop:
+			for {
+				select {
+				case update := <-addrCh:
+					if containernetwork.CheckIPIsGlobalUnicast(update.LinkAddress.IP) {
+						// Create event to update node configuration.
+						c.nodeQueue.Add(ActionReconcileNode)
+					}
+				case <-exitCh:
+					break addrLoop
+				}
 			}
 		}
 	}()
@@ -425,49 +475,65 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 		}
 	}
 
-	ch := make(chan netlink.NeighUpdate, NeighUpdateChanSize)
-
-	// clear stale neigh entries for vxlan interface at the first time
-	linkList, err := netlink.LinkList()
-	if err != nil {
-		return fmt.Errorf("list link failed: %v", err)
-	}
-
-	for _, link := range linkList {
-		if strings.Contains(link.Attrs().Name, containernetwork.VxlanLinkInfix) {
-			if err := neigh.ClearStaleNeighEntries(link.Attrs().Index); err != nil {
-				return fmt.Errorf("clear stale neigh entries for link %v failed: %v",
-					link.Attrs().Name, err)
-			}
-		}
-	}
-
 	hostNetNs, err := netns.Get()
 	if err != nil {
 		return fmt.Errorf("get root netns failed: %v", err)
 	}
 
-	if err := netlink.NeighSubscribeAt(hostNetNs, ch, nil); err != nil {
-		return fmt.Errorf("subscribe neigh update event failed: %v", err)
-	}
+	timer := time.NewTicker(c.config.VxlanExpiredNeighCachesClearInterval)
+	errorMessageWrapper := initErrorMessageWrapper("handle vxlan interface neigh event failed: ")
 
 	go func() {
-		errorMessageWrapper := initErrorMessageWrapper("handle vxlan interface neigh event failed: ")
+		for {
+			// Clear stale and failed neigh entries for vxlan interface at the first time.
+			// Once neigh subscribe failed (include the goroutine exit), it's most probably because of
+			// "No buffer space available" problem, we need to clean expired neigh caches.
+			if err := clearVxlanExpiredNeighCaches(); err != nil {
+				klog.Errorf("clear vxlan expired neigh caches failed: %v", err)
+			}
 
-		for update := range ch {
-			if isNeighResolving(update.State) {
-				if update.Type == syscall.RTM_DELNEIGH {
-					continue
-				}
+			neighCh := make(chan netlink.NeighUpdate, NeighUpdateChanSize)
+			exitCh := make(chan struct{})
 
-				link, err := netlink.LinkByIndex(update.LinkIndex)
-				if err != nil {
-					klog.Errorf(errorMessageWrapper("get link by index %v failed: %v", update.LinkIndex, err))
-					continue
-				}
+			errorCallback := func(err error) {
+				klog.Errorf("subscribe netlink neigh event exit with error: %v", err)
+				close(exitCh)
+			}
 
-				if strings.Contains(link.Attrs().Name, containernetwork.VxlanLinkInfix) {
-					go ipSearchExecWrapper(update.IP, link)
+			if err := netlink.NeighSubscribeWithOptions(neighCh, nil, netlink.NeighSubscribeOptions{
+				Namespace:     &hostNetNs,
+				ErrorCallback: errorCallback,
+			}); err != nil {
+				klog.Errorf("subscribe neigh update event failed: %v", err)
+				time.Sleep(NetlinkSubscribeRetryInterval)
+				continue
+			}
+
+		neighLoop:
+			for {
+				select {
+				case update := <-neighCh:
+					if isNeighResolving(update.State) {
+						if update.Type == syscall.RTM_DELNEIGH {
+							continue
+						}
+
+						link, err := netlink.LinkByIndex(update.LinkIndex)
+						if err != nil {
+							klog.Errorf(errorMessageWrapper("get link by index %v failed: %v", update.LinkIndex, err))
+							continue
+						}
+
+						if strings.Contains(link.Attrs().Name, containernetwork.VxlanLinkInfix) {
+							go ipSearchExecWrapper(update.IP, link)
+						}
+					}
+				case <-timer.C:
+					if err := clearVxlanExpiredNeighCaches(); err != nil {
+						klog.Errorf("clear vxlan expired neigh caches failed: %v", err)
+					}
+				case <-exitCh:
+					break neighLoop
 				}
 			}
 		}
@@ -661,7 +727,8 @@ func (c *Controller) runHealthyServer() {
 }
 
 func isNeighResolving(state int) bool {
-	return (state & (netlink.NUD_INCOMPLETE | netlink.NUD_STALE | netlink.NUD_DELAY | netlink.NUD_PROBE)) != 0
+	// We need a neigh cache to be STALE if it's not used for a while.
+	return (state & netlink.NUD_INCOMPLETE) != 0
 }
 
 func indexByInstanceIP(obj interface{}) ([]string, error) {
@@ -686,4 +753,22 @@ var indexByEndpointIP cache.IndexFunc = func(obj interface{}) ([]string, error) 
 		}
 	}
 	return []string{}, nil
+}
+
+func clearVxlanExpiredNeighCaches() error {
+	linkList, err := netlink.LinkList()
+	if err != nil {
+		return fmt.Errorf("list link failed: %v", err)
+	}
+
+	for _, link := range linkList {
+		if strings.Contains(link.Attrs().Name, containernetwork.VxlanLinkInfix) {
+			if err := neigh.ClearStaleAddFailedNeighEntries(link.Attrs().Index); err != nil {
+				return fmt.Errorf("clear stale neigh entries for link %v failed: %v",
+					link.Attrs().Name, err)
+			}
+		}
+	}
+
+	return nil
 }
