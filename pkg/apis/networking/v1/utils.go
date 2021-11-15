@@ -27,12 +27,13 @@ import (
 
 func ValidateAddressRange(ar *AddressRange) (err error) {
 	var (
-		isIPv6  bool
-		start   net.IP
-		end     net.IP
-		gateway net.IP
-		cidr    *net.IPNet
-		tempIP  net.IP
+		isIPv6   bool
+		start    net.IP
+		end      net.IP
+		gateway  net.IP
+		ipOfCIDR net.IP
+		cidr     *net.IPNet
+		tempIP   net.IP
 	)
 	switch ar.Version {
 	case IPv4:
@@ -54,8 +55,11 @@ func ValidateAddressRange(ar *AddressRange) (err error) {
 	if gatewayIsIPv6 := gateway.To4() == nil; gatewayIsIPv6 != isIPv6 {
 		return fmt.Errorf("address families of ip version and gateway mismatch")
 	}
-	if _, cidr, err = net.ParseCIDR(ar.CIDR); err != nil {
+	if ipOfCIDR, cidr, err = net.ParseCIDR(ar.CIDR); err != nil {
 		return fmt.Errorf("invalid range CIDR %s", ar.CIDR)
+	}
+	if !cidr.IP.Equal(ipOfCIDR) {
+		return fmt.Errorf("CIDR notation is not standard, should start from %s but from %s", cidr.IP, ipOfCIDR)
 	}
 
 	if len(ar.Start) > 0 && !cidr.Contains(start) {
