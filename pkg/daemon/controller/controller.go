@@ -681,8 +681,15 @@ func (c *Controller) iptablesSyncLoop() {
 			return fmt.Errorf("sync v4 iptables rule failed: %v", err)
 		}
 
-		if err := c.iptablesV6Manager.SyncRules(); err != nil {
-			return fmt.Errorf("sync v6 iptables rule failed: %v", err)
+		globalDisabled, err := containernetwork.CheckIPv6GlobalDisabled()
+		if err != nil {
+			return fmt.Errorf("check ipv6 global disabled failed: %v", err)
+		}
+
+		if !globalDisabled {
+			if err := c.iptablesV6Manager.SyncRules(); err != nil {
+				return fmt.Errorf("sync v6 iptables rule failed: %v", err)
+			}
 		}
 
 		return nil
@@ -756,9 +763,21 @@ func clearVxlanExpiredNeighCaches() error {
 
 	for _, link := range linkList {
 		if strings.Contains(link.Attrs().Name, containernetwork.VxlanLinkInfix) {
-			if err := neigh.ClearStaleAddFailedNeighEntries(link.Attrs().Index); err != nil {
-				return fmt.Errorf("clear stale neigh entries for link %v failed: %v",
+			if err := neigh.ClearStaleAddFailedNeighEntries(link.Attrs().Index, netlink.FAMILY_V4); err != nil {
+				return fmt.Errorf("clear v4 expired neigh entries for link %v failed: %v",
 					link.Attrs().Name, err)
+			}
+
+			ipv6Disabled, err := containernetwork.CheckIPv6Disabled(link.Attrs().Name)
+			if err != nil {
+				return fmt.Errorf("check ipv6 disables for link %v failed: %v", link.Attrs().Name, err)
+			}
+
+			if !ipv6Disabled {
+				if err := neigh.ClearStaleAddFailedNeighEntries(link.Attrs().Index, netlink.FAMILY_V6); err != nil {
+					return fmt.Errorf("clear v6 expired neigh entries for link %v failed: %v",
+						link.Attrs().Name, err)
+				}
 			}
 		}
 	}

@@ -183,8 +183,15 @@ func (c *Controller) reconcileSubnet() error {
 		return fmt.Errorf("sync ipv4 routes failed: %v", err)
 	}
 
-	if err := c.routeV6Manager.SyncRoutes(); err != nil {
-		return fmt.Errorf("sync ipv6 routes failed: %v", err)
+	globalDisabled, err := containernetwork.CheckIPv6GlobalDisabled()
+	if err != nil {
+		return fmt.Errorf("check ipv6 global disabled failed: %v", err)
+	}
+
+	if !globalDisabled {
+		if err := c.routeV6Manager.SyncRoutes(); err != nil {
+			return fmt.Errorf("sync ipv6 routes failed: %v", err)
+		}
 	}
 
 	c.iptablesSyncTrigger()
