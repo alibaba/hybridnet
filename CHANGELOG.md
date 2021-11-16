@@ -61,3 +61,10 @@ All notable changes to this project will be documented in this file.
 - Fix high CPU cost of hybridnet daemon in large scale cluster
 - Fix wrong underlay pod scheduling if not all the nodes belong to an underlay network while an overlay network exists
 
+## v0.3.1
+### Improvements
+- Detect OS parameters for disabling IPv6-related operations
+- Disallow unexpected CIDR notation in APIs
+
+### Fixed Issues
+- Avoid permanent exit of arp proxy on large-scale clusters
