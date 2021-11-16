@@ -53,6 +53,9 @@ const (
 	IPv4BaseReachableTimeMSSysctl = "/proc/sys/net/ipv4/neigh/%s/base_reachable_time_ms"
 	IPv6BaseReachableTimeMSSysctl = "/proc/sys/net/ipv6/neigh/%s/base_reachable_time_ms"
 
+	IPv6DisableModuleParameter = "/sys/module/ipv6/parameters/disable"
+	IPv6DisableSysctl          = "/proc/sys/net/ipv6/conf/%s/disable_ipv6"
+
 	// IP Masks that have no effect on IP Address
 	DefaultIP4Mask = "255.255.255.255"
 	DefaultIP6Mask = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"

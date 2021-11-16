@@ -71,24 +71,31 @@ func NewVxlanDevice(name string, vxlanID int, parent string, localAddr net.IP, p
 		return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
 	}
 
-	sysctlPath = fmt.Sprintf(containernetwork.IPv6AppSolicitSysctl, link.Name)
-	if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, 1); err != nil {
-		return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
-	}
-
 	sysctlPath = fmt.Sprintf(containernetwork.IPv4BaseReachableTimeMSSysctl, link.Name)
 	if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, int(1000*baseReachableTime.Seconds())); err != nil {
 		return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
 	}
 
-	sysctlPath = fmt.Sprintf(containernetwork.IPv6BaseReachableTimeMSSysctl, link.Name)
-	if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, int(1000*baseReachableTime.Seconds())); err != nil {
-		return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
+	ipv6Disabled, err := containernetwork.CheckIPv6Disabled(link.Name)
+	if err != nil {
+		return nil, fmt.Errorf("check ipv6 disables for link %v failed: %v", link.Name, err)
 	}
 
-	sysctlPath = fmt.Sprintf(containernetwork.AcceptRASysctl, link.Name)
-	if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
-		return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
+	if !ipv6Disabled {
+		sysctlPath = fmt.Sprintf(containernetwork.IPv6AppSolicitSysctl, link.Name)
+		if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, 1); err != nil {
+			return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
+		}
+
+		sysctlPath = fmt.Sprintf(containernetwork.IPv6BaseReachableTimeMSSysctl, link.Name)
+		if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, int(1000*baseReachableTime.Seconds())); err != nil {
+			return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
+		}
+
+		sysctlPath = fmt.Sprintf(containernetwork.AcceptRASysctl, link.Name)
+		if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
+			return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
+		}
 	}
 
 	return &Device{
