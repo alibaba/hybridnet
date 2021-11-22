@@ -30,7 +30,7 @@ Hybridnet focus on productive large-scale, user friendliness and heterogeneous i
 
 ## How-To-Use
 
-Directions is maintained on [wiki](chttps://github.com/alibaba/hybridnet/wiki).
+Directions is maintained on [wiki](https://github.com/alibaba/hybridnet/wiki).
 
 ## Contributing
 
