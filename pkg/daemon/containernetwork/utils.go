@@ -75,7 +75,7 @@ func EnsureVlanIf(nodeIfName string, vlanID *uint32) (string, error) {
 		return "", fmt.Errorf("failed to ensure bridge: %v", err)
 	}
 
-	// find the vlan interface to attach to bridge, create if not exist
+	// create the vlan interface if not exist
 	var vlanIf netlink.Link
 	if vlanIf, err = netlink.LinkByName(vlanIfName); err != nil {
 		if vlanIfName == nodeIfName {
@@ -90,7 +90,7 @@ func EnsureVlanIf(nodeIfName string, vlanID *uint32) (string, error) {
 		vif.ParentIndex = nodeIf.Attrs().Index
 		vif.Name = vlanIfName
 
-		err = netlink.LinkAdd(vlanIf)
+		err = netlink.LinkAdd(vif)
 		if err != nil {
 			return vlanIfName, err
 		}
