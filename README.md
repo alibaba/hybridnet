@@ -10,22 +10,27 @@
 
 ## What is Hybridnet?
 
-Hybridnet is an open source container networking solution, integrated with Kubernetes and used officially by following well-known PaaS platforms,
+Hybridnet is an open source container networking solution designed for hybrid clouds, integrated with Kubernetes and used officially by following well-known PaaS platforms,
 
 - ACK Distro of Alibaba Cloud
 - AECP of Alibaba Cloud
 - SOFAStack of Ant Financial Co.
 
-Hybridnet focus on large-scale, user-friendly and heterogeneous infrastructure, now hundreds of clusters are running on hybridnet all over world.
+Hybridnet focus on productive large-scale, user friendliness and heterogeneous infrastructure, now hundreds of clusters are running on hybridnet all over world.
 
 ## Features
 
 - Flexible network models: three-level, **Network, Subnet and IPInstance**, all implemented in CRD
 - DualStack: three modes optional, IPv4Only, IPv6Only and DualStack
-- Hybrid network fabric: support overlay and underlay pods at same time
+- Hybrid network fabric: support overlay and underlay pods at same time on node level
+- Cluster mesh: support network connectivity among different clusters
 - Advanced IPAM: Network/Subnet/IPInstance assignment; stateful workloads IP retain
-- Kube-proxy friendly: working well with iptables-mode kube-proxy
+- Integration friendly: working well with other networking components (e.g., kube-proxy, cilium)
 - ARM support: run on x86_64 and arm64 architectures
+
+## How-To-Use
+
+Directions is maintained on [wiki](https://github.com/alibaba/hybridnet/wiki).
 
 ## Contributing
 
