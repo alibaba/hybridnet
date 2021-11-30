@@ -68,3 +68,11 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed Issues
 - Avoid permanent exit of arp proxy on large-scale clusters
+
+## v0.3.2
+### Improvements
+- Short-circuit terminating pods before enqueuing in manager controller
+
+### Fixed Issues
+- Fix ipv6 address range calculation error
+- Fix nil point dereference error while creating a vlan interface
