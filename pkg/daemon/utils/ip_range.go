@@ -18,9 +18,10 @@ package utils
 
 import (
 	"fmt"
-	"math/big"
 	"net"
 	"sort"
+
+	"github.com/mikioh/ipaddr"
 
 	"github.com/containernetworking/plugins/pkg/ip"
 )
@@ -171,20 +172,16 @@ func (ir *IPRange) splitIPRangeToIPBlocks() []*net.IPNet {
 }
 
 func calculateIPLastZeroBits(ip net.IP) int {
-	zeroBits := 0
-	for {
-		nextPossibleZeroBits := zeroBits + 1
-		ipInt := ipToInt(ip)
-		ipUint64 := ipInt.Uint64()
-
-		if ipUint64 == (ipUint64>>nextPossibleZeroBits)<<nextPossibleZeroBits {
-			zeroBits = nextPossibleZeroBits
-		} else {
-			break
-		}
+	testMaskBits := net.IPv4len * 8
+	if ip.To4() == nil {
+		testMaskBits = net.IPv6len * 8
 	}
 
-	return zeroBits
+	zeroBits := 0
+	for ; !ip.Mask(net.CIDRMask(zeroBits, testMaskBits)).Equal(ip); zeroBits++ {
+	}
+
+	return testMaskBits - zeroBits
 }
 
 func findTheFirstLargestCidr(start, end net.IP) (*net.IPNet, net.IP) {
@@ -218,26 +215,7 @@ func findTheFirstLargestCidr(start, end net.IP) (*net.IPNet, net.IP) {
 	}
 }
 
-func ipToInt(ip net.IP) *big.Int {
-	if v := ip.To4(); v != nil {
-		return big.NewInt(0).SetBytes(v)
-	}
-	return big.NewInt(0).SetBytes(ip.To16())
-}
-
-func intToIP(i *big.Int) net.IP {
-	return i.Bytes()
-}
-
 func LastIP(cidr *net.IPNet) net.IP {
-	cidrPrefixLen, ipLen := cidr.Mask.Size()
-
-	if cidrPrefixLen == ipLen {
-		return cidr.IP
-	}
-
-	cidrEndIPInt := ipToInt(cidr.IP)
-	cidrEndIPInt.Add(cidrEndIPInt, big.NewInt(1<<(ipLen-cidrPrefixLen)-1))
-
-	return intToIP(cidrEndIPInt)
+	cur := ipaddr.NewCursor([]ipaddr.Prefix{*ipaddr.NewPrefix(cidr)})
+	return cur.Last().IP
 }

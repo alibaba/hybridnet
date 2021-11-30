@@ -29,6 +29,12 @@ type TestSubnetSpec struct {
 	excludeIPs     []net.IP
 
 	expectIPBlocks []*net.IPNet
+	lastIP         net.IP
+}
+
+type TestIPSpec struct {
+	addr         net.IP
+	lastZeroBits int
 }
 
 func TestFindSubnetExcludeIPBlocks(t *testing.T) {
@@ -256,6 +262,58 @@ func TestFindSubnetExcludeIPBlocks(t *testing.T) {
 
 		if !blockSliceEqual(ipBlocks, test.expectIPBlocks) {
 			t.Fatalf("failed to parse case %v ip range %v, result ip blocks: %v", index, test.String(), ipBlocks)
+		}
+	}
+}
+
+func TestLastIP(t *testing.T) {
+	testCases := []TestSubnetSpec{
+		{
+			cidr: &net.IPNet{
+				IP:   net.ParseIP("192.168.3.0"),
+				Mask: net.CIDRMask(24, 32),
+			},
+			lastIP: net.ParseIP("192.168.3.255"),
+		}, {
+			cidr: &net.IPNet{
+				IP:   net.ParseIP("2021:23::"),
+				Mask: net.CIDRMask(64, 128),
+			},
+			lastIP: net.ParseIP("2021:23::ffff:ffff:ffff:ffff"),
+		},
+	}
+
+	for index, test := range testCases {
+		lastIP := LastIP(test.cidr)
+
+		if !lastIP.Equal(test.lastIP) {
+			t.Fatalf("failed to parse case %v cidr %v, result last ip: %v", index, test.cidr.String(), lastIP)
+		}
+	}
+}
+
+func TestZeroBits(t *testing.T) {
+	testCases := []TestIPSpec{
+		{
+			addr:         net.ParseIP("192.168.3.0"),
+			lastZeroBits: 8,
+		}, {
+			addr:         net.ParseIP("2021:23::"),
+			lastZeroBits: 96,
+		}, {
+			addr:         net.ParseIP("2021:23::ffff"),
+			lastZeroBits: 0,
+		}, {
+			addr:         net.ParseIP("192.168.3.1"),
+			lastZeroBits: 0,
+		},
+	}
+
+	for index, test := range testCases {
+		lastZeroBits := calculateIPLastZeroBits(test.addr)
+
+		if lastZeroBits != test.lastZeroBits {
+			t.Fatalf("failed to parse case %v addr %v, result last zero bits: %v", index, test.addr, lastZeroBits)
 		}
 	}
 }

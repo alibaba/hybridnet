@@ -81,6 +81,12 @@ func (c *Controller) updatePod(oldObj, newObj interface{}) {
 		return
 	}
 
+	// short-circuit terminating pods because ip instances will be
+	// recycled asynchronously
+	if new.DeletionTimestamp != nil {
+		return
+	}
+
 	c.enqueuePod(new)
 }
 
