@@ -48,31 +48,11 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	// Specified Network Validation
 	var (
 		specifiedNetwork   = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedNetwork], pod.Labels[constants.LabelSpecifiedNetwork])
 		networkTypeFromPod = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType])
 		networkType        = ipamtypes.ParseNetworkTypeFromString(networkTypeFromPod)
 	)
-	if len(specifiedNetwork) > 0 {
-		network := &networkingv1.Network{}
-		if err = handler.Cache.Get(ctx, types.NamespacedName{Name: specifiedNetwork}, network); err != nil {
-			if errors.IsNotFound(err) {
-				return admission.Denied(fmt.Sprintf("specified network %s not found", specifiedNetwork))
-			}
-			return admission.Errored(http.StatusInternalServerError, err)
-		}
-
-		// check network type, if network type is explicitly specified on pod, use it for comparison directly,
-		// or else mutate network type inherit from specified network
-		if len(networkTypeFromPod) > 0 {
-			if !stringEqualCaseInsensitive(string(networkingv1.GetNetworkType(network)), string(networkType)) {
-				return admission.Errored(http.StatusInternalServerError, fmt.Errorf("specified network type mismatch %s %s", networkType, networkingv1.GetNetworkType(network)))
-			}
-		} else {
-			networkType = ipamtypes.ParseNetworkTypeFromString(string(networkingv1.GetNetworkType(network)))
-		}
-	}
 
 	// Specified Subnet Validation
 	var specifiedSubnet string
@@ -98,8 +78,27 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 		}
 	}
 
-	// Existing IP Instances Validation
 	if len(specifiedNetwork) > 0 {
+		// Specified Network Validation
+		network := &networkingv1.Network{}
+		if err = handler.Cache.Get(ctx, types.NamespacedName{Name: specifiedNetwork}, network); err != nil {
+			if errors.IsNotFound(err) {
+				return admission.Denied(fmt.Sprintf("specified network %s not found", specifiedNetwork))
+			}
+			return admission.Errored(http.StatusInternalServerError, err)
+		}
+
+		// check network type, if network type is explicitly specified on pod, use it for comparison directly,
+		// or else mutate network type inherit from specified network
+		if len(networkTypeFromPod) > 0 {
+			if !stringEqualCaseInsensitive(string(networkingv1.GetNetworkType(network)), string(networkType)) {
+				return admission.Errored(http.StatusInternalServerError, fmt.Errorf("specified network type mismatch %s %s", networkType, networkingv1.GetNetworkType(network)))
+			}
+		} else {
+			networkType = ipamtypes.ParseNetworkTypeFromString(string(networkingv1.GetNetworkType(network)))
+		}
+
+		// Existing IP Instances Validation
 		ipList := &networkingv1.IPInstanceList{}
 		if err = handler.Client.List(
 			ctx,
