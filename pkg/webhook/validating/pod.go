@@ -22,17 +22,17 @@ import (
 	"net/http"
 	"strings"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/feature"
-	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
-	"github.com/alibaba/hybridnet/pkg/utils"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/feature"
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 var podGVK = gvkConverter(corev1.SchemeGroupVersion.WithKind("Pod"))
@@ -72,7 +72,34 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 		} else {
 			networkType = ipamtypes.ParseNetworkTypeFromString(string(networkingv1.GetNetworkType(network)))
 		}
+	}
 
+	// Specified Subnet Validation
+	var specifiedSubnet string
+	if specifiedSubnet = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedSubnet], pod.Labels[constants.LabelSpecifiedSubnet]); len(specifiedSubnet) > 0 {
+		subnet := &networkingv1.Subnet{}
+		if err = handler.Cache.Get(ctx, types.NamespacedName{Name: specifiedSubnet}, subnet); err != nil {
+			if errors.IsNotFound(err) {
+				return admission.Denied(fmt.Sprintf("specified subnet %s not found", specifiedSubnet))
+			}
+			return admission.Errored(http.StatusInternalServerError, err)
+		}
+
+		if len(specifiedNetwork) > 0 {
+			if subnet.Spec.Network != specifiedNetwork {
+				return admission.Denied(fmt.Sprintf("specified subnet %s not belong to specified network %s",
+					specifiedSubnet,
+					specifiedNetwork,
+				))
+			}
+		} else {
+			// subnet can also determine the specified network
+			specifiedNetwork = subnet.Spec.Network
+		}
+	}
+
+	// Existing IP Instances Validation
+	if len(specifiedNetwork) > 0 {
 		ipList := &networkingv1.IPInstanceList{}
 		if err = handler.Client.List(
 			ctx,
@@ -87,35 +114,24 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 		for i := range ipList.Items {
 			var ipInstance = &ipList.Items[i]
 			// terminating ipInstance should be ignored
-			if ipInstance.DeletionTimestamp == nil && ipInstance.Spec.Network != specifiedNetwork {
-				return admission.Denied(fmt.Sprintf(
-					"pod has assigned ip %s of network %s, cannot assign to another network %s",
-					ipInstance.Spec.Address.IP,
-					ipInstance.Spec.Network,
-					specifiedNetwork,
-				))
+			if ipInstance.DeletionTimestamp == nil {
+				switch {
+				case ipInstance.Spec.Network != specifiedNetwork:
+					return admission.Denied(fmt.Sprintf(
+						"pod has assigned ip %s of network %s, cannot assign to another network %s",
+						ipInstance.Spec.Address.IP,
+						ipInstance.Spec.Network,
+						specifiedNetwork,
+					))
+				case len(specifiedSubnet) > 0 && ipInstance.Spec.Subnet != specifiedSubnet:
+					return admission.Denied(fmt.Sprintf(
+						"pod has assigend ip %s of subnet %s, cannot assign to another subnet %s",
+						ipInstance.Spec.Address.IP,
+						ipInstance.Spec.Subnet,
+						specifiedSubnet,
+					))
+				}
 			}
-		}
-	}
-
-	// Specified Subnet Validation
-	var specifiedSubnet string
-	if specifiedSubnet = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedSubnet], pod.Labels[constants.LabelSpecifiedSubnet]); len(specifiedSubnet) > 0 {
-		if len(specifiedNetwork) == 0 {
-			return admission.Denied("subnet and network must be specified at the same time")
-		}
-		subnet := &networkingv1.Subnet{}
-		if err = handler.Cache.Get(ctx, types.NamespacedName{Name: specifiedSubnet}, subnet); err != nil {
-			if errors.IsNotFound(err) {
-				return admission.Denied(fmt.Sprintf("specified subnet %s not found", specifiedSubnet))
-			}
-			return admission.Errored(http.StatusInternalServerError, err)
-		}
-		if subnet.Spec.Network != specifiedNetwork {
-			return admission.Denied(fmt.Sprintf("specified subnet %s not belong to specified network %s",
-				specifiedSubnet,
-				specifiedNetwork,
-			))
 		}
 	}
 
@@ -123,7 +139,7 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 	var ipPool string
 	if ipPool = pod.Annotations[constants.AnnotationIPPool]; len(ipPool) > 0 {
 		if len(specifiedNetwork) == 0 {
-			return admission.Denied("ip pool and network must be specified at the same time")
+			return admission.Denied("ip pool and network(subnet) must be specified at the same time")
 		}
 		ips := strings.Split(ipPool, ",")
 		for _, ip := range ips {
