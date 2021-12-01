@@ -74,14 +74,22 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 	// Select specific network for pod
 	// Priority as below
 	// 1. Network Annotation/Label from Pod
-	// 2. Allocated IP Instance for Pod in Stateful Workloads
+	// 2. Subnet Annotation/Label from Pod
+	// 3. Allocated IP Instance for Pod in Stateful Workloads
 	var (
 		networkName        string
 		networkNameFromPod = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedNetwork], pod.Labels[constants.LabelSpecifiedNetwork])
+		subnetNameFromPod  = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedSubnet], pod.Labels[constants.LabelSpecifiedSubnet])
 	)
 	switch {
 	case len(networkNameFromPod) > 0:
 		networkName = networkNameFromPod
+	case len(subnetNameFromPod) > 0:
+		subnet := &networkingv1.Subnet{}
+		if err = handler.Cache.Get(ctx, types.NamespacedName{Name: subnetNameFromPod}, subnet); err != nil {
+			return admission.Errored(http.StatusInternalServerError, err)
+		}
+		networkName = subnet.Spec.Network
 	case strategy.OwnByStatefulWorkload(pod):
 		if shouldReallocate := !utils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], strategy.DefaultIPRetain); shouldReallocate {
 			// reallocate means that pod will locate on node freely
