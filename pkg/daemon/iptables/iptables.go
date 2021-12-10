@@ -101,10 +101,10 @@ func CreateIPtablesManager(protocol Protocol) (*Manager, error) {
 
 	switch protocol {
 	case ProtocolIpv4:
-		interfaceProtocol = utiliptables.ProtocolIpv4
+		interfaceProtocol = utiliptables.ProtocolIPv4
 		helperProtocol = extraliptables.ProtocolIPv4
 	case ProtocolIpv6:
-		interfaceProtocol = utiliptables.ProtocolIpv6
+		interfaceProtocol = utiliptables.ProtocolIPv6
 		helperProtocol = extraliptables.ProtocolIPv6
 	default:
 		return nil, fmt.Errorf("iptables version %v not supported", protocol)

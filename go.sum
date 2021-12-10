@@ -446,8 +446,11 @@ github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182aff
 github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369/go.mod h1:BSXmuO+STAnVfrANrmjBb36TMTDstsz7MSK+HVaYKv4=
 github.com/mdlayher/ethernet v0.0.0-20190606142754-0394541c37b7 h1:lez6TS6aAau+8wXUP3G9I3TGlmPFEq2CTxBaRqY6AGE=
 github.com/mdlayher/ethernet v0.0.0-20190606142754-0394541c37b7/go.mod h1:U6ZQobyTjI/tJyq2HG+i/dfSoFUt8/aZCM+GKtmFk/Y=
+github.com/mdlayher/ndp v0.0.0-20200602162440-17ab9e3e5567 h1:x+xs91ZJ+lr0C6sedWeREvck4uGCt+AA1kKXwsHB6jI=
+github.com/mdlayher/ndp v0.0.0-20200602162440-17ab9e3e5567/go.mod h1:32w/5dDZWVSEOxyniAgKK4d7dHTuO6TCxWmUznQe3f8=
 github.com/mdlayher/ndp v0.0.0-20210831201139-f982b8766fb5 h1:w1Lne6x7QKrrkAviNvSd0M3NYblM1n76Pv2FsGkNzzI=
 github.com/mdlayher/ndp v0.0.0-20210831201139-f982b8766fb5/go.mod h1:32w/5dDZWVSEOxyniAgKK4d7dHTuO6TCxWmUznQe3f8=
+github.com/mdlayher/raw v0.0.0-20190606142536-fef19f00fc18 h1:zwOa3e/13D6veNIz6zzuqrd3eZEMF0dzD0AQWKcYSs4=
 github.com/mdlayher/raw v0.0.0-20190606142536-fef19f00fc18/go.mod h1:7EpbotpCmVZcu+KCX4g9WaRNuu11uyhiW7+Le1dKawg=
 github.com/mdlayher/raw v0.0.0-20211126142749-4eae47f3d54b h1:MHcTarUMC4sFA7eiyR8IEJ6j2PgmgXR+B9X2IIMjh7A=
 github.com/mdlayher/raw v0.0.0-20211126142749-4eae47f3d54b/go.mod h1:7EpbotpCmVZcu+KCX4g9WaRNuu11uyhiW7+Le1dKawg=

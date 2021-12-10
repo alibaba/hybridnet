@@ -25,7 +25,6 @@ import (
 
 	"k8s.io/client-go/informers"
 	"k8s.io/klog"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 )
 
 var gitCommit string
@@ -42,7 +41,8 @@ func main() {
 		klog.Fatalf("parse config failed: %v", err)
 	}
 
-	stopCh := controllerruntime.SetupSignalHandler()
+	// TODO: remove the stop channel
+	stopCh := make(chan struct{})
 	hybridnetInformerFactory := hybridnetinformer.NewSharedInformerFactory(config.HybridnetClient, 0)
 	kubeInformerFactory := informers.NewSharedInformerFactory(config.KubeClient, 0)
 
