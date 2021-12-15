@@ -69,31 +69,6 @@ const (
 
 // Controller is a set of kubernetes controllers
 type Controller struct {
-	subnetLister networkinglister.SubnetLister
-	subnetSynced cache.InformerSynced
-	subnetQueue  workqueue.RateLimitingInterface
-
-	ipInstanceLister  networkinglister.IPInstanceLister
-	ipInstanceSynced  cache.InformerSynced
-	ipInstanceQueue   workqueue.RateLimitingInterface
-	ipInstanceIndexer cache.Indexer
-
-	networkLister networkinglister.NetworkLister
-	networkSynced cache.InformerSynced
-
-	nodeLister corev1.NodeLister
-	nodeSynced cache.InformerSynced
-	nodeQueue  workqueue.RateLimitingInterface
-
-	// cluster-mesh related crd: RemoteSubnet
-	remoteSubnetLister networkinglister.RemoteSubnetLister
-	remoteSubnetSynced cache.InformerSynced
-
-	// cluster-mesh related crd: RemoteVtep
-	remoteVtepLister  networkinglister.RemoteVtepLister
-	remoteVtepSynced  cache.InformerSynced
-	remoteVtepIndexer cache.Indexer
-
 	config *daemonconfig.Configuration
 
 	routeV4Manager *route.Manager
@@ -115,15 +90,7 @@ type Controller struct {
 }
 
 // NewController returns a Controller to watch kubernetes CRD object events
-func NewController(config *daemonconfig.Configuration,
-	hybridnetInformerFactory hybridnetinformer.SharedInformerFactory,
-	kubeInformerFactory informers.SharedInformerFactory) (*Controller, error) {
-
-	subnetInformer := hybridnetInformerFactory.Networking().V1().Subnets()
-	networkInformer := hybridnetInformerFactory.Networking().V1().Networks()
-	ipInstanceInformer := hybridnetInformerFactory.Networking().V1().IPInstances()
-	nodeInformer := kubeInformerFactory.Core().V1().Nodes()
-
+func NewController(config *daemonconfig.Configuration, mgr manager.Manager) (*Controller, error) {
 	routeV4Manager, err := route.CreateRouteManager(config.LocalDirectTableNum,
 		config.ToOverlaySubnetTableNum,
 		config.OverlayMarkTableNum,
@@ -157,29 +124,7 @@ func NewController(config *daemonconfig.Configuration,
 
 	addrV4Manager := addr.CreateAddrManager(netlink.FAMILY_V4, config.NodeName)
 
-	if err := ipInstanceInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{
-		ByInstanceIPIndexer: indexByInstanceIP,
-	}); err != nil {
-		return nil, fmt.Errorf("add indexer to ip instance informer failed: %v", err)
-	}
-
 	controller := &Controller{
-		subnetLister: subnetInformer.Lister(),
-		subnetSynced: subnetInformer.Informer().HasSynced,
-		subnetQueue:  workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Subnet"),
-
-		networkLister: networkInformer.Lister(),
-		networkSynced: networkInformer.Informer().HasSynced,
-
-		ipInstanceLister:  ipInstanceInformer.Lister(),
-		ipInstanceSynced:  ipInstanceInformer.Informer().HasSynced,
-		ipInstanceQueue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "IPInstance"),
-		ipInstanceIndexer: ipInstanceInformer.Informer().GetIndexer(),
-
-		nodeLister: nodeInformer.Lister(),
-		nodeSynced: nodeInformer.Informer().HasSynced,
-		nodeQueue:  workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Node"),
-
 		config: config,
 
 		routeV4Manager: routeV4Manager,
@@ -201,64 +146,6 @@ func NewController(config *daemonconfig.Configuration,
 	_, err = config.KubeClient.CoreV1().Nodes().Get(context.TODO(), config.NodeName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node %s info %v", config.NodeName, err)
-	}
-
-	networkInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    controller.enqueueAddOrDeleteNetwork,
-		DeleteFunc: controller.enqueueAddOrDeleteNetwork,
-		UpdateFunc: controller.enqueueUpdateNetwork,
-	})
-
-	subnetInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    controller.enqueueAddOrDeleteSubnet,
-		DeleteFunc: controller.enqueueAddOrDeleteSubnet,
-		UpdateFunc: controller.enqueueUpdateSubnet,
-	})
-
-	ipInstanceInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
-		FilterFunc: controller.filterIPInstance,
-		Handler: cache.ResourceEventHandlerFuncs{
-			AddFunc:    controller.enqueueAddOrDeleteIPInstance,
-			UpdateFunc: controller.enqueueUpdateIPInstance,
-			DeleteFunc: controller.enqueueAddOrDeleteIPInstance,
-		},
-	})
-
-	nodeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    controller.enqueueAddOrDeleteNode,
-		UpdateFunc: controller.enqueueUpdateNode,
-		DeleteFunc: controller.enqueueAddOrDeleteNode,
-	})
-
-	// clustermesh-related
-	if feature.MultiClusterEnabled() {
-		remoteSubnetInformer := hybridnetInformerFactory.Networking().V1().RemoteSubnets()
-		remoteVtepInformer := hybridnetInformerFactory.Networking().V1().RemoteVteps()
-
-		if err := remoteVtepInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{
-			ByEndpointIPIndexer: indexByEndpointIP,
-		}); err != nil {
-			return nil, fmt.Errorf("add indexer to remote vtep informer failed: %v", err)
-		}
-
-		controller.remoteSubnetLister = remoteSubnetInformer.Lister()
-		controller.remoteSubnetSynced = remoteSubnetInformer.Informer().HasSynced
-
-		controller.remoteVtepLister = remoteVtepInformer.Lister()
-		controller.remoteVtepSynced = remoteVtepInformer.Informer().HasSynced
-		controller.remoteVtepIndexer = remoteVtepInformer.Informer().GetIndexer()
-
-		remoteSubnetInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc:    controller.enqueueAddOrDeleteRemoteSubnet,
-			UpdateFunc: controller.enqueueUpdateRemoteSubnet,
-			DeleteFunc: controller.enqueueAddOrDeleteRemoteSubnet,
-		})
-
-		remoteVtepInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc:    controller.enqueueAddOrDeleteRemoteVtep,
-			UpdateFunc: controller.enqueueUpdateRemoteVtep,
-			DeleteFunc: controller.enqueueAddOrDeleteRemoteVtep,
-		})
 	}
 
 	return controller, nil
