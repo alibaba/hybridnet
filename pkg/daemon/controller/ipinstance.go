@@ -17,6 +17,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -24,161 +25,114 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/types"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/go-logr/logr"
+
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
-
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
 
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog"
 )
 
-func (c *Controller) filterIPInstance(obj interface{}) bool {
-	p, ok := obj.(*networkingv1.IPInstance)
-	if !ok {
-		return false
-	}
-
-	// only ip on this node
-	return p.Labels[constants.LabelNode] == c.config.NodeName
+type ipInstanceReconciler struct {
+	client.Client
+	controllerRef *Controller
+	logger        logr.Logger
 }
 
-func (c *Controller) enqueueAddOrDeleteIPInstance(obj interface{}) {
-	c.ipInstanceQueue.Add(ActionReconcileIPInstance)
-}
-
-func (c *Controller) enqueueUpdateIPInstance(oldObj, newObj interface{}) {
-	oldIPInstance := oldObj.(*networkingv1.IPInstance)
-	newIPInstance := newObj.(*networkingv1.IPInstance)
-
-	if oldIPInstance.Labels[constants.LabelNode] != newIPInstance.Labels[constants.LabelNode] {
-		c.ipInstanceQueue.Add(ActionReconcileIPInstance)
-	}
-}
-
-func (c *Controller) processNextIPInstanceWorkItem() bool {
-	obj, shutdown := c.ipInstanceQueue.Get()
-
-	if shutdown {
-		return false
-	}
-
-	err := func(obj interface{}) error {
-		defer c.ipInstanceQueue.Done(obj)
-		var key string
-		var ok bool
-		if key, ok = obj.(string); !ok {
-			c.ipInstanceQueue.Forget(obj)
-			klog.Errorf("expected string in work queue but got %#v", obj)
-			return nil
-		}
-		if err := c.reconcileIPInfo(); err != nil {
-			c.ipInstanceQueue.AddRateLimited(key)
-			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
-		}
-		c.ipInstanceQueue.Forget(obj)
-		return nil
-	}(obj)
-
-	if err != nil {
-		klog.Error(err)
-	}
-	return true
-}
-
-func (c *Controller) runIPInstanceWorker() {
-	for c.processNextIPInstanceWorkItem() {
-	}
-}
-
-func (c *Controller) reconcileIPInfo() error {
+func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
 		klog.Infof("IPInstance information reconciled, took %v", endTime)
 	}()
 
-	networkList, err := c.networkLister.List(labels.Everything())
-	if err != nil {
-		return fmt.Errorf("list network failed: %v", err)
+	networkList := &networkingv1.NetworkList{}
+	if err := r.List(ctx, networkList); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("list network failed: %v", err)
 	}
 
 	var overlayExist bool
 	var overlayForwardNodeIfName string
-	for _, network := range networkList {
-		if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
+	var err error
+	for _, network := range networkList.Items {
+		if networkingv1.GetNetworkType(&network) == networkingv1.NetworkTypeOverlay {
 			netID := network.Spec.NetID
-			overlayForwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
+			overlayForwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(r.controllerRef.config.NodeVxlanIfName, netID)
 			if err != nil {
-				return fmt.Errorf("generate vxlan forward node if name failed: %v", err)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("generate vxlan forward node if name failed: %v", err)
 			}
 			overlayExist = true
 			break
 		}
 	}
 
-	if !c.upgradeWorkDone {
-		if err := ensureExistPodConfigs(c.config.LocalDirectTableNum); err != nil {
-			return fmt.Errorf("ensure exist pod config failed: %v", err)
+	if !r.controllerRef.upgradeWorkDone {
+		if err := ensureExistPodConfigs(r.controllerRef.config.LocalDirectTableNum); err != nil {
+			return reconcile.Result{Requeue: true}, fmt.Errorf("ensure exist pod config failed: %v", err)
 		}
-		c.upgradeWorkDone = true
+		r.controllerRef.upgradeWorkDone = true
 	}
 
-	nodeSelector := labels.SelectorFromSet(labels.Set{
-		constants.LabelNode: c.config.NodeName,
-	})
-
-	ipInstances, err := c.ipInstanceLister.List(nodeSelector)
-	if err != nil {
-		return fmt.Errorf("list ip instances for node %v error: %v", c.config.NodeName, err)
+	ipInstanceList := &networkingv1.IPInstanceList{}
+	if err := r.List(ctx, ipInstanceList,
+		client.MatchingLabels{constants.LabelNode: r.controllerRef.config.NodeName}); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("list ip instances for node %v error: %v",
+			r.controllerRef.config.NodeName, err)
 	}
 
-	c.neighV4Manager.ResetInfos()
-	c.neighV6Manager.ResetInfos()
+	r.controllerRef.neighV4Manager.ResetInfos()
+	r.controllerRef.neighV6Manager.ResetInfos()
 
-	c.addrV4Manager.ResetInfos()
+	r.controllerRef.addrV4Manager.ResetInfos()
 
-	for _, ipInstance := range ipInstances {
+	for _, ipInstance := range ipInstanceList.Items {
 		netID := ipInstance.Spec.Address.NetID
 		if netID == nil {
-			return fmt.Errorf("NetID of ip instance %v should not be nil", ipInstance.Name)
+			return reconcile.Result{Requeue: true}, fmt.Errorf("NetID of ip instance %v should not be nil", ipInstance.Name)
 		}
 
 		podIP, subnetCidr, err := net.ParseCIDR(ipInstance.Spec.Address.IP)
 		if err != nil {
-			return fmt.Errorf("parse pod ip %v error: %v", ipInstance.Spec.Address.IP, err)
+			return reconcile.Result{Requeue: true}, fmt.Errorf("parse pod ip %v error: %v", ipInstance.Spec.Address.IP, err)
 		}
 
-		network, err := c.networkLister.Get(ipInstance.Spec.Network)
-		if err != nil {
-			return fmt.Errorf("get network for ip instance %v failed: %v", ipInstance.Name, err)
+		network := &networkingv1.Network{}
+		if err := r.Get(ctx, types.NamespacedName{Name: ipInstance.Spec.Network}, network); err != nil {
+			return reconcile.Result{Requeue: true}, fmt.Errorf("get network for ip instance %v failed: %v",
+				ipInstance.Name, err)
 		}
 
 		var forwardNodeIfName string
 		switch networkingv1.GetNetworkType(network) {
 		case networkingv1.NetworkTypeUnderlay:
-			forwardNodeIfName, err = containernetwork.GenerateVlanNetIfName(c.config.NodeVlanIfName, netID)
+			forwardNodeIfName, err = containernetwork.GenerateVlanNetIfName(r.controllerRef.config.NodeVlanIfName, netID)
 			if err != nil {
-				return fmt.Errorf("generate vlan forward node interface name failed: %v", err)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("generate vlan forward node interface name failed: %v", err)
 			}
 
 			if ipInstance.Spec.Address.Version == networkingv1.IPv4 {
-				c.addrV4Manager.TryAddPodInfo(forwardNodeIfName, subnetCidr, podIP)
+				r.controllerRef.addrV4Manager.TryAddPodInfo(forwardNodeIfName, subnetCidr, podIP)
 			}
 
 		case networkingv1.NetworkTypeOverlay:
-			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
+			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(r.controllerRef.config.NodeVxlanIfName, netID)
 			if err != nil {
-				return fmt.Errorf("generate vxlan forward node interface name failed: %v", err)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("generate vxlan forward node interface name failed: %v", err)
 			}
 		}
 
 		// create proxy neigh
-		neighManager := c.getNeighManager(ipInstance.Spec.Address.Version)
+		neighManager := r.controllerRef.getNeighManager(ipInstance.Spec.Address.Version)
 
 		if overlayExist {
 			// Every underlay pod should also add a proxy neigh on overlay forward interface.
@@ -188,26 +142,26 @@ func (c *Controller) reconcileIPInfo() error {
 		neighManager.AddPodInfo(podIP, forwardNodeIfName)
 	}
 
-	if err := c.neighV4Manager.SyncNeighs(); err != nil {
-		return fmt.Errorf("sync ipv4 neighs failed: %v", err)
+	if err := r.controllerRef.neighV4Manager.SyncNeighs(); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("sync ipv4 neighs failed: %v", err)
 	}
 
 	globalDisabled, err := containernetwork.CheckIPv6GlobalDisabled()
 	if err != nil {
-		return fmt.Errorf("check ipv6 global disabled failed: %v", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("check ipv6 global disabled failed: %v", err)
 	}
 
 	if !globalDisabled {
-		if err := c.neighV6Manager.SyncNeighs(); err != nil {
-			return fmt.Errorf("sync ipv6 neighs failed: %v", err)
+		if err := r.controllerRef.neighV6Manager.SyncNeighs(); err != nil {
+			return reconcile.Result{Requeue: true}, fmt.Errorf("sync ipv6 neighs failed: %v", err)
 		}
 	}
 
-	if err := c.addrV4Manager.SyncAddresses(c.getIPInstanceByAddress); err != nil {
-		return fmt.Errorf("sync ipv4 addresses failed: %v", err)
+	if err := r.controllerRef.addrV4Manager.SyncAddresses(r.controllerRef.getIPInstanceByAddress); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("sync ipv4 addresses failed: %v", err)
 	}
 
-	return nil
+	return reconcile.Result{}, nil
 }
 
 // TODO: update logic, need to be removed further

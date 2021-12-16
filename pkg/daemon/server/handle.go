@@ -23,9 +23,12 @@ import (
 	"net/http"
 	"time"
 
+	"k8s.io/apimachinery/pkg/types"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	clientset "github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
-	networkinglister "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
@@ -34,34 +37,27 @@ import (
 
 	"github.com/emicklei/go-restful"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 )
 
 type cniDaemonHandler struct {
-	config          *daemonconfig.Configuration
-	KubeClient      kubernetes.Interface
-	HybridnetClient clientset.Interface
+	config           *daemonconfig.Configuration
+	kubeClient       kubernetes.Interface
+	networkingClient clientset.Interface
 
-	ipInstanceLister networkinglister.IPInstanceLister
-	ipInstanceSynced cache.InformerSynced
-
-	networkLister networkinglister.NetworkLister
+	mgrClient client.Client
 }
 
-func createCniDaemonHandler(stopCh <-chan struct{}, config *daemonconfig.Configuration, ctrlRef *controller.Controller) (*cniDaemonHandler, error) {
+func createCniDaemonHandler(ctx context.Context, config *daemonconfig.Configuration, ctrlRef *controller.Controller) (*cniDaemonHandler, error) {
 	cdh := &cniDaemonHandler{
-		KubeClient:       config.KubeClient,
-		HybridnetClient:  config.HybridnetClient,
+		kubeClient:       config.KubeClient,
+		networkingClient: config.HybridnetClient,
 		config:           config,
-		ipInstanceLister: ctrlRef.GetIPInstanceLister(),
-		networkLister:    ctrlRef.GetNetworkLister(),
-		ipInstanceSynced: ctrlRef.GetIPInstanceSynced(),
+		mgrClient:        ctrlRef.GetMgrClient(),
 	}
 
-	if ok := cache.WaitForCacheSync(stopCh, cdh.ipInstanceSynced); !ok {
+	if ok := ctrlRef.CacheSynced(ctx); !ok {
 		return nil, fmt.Errorf("failed to wait for ip instance & pod caches to sync")
 	}
 
@@ -97,7 +93,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		time.Sleep(backOffBase)
 		backOffBase = backOffBase * 2
 
-		pod, err := cdh.KubeClient.CoreV1().Pods(podRequest.PodNamespace).Get(context.TODO(), podRequest.PodName, metav1.GetOptions{})
+		pod, err := cdh.kubeClient.CoreV1().Pods(podRequest.PodNamespace).Get(context.TODO(), podRequest.PodName, metav1.GetOptions{})
 		if err != nil {
 			errMsg := fmt.Errorf("get pod %v/%v failed: %v", podRequest.PodName, podRequest.PodNamespace, err)
 			klog.Error(errMsg)
@@ -118,13 +114,11 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		}
 	}
 
-	ipSelector := labels.SelectorFromSet(labels.Set{
+	ipInstanceList := &networkingv1.IPInstanceList{}
+	if err := cdh.mgrClient.List(context.TODO(), ipInstanceList, client.MatchingLabels{
 		constants.LabelNode: cdh.config.NodeName,
 		constants.LabelPod:  podRequest.PodName,
-	})
-
-	ipInstanceList, err := cdh.ipInstanceLister.IPInstances(podRequest.PodNamespace).List(ipSelector)
-	if err != nil {
+	}); err != nil {
 		errMsg := fmt.Errorf("list ip instance for pod %v failed: %v", cdh.config.NodeName, err)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})
@@ -132,7 +126,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 	}
 
 	var networkName string
-	for _, ipInstance := range ipInstanceList {
+	for _, ipInstance := range ipInstanceList.Items {
 		// IPv4 and IPv6 ip will exist at the same time
 		if ipInstance.Status.PodName == podRequest.PodName && ipInstance.Status.PodNamespace == podRequest.PodNamespace {
 
@@ -221,7 +215,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 				Protocol: ipVersion,
 			})
 
-			affectedIPInstances = append(affectedIPInstances, ipInstance)
+			affectedIPInstances = append(affectedIPInstances, &ipInstance)
 		}
 	}
 
@@ -233,8 +227,8 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		return
 	}
 
-	network, err := cdh.networkLister.Get(networkName)
-	if err != nil {
+	network := &networkingv1.Network{}
+	if err := cdh.mgrClient.Get(context.TODO(), types.NamespacedName{Name: networkName}, network); err != nil {
 		errMsg := fmt.Errorf("cannot get network %v", networkName)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
@@ -262,7 +256,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		}
 
 		newIPInstance.Status.SandboxID = podRequest.ContainerID
-		_, err = cdh.HybridnetClient.NetworkingV1().IPInstances(newIPInstance.Namespace).UpdateStatus(context.TODO(), newIPInstance, metav1.UpdateOptions{})
+		_, err = cdh.networkingClient.NetworkingV1().IPInstances(newIPInstance.Namespace).UpdateStatus(context.TODO(), newIPInstance, metav1.UpdateOptions{})
 		if err != nil {
 			errMsg := fmt.Errorf("failed to update IPInstance crd for %s, %v", newIPInstance.Name, err)
 			klog.Error(errMsg)

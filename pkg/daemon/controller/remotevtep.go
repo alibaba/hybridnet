@@ -19,22 +19,33 @@ package controller
 import (
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"k8s.io/client-go/util/workqueue"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
 // add handler for RemoteVtep and RemoteSubnet
 
-func (c *Controller) enqueueAddOrDeleteRemoteVtep(obj interface{}) {
-	c.nodeQueue.Add(ActionReconcileNode)
+type enqueueRequestForRemoteVtep struct {
+	handler.Funcs
 }
 
-func (c *Controller) enqueueUpdateRemoteVtep(oldObj, newObj interface{}) {
-	old := oldObj.(*networkingv1.RemoteVtep)
-	new := newObj.(*networkingv1.RemoteVtep)
+func (e enqueueRequestForRemoteVtep) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
+	q.Add(ActionReconcileNode)
+}
 
-	if old.Spec.VtepIP != new.Spec.VtepIP ||
-		old.Spec.VtepMAC != new.Spec.VtepMAC ||
-		old.Annotations[constants.AnnotationNodeLocalVxlanIPList] != new.Annotations[constants.AnnotationNodeLocalVxlanIPList] ||
-		!isIPListEqual(old.Spec.EndpointIPList, new.Spec.EndpointIPList) {
-		c.nodeQueue.Add(ActionReconcileNode)
+func (e enqueueRequestForRemoteVtep) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
+	oldRemoteVtep := evt.ObjectOld.(*networkingv1.RemoteVtep)
+	newRemoteVtep := evt.ObjectNew.(*networkingv1.RemoteVtep)
+
+	if oldRemoteVtep.Spec.VtepIP != newRemoteVtep.Spec.VtepIP ||
+		oldRemoteVtep.Spec.VtepMAC != newRemoteVtep.Spec.VtepMAC ||
+		oldRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] != newRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] ||
+		!isIPListEqual(oldRemoteVtep.Spec.EndpointIPList, newRemoteVtep.Spec.EndpointIPList) {
+		q.Add(ActionReconcileNode)
 	}
+}
+
+func (e enqueueRequestForRemoteVtep) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
+	q.Add(ActionReconcileNode)
 }

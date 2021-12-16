@@ -21,13 +21,30 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"reflect"
 	"strings"
 	"syscall"
 	"time"
 
+	"golang.org/x/sys/unix"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/workqueue"
+	"k8s.io/klog"
+
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	hybridnetinformer "github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
-	networkinglister "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/addr"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
@@ -39,16 +56,6 @@ import (
 	"github.com/heptiolabs/healthcheck"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
-
-	"golang.org/x/sys/unix"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/informers"
-	corev1 "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
-	"k8s.io/klog"
 )
 
 const (
@@ -56,10 +63,9 @@ const (
 	ActionReconcileIPInstance = "ReconcileIPInstance"
 	ActionReconcileNode       = "ReconcileNode"
 
-	ByInstanceIPIndexer = "instanceIP"
-	ByEndpointIPIndexer = "endpointIP"
+	InstanceIPIndex = "instanceIP"
+	EndpointIPIndex = "endpointIP"
 
-	// to reduce channel block times while neigh netlink update increase.
 	NeighUpdateChanSize = 2000
 	LinkUpdateChainSize = 200
 	AddrUpdateChainSize = 200
@@ -70,6 +76,11 @@ const (
 // Controller is a set of kubernetes controllers
 type Controller struct {
 	config *daemonconfig.Configuration
+	mgr    ctrl.Manager
+
+	subnetControllerTriggerSource     *simpleTriggerSource
+	ipInstanceControllerTriggerSource *simpleTriggerSource
+	nodeControllerTriggerSource       *simpleTriggerSource
 
 	routeV4Manager *route.Manager
 	routeV6Manager *route.Manager
@@ -90,7 +101,7 @@ type Controller struct {
 }
 
 // NewController returns a Controller to watch kubernetes CRD object events
-func NewController(config *daemonconfig.Configuration, mgr manager.Manager) (*Controller, error) {
+func NewController(config *daemonconfig.Configuration, mgr ctrl.Manager) (*Controller, error) {
 	routeV4Manager, err := route.CreateRouteManager(config.LocalDirectTableNum,
 		config.ToOverlaySubnetTableNum,
 		config.OverlayMarkTableNum,
@@ -126,6 +137,11 @@ func NewController(config *daemonconfig.Configuration, mgr manager.Manager) (*Co
 
 	controller := &Controller{
 		config: config,
+		mgr:    mgr,
+
+		subnetControllerTriggerSource:     &simpleTriggerSource{},
+		ipInstanceControllerTriggerSource: &simpleTriggerSource{},
+		nodeControllerTriggerSource:       &simpleTriggerSource{},
 
 		routeV4Manager: routeV4Manager,
 		routeV6Manager: routeV6Manager,
@@ -151,28 +167,12 @@ func NewController(config *daemonconfig.Configuration, mgr manager.Manager) (*Co
 	return controller, nil
 }
 
-// Run a Controller
-func (c *Controller) Run(stopCh <-chan struct{}) error {
-	klog.Info("Started controller")
+func (c *Controller) Run(ctx context.Context) error {
 	c.runHealthyServer()
 
-	defer c.subnetQueue.ShutDown()
-	defer c.ipInstanceQueue.ShutDown()
-	defer c.nodeQueue.ShutDown()
-
-	synced := []cache.InformerSynced{c.subnetSynced, c.ipInstanceSynced, c.networkSynced, c.nodeSynced}
-
-	if feature.MultiClusterEnabled() {
-		synced = append(synced, c.remoteSubnetSynced, c.remoteVtepSynced)
+	if err := c.setupControllers(); err != nil {
+		return fmt.Errorf("failed to start controllers: %v", err)
 	}
-
-	if ok := cache.WaitForCacheSync(stopCh, synced...); !ok {
-		return fmt.Errorf("failed to wait for caches to sync")
-	}
-
-	go wait.Until(c.runSubnetWorker, time.Second, stopCh)
-	go wait.Until(c.runIPInstanceWorker, time.Second, stopCh)
-	go wait.Until(c.runNodeWorker, time.Second, stopCh)
 
 	if err := c.handleLocalNetworkDeviceEvent(); err != nil {
 		return fmt.Errorf("failed to handle local network device event: %v", err)
@@ -184,22 +184,164 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 
 	c.iptablesSyncLoop()
 
-	<-stopCh
-	klog.Info("Shutting down controller")
+	if err := c.mgr.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start controller manager: %v", err)
+	}
 
 	return nil
 }
 
-func (c *Controller) GetIPInstanceLister() networkinglister.IPInstanceLister {
-	return c.ipInstanceLister
+// StartControllers sets up the controllers.
+func (c *Controller) setupControllers() error {
+	if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.IPInstance{}, InstanceIPIndex, instanceIPIndexer); err != nil {
+		return fmt.Errorf("failed to add instance ip indexer to manager: %v", err)
+	}
+
+	// create subnet controller
+	subnetReconcileLogger := ctrl.Log.WithName("subnet reconcile")
+	subnetControllerBuilder := ctrl.NewControllerManagedBy(c.mgr).
+		Named("subnet-controller").
+		Watches(&source.Kind{Type: &networkingv1.Subnet{}}, &fixedKeyHandler{key: ActionReconcileSubnet},
+			builder.WithPredicates(
+				&predicate.ResourceVersionChangedPredicate{},
+				&predicate.Funcs{
+					UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+						oldSubnet := updateEvent.ObjectOld.(*networkingv1.Subnet)
+						newSubnet := updateEvent.ObjectNew.(*networkingv1.Subnet)
+
+						oldSubnetNetID := oldSubnet.Spec.NetID
+						newSubnetNetID := newSubnet.Spec.NetID
+
+						if (oldSubnetNetID == nil && newSubnetNetID != nil) ||
+							(oldSubnetNetID != nil && newSubnetNetID == nil) ||
+							(oldSubnetNetID != nil && newSubnetNetID != nil && *oldSubnetNetID != *newSubnetNetID) ||
+							oldSubnet.Spec.Network != newSubnet.Spec.Network ||
+							!reflect.DeepEqual(oldSubnet.Spec.Range, newSubnet.Spec.Range) ||
+							networkingv1.IsSubnetAutoNatOutgoing(&oldSubnet.Spec) != networkingv1.IsSubnetAutoNatOutgoing(&newSubnet.Spec) {
+							return true
+						}
+						return false
+					},
+				})).
+		Watches(&source.Kind{Type: &networkingv1.Network{}}, enqueueRequestForNetwork{}).
+		Watches(&source.Kind{Type: &corev1.Node{}}, &handler.Funcs{
+			UpdateFunc: func(updateEvent event.UpdateEvent, q workqueue.RateLimitingInterface) {
+				if checkNodeUpdate(updateEvent) {
+					q.Add(ActionReconcileSubnet)
+				}
+			},
+		}).
+		Watches(c.subnetControllerTriggerSource, &handler.Funcs{}).
+		WithOptions(controller.Options{Log: subnetReconcileLogger})
+
+	// create ip instance controller
+	ipInstanceReconcileLogger := ctrl.Log.WithName("ip instance reconcile")
+	ipInstanceControllerBuilder := ctrl.NewControllerManagedBy(c.mgr).
+		Named("ipInstance-controller").
+		Watches(&source.Kind{Type: &networkingv1.IPInstance{}}, &fixedKeyHandler{key: ActionReconcileIPInstance},
+			builder.WithPredicates(
+				&predicate.ResourceVersionChangedPredicate{},
+				&predicate.LabelChangedPredicate{},
+				&predicate.Funcs{
+					CreateFunc: func(createEvent event.CreateEvent) bool {
+						ipInstance := createEvent.Object.(*networkingv1.IPInstance)
+						return ipInstance.GetLabels()[constants.LabelNode] == c.config.NodeName
+					},
+					DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
+						ipInstance := deleteEvent.Object.(*networkingv1.IPInstance)
+						return ipInstance.GetLabels()[constants.LabelNode] == c.config.NodeName
+					},
+					UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+						oldIPInstance := updateEvent.ObjectOld.(*networkingv1.IPInstance)
+						newIPInstance := updateEvent.ObjectNew.(*networkingv1.IPInstance)
+
+						if newIPInstance.GetLabels()[constants.LabelNode] != c.config.NodeName ||
+							oldIPInstance.GetLabels()[constants.LabelNode] != c.config.NodeName {
+							return false
+						}
+
+						if oldIPInstance.Labels[constants.LabelNode] != newIPInstance.Labels[constants.LabelNode] {
+							return true
+						}
+						return false
+					},
+					GenericFunc: func(genericEvent event.GenericEvent) bool {
+						ipInstance := genericEvent.Object.(*networkingv1.IPInstance)
+						return ipInstance.GetLabels()[constants.LabelNode] == c.config.NodeName
+					},
+				})).
+		Watches(c.ipInstanceControllerTriggerSource, &handler.Funcs{}).
+		WithOptions(controller.Options{Log: ipInstanceReconcileLogger})
+
+	// create node controller
+	nodeReconcileLogger := ctrl.Log.WithName("node reconcile")
+	nodeControllerBuilder := ctrl.NewControllerManagedBy(c.mgr).
+		Named("node-controller").
+		Watches(&source.Kind{Type: &corev1.Node{}}, &fixedKeyHandler{key: ActionReconcileNode},
+			builder.WithPredicates(
+				&predicate.ResourceVersionChangedPredicate{},
+				&predicate.LabelChangedPredicate{},
+				&predicate.Funcs{
+					UpdateFunc: checkNodeUpdate,
+				},
+			)).
+		Watches(&source.Kind{Type: &networkingv1.Network{}}, &handler.Funcs{
+			CreateFunc: func(createEvent event.CreateEvent, limitingInterface workqueue.RateLimitingInterface) {
+				enqueueAddOrDeleteNetworkForNode(createEvent.Object, limitingInterface)
+			},
+			DeleteFunc: func(deleteEvent event.DeleteEvent, limitingInterface workqueue.RateLimitingInterface) {
+				enqueueAddOrDeleteNetworkForNode(deleteEvent.Object, limitingInterface)
+			},
+		}).
+		Watches(c.nodeControllerTriggerSource, &handler.Funcs{}).
+		WithOptions(controller.Options{Log: nodeReconcileLogger})
+
+	// enable multicluster feature
+	if feature.MultiClusterEnabled() {
+		subnetControllerBuilder.Watches(&source.Kind{Type: &networkingv1.RemoteSubnet{}}, &enqueueRequestForRemoteSubnet{})
+		nodeControllerBuilder.Watches(&source.Kind{Type: &networkingv1.RemoteVtep{}}, &enqueueRequestForRemoteVtep{})
+
+		if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.RemoteVtep{}, EndpointIPIndex, endpointIPIndexer); err != nil {
+			return fmt.Errorf("failed to add endpoint ip indexer to manager: %v", err)
+		}
+	}
+
+	// run subnet controller
+	if err := subnetControllerBuilder.
+		Complete(&subnetReconciler{
+			Client:        c.mgr.GetClient(),
+			controllerRef: c,
+			logger:        subnetReconcileLogger,
+		}); err != nil {
+		return fmt.Errorf("failed to start subnet controller: %v", err)
+	}
+
+	if err := ipInstanceControllerBuilder.
+		Complete(&ipInstanceReconciler{
+			Client:        c.mgr.GetClient(),
+			controllerRef: c,
+			logger:        ipInstanceReconcileLogger,
+		}); err != nil {
+		return fmt.Errorf("failed to start network controller: %v", err)
+	}
+
+	if err := nodeControllerBuilder.Complete(&nodeReconciler{
+		Client:        c.mgr.GetClient(),
+		controllerRef: c,
+		logger:        nodeReconcileLogger,
+	}); err != nil {
+		return fmt.Errorf("failed to start node controller: %v", err)
+	}
+
+	return nil
 }
 
-func (c *Controller) GetNetworkLister() networkinglister.NetworkLister {
-	return c.networkLister
+func (c *Controller) CacheSynced(ctx context.Context) bool {
+	return c.mgr.GetCache().WaitForCacheSync(ctx)
 }
 
-func (c *Controller) GetIPInstanceSynced() cache.InformerSynced {
-	return c.ipInstanceSynced
+func (c *Controller) GetMgrClient() client.Client {
+	return c.mgr.GetClient()
 }
 
 // Once node network interface is set from down to up for some reasons, the routes and neigh caches for this interface
@@ -240,8 +382,8 @@ func (c *Controller) handleLocalNetworkDeviceEvent() error {
 						!containernetwork.CheckIfContainerNetworkLink(update.Link.Attrs().Name) {
 
 						// Create event to flush routes and neigh caches.
-						c.subnetQueue.Add(ActionReconcileSubnet)
-						c.ipInstanceQueue.Add(ActionReconcileIPInstance)
+						c.subnetControllerTriggerSource.Trigger()
+						c.ipInstanceControllerTriggerSource.Trigger()
 					}
 				case <-exitCh:
 					break linkLoop
@@ -275,7 +417,7 @@ func (c *Controller) handleLocalNetworkDeviceEvent() error {
 				case update := <-addrCh:
 					if containernetwork.CheckIPIsGlobalUnicast(update.LinkAddress.IP) {
 						// Create event to update node configuration.
-						c.nodeQueue.Add(ActionReconcileNode)
+						c.nodeControllerTriggerSource.Trigger()
 					}
 				case <-exitCh:
 					break addrLoop
@@ -302,10 +444,10 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 			}
 
 			if ipInstance != nil {
+				node := &corev1.Node{}
 				nodeName := ipInstance.Labels[constants.LabelNode]
 
-				node, err := c.nodeLister.Get(nodeName)
-				if err != nil {
+				if err := c.mgr.GetClient().Get(context.TODO(), types.NamespacedName{Name: nodeName}, node); err != nil {
 					return fmt.Errorf("get node %v failed: %v", nodeName, err)
 				}
 
@@ -434,14 +576,14 @@ func (c *Controller) iptablesSyncLoop() {
 		c.iptablesV4Manager.Reset()
 		c.iptablesV6Manager.Reset()
 
-		networkList, err := c.networkLister.List(labels.Everything())
-		if err != nil {
+		networkList := &networkingv1.NetworkList{}
+		if err := c.mgr.GetClient().List(context.TODO(), networkList); err != nil {
 			return fmt.Errorf("list network failed: %v", err)
 		}
 
 		var overlayExist bool
-		for _, network := range networkList {
-			if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
+		for _, network := range networkList.Items {
+			if networkingv1.GetNetworkType(&network) == networkingv1.NetworkTypeOverlay {
 				netID := network.Spec.NetID
 
 				overlayIfName, err := containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
@@ -460,12 +602,12 @@ func (c *Controller) iptablesSyncLoop() {
 		// add local subnets
 		if overlayExist {
 			// Record node ips.
-			nodeList, err := c.nodeLister.List(labels.Everything())
-			if err != nil {
+			nodeList := &corev1.NodeList{}
+			if err := c.mgr.GetClient().List(context.TODO(), nodeList); err != nil {
 				return fmt.Errorf("list node failed: %v", err)
 			}
 
-			for _, node := range nodeList {
+			for _, node := range nodeList.Items {
 				// Underlay only environment should node print output
 
 				if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
@@ -489,19 +631,19 @@ func (c *Controller) iptablesSyncLoop() {
 			}
 
 			// Record subnet cidr.
-			subnetList, err := c.subnetLister.List(labels.Everything())
-			if err != nil {
+			subnetList := &networkingv1.SubnetList{}
+			if err := c.mgr.GetClient().List(context.TODO(), subnetList); err != nil {
 				return fmt.Errorf("list subnet failed: %v", err)
 			}
 
-			for _, subnet := range subnetList {
+			for _, subnet := range subnetList.Items {
 				_, cidr, err := net.ParseCIDR(subnet.Spec.Range.CIDR)
 				if err != nil {
 					return fmt.Errorf("parse subnet cidr %v failed: %v", subnet.Spec.Range.CIDR, err)
 				}
 
-				network, err := c.networkLister.Get(subnet.Spec.Network)
-				if err != nil {
+				network := &networkingv1.Network{}
+				if err := c.mgr.GetClient().Get(context.TODO(), types.NamespacedName{Name: subnet.Spec.Network}, network); err != nil {
 					return fmt.Errorf("failed to get network for subnet %v", subnet.Name)
 				}
 
@@ -513,18 +655,18 @@ func (c *Controller) iptablesSyncLoop() {
 				// If remote overlay network des not exist, the rcmanager will not fetch
 				// RemoteSubnet and RemoteVtep. Thus, existence check is redundant here.
 
-				remoteSubnetList, err := c.remoteSubnetLister.List(labels.Everything())
-				if err != nil {
+				remoteSubnetList := &networkingv1.RemoteSubnetList{}
+				if err := c.mgr.GetClient().List(context.TODO(), remoteSubnetList); err != nil {
 					return fmt.Errorf("list remote network failed: %v", err)
 				}
 
 				// Record remote vtep ip.
-				vtepList, err := c.remoteVtepLister.List(labels.Everything())
-				if err != nil {
+				vtepList := &networkingv1.RemoteVtepList{}
+				if err := c.mgr.GetClient().List(context.TODO(), vtepList); err != nil {
 					return fmt.Errorf("list remote vtep failed: %v", err)
 				}
 
-				for _, vtep := range vtepList {
+				for _, vtep := range vtepList.Items {
 					if _, exist := vtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
 						ip := net.ParseIP(vtep.Spec.VtepIP)
 						if ip.To4() != nil {
@@ -551,14 +693,14 @@ func (c *Controller) iptablesSyncLoop() {
 				}
 
 				// Record remote subnet cidr
-				for _, remoteSubnet := range remoteSubnetList {
+				for _, remoteSubnet := range remoteSubnetList.Items {
 					_, cidr, err := net.ParseCIDR(remoteSubnet.Spec.Range.CIDR)
 					if err != nil {
 						return fmt.Errorf("parse remote subnet cidr %v failed: %v", remoteSubnet.Spec.Range.CIDR, err)
 					}
 
 					c.getIPtablesManager(remoteSubnet.Spec.Range.Version).
-						RecordRemoteSubnet(cidr, networkingv1.GetRemoteSubnetType(remoteSubnet) == networkingv1.NetworkTypeOverlay)
+						RecordRemoteSubnet(cidr, networkingv1.GetRemoteSubnetType(&remoteSubnet) == networkingv1.NetworkTypeOverlay)
 				}
 			}
 		}
@@ -618,28 +760,28 @@ func isNeighResolving(state int) bool {
 	return (state & netlink.NUD_INCOMPLETE) != 0
 }
 
-func indexByInstanceIP(obj interface{}) ([]string, error) {
+func instanceIPIndexer(obj client.Object) []string {
 	instance, ok := obj.(*networkingv1.IPInstance)
 	if ok {
 		podIP, _, err := net.ParseCIDR(instance.Spec.Address.IP)
 		if err != nil {
-			return []string{}, fmt.Errorf("parse pod ip %v failed: %v", instance.Spec.Address.IP, err)
+			return []string{}
 		}
 
-		return []string{podIP.String()}, nil
+		return []string{podIP.String()}
 	}
-	return []string{}, nil
+	return []string{}
 }
 
-var indexByEndpointIP cache.IndexFunc = func(obj interface{}) ([]string, error) {
+func endpointIPIndexer(obj client.Object) []string {
 	vtep, ok := obj.(*networkingv1.RemoteVtep)
 	if ok {
 		endpointIPs := vtep.Spec.EndpointIPList
 		if len(endpointIPs) > 0 {
-			return endpointIPs, nil
+			return endpointIPs
 		}
 	}
-	return []string{}, nil
+	return []string{}
 }
 
 func clearVxlanExpiredNeighCaches() error {

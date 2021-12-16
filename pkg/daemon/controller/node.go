@@ -20,8 +20,13 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"strings"
-	"sync"
+
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/go-logr/logr"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
@@ -33,151 +38,29 @@ import (
 
 	"github.com/vishvananda/netlink"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog"
 )
 
-type NodeIPCache struct {
-	// ip string to node vtep mac
-	nodeIPMap map[string]net.HardwareAddr
-	mu        *sync.RWMutex
+type nodeReconciler struct {
+	client.Client
+	controllerRef *Controller
+	logger        logr.Logger
 }
 
-func NewNodeIPCache() *NodeIPCache {
-	return &NodeIPCache{
-		nodeIPMap: map[string]net.HardwareAddr{},
-		mu:        &sync.RWMutex{},
-	}
-}
-
-func (nic *NodeIPCache) UpdateNodeIPs(nodeList []*v1.Node, localNodeName string, remoteVtepList []*networkingv1.RemoteVtep) error {
-	nic.mu.Lock()
-	defer nic.mu.Unlock()
-
-	nic.nodeIPMap = map[string]net.HardwareAddr{}
-
-	for _, node := range nodeList {
-		// Only update remote node vtep information.
-		if node.Name == localNodeName {
-			continue
-		}
-
-		// ignore empty information
-		if _, exist := node.Annotations[constants.AnnotationNodeVtepMac]; !exist {
-			continue
-		}
-		if _, exist := node.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
-			continue
-		}
-
-		macAddr, err := net.ParseMAC(node.Annotations[constants.AnnotationNodeVtepMac])
-		if err != nil {
-			return fmt.Errorf("parse node vtep mac %v failed: %v", node.Annotations[constants.AnnotationNodeVtepMac], err)
-		}
-
-		ipStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
-		for _, ipString := range ipStringList {
-			nic.nodeIPMap[ipString] = macAddr
-		}
-	}
-
-	for _, remoteVtep := range remoteVtepList {
-		macAddr, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
-		if err != nil {
-			return fmt.Errorf("parse remote node vtep mac %v failed: %v", remoteVtep.Spec.VtepMAC, err)
-		}
-
-		if _, exist := remoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
-			nic.nodeIPMap[remoteVtep.Spec.VtepIP] = macAddr
-			continue
-		}
-
-		ipStringList := strings.Split(remoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
-		for _, ipString := range ipStringList {
-			nic.nodeIPMap[ipString] = macAddr
-		}
-	}
-
-	return nil
-}
-
-func (nic *NodeIPCache) SearchIP(ip net.IP) (net.HardwareAddr, bool) {
-	nic.mu.RLock()
-	defer nic.mu.RUnlock()
-
-	mac, exist := nic.nodeIPMap[ip.String()]
-	return mac, exist
-}
-
-// reconcile node infos on node if node info changed
-func (c *Controller) enqueueAddOrDeleteNode(obj interface{}) {
-	c.nodeQueue.Add(ActionReconcileNode)
-}
-
-func (c *Controller) enqueueUpdateNode(oldObj, newObj interface{}) {
-	oldNode := oldObj.(*v1.Node)
-	newNode := newObj.(*v1.Node)
-
-	if oldNode.Annotations[constants.AnnotationNodeVtepIP] != newNode.Annotations[constants.AnnotationNodeVtepIP] ||
-		oldNode.Annotations[constants.AnnotationNodeVtepMac] != newNode.Annotations[constants.AnnotationNodeVtepMac] {
-
-		c.nodeQueue.Add(ActionReconcileNode)
-
-		// For iptables rule update.
-		c.subnetQueue.Add(ActionReconcileSubnet)
-		return
-	}
-}
-
-func (c *Controller) processNextNodeWorkItem() bool {
-	obj, shutdown := c.nodeQueue.Get()
-
-	if shutdown {
-		return false
-	}
-
-	err := func(obj interface{}) error {
-		defer c.nodeQueue.Done(obj)
-		var key string
-		var ok bool
-		if key, ok = obj.(string); !ok {
-			c.nodeQueue.Forget(obj)
-			klog.Errorf("expected string in work queue but got %#v", obj)
-			return nil
-		}
-		if err := c.reconcileNodeInfo(); err != nil {
-			c.nodeQueue.AddRateLimited(key)
-			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
-		}
-		c.nodeQueue.Forget(obj)
-		return nil
-	}(obj)
-
-	if err != nil {
-		klog.Error(err)
-	}
-	return true
-}
-
-func (c *Controller) runNodeWorker() {
-	for c.processNextNodeWorkItem() {
-	}
-}
-
-func (c *Controller) reconcileNodeInfo() error {
+func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	klog.Info("Reconciling node information")
 
-	networkList, err := c.networkLister.List(labels.Everything())
-	if err != nil {
-		return fmt.Errorf("failed to list network %v", err)
+	networkList := &networkingv1.NetworkList{}
+	if err := r.List(ctx, networkList); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list network %v", err)
 	}
 
 	var overlayNetID *uint32
-	for _, network := range networkList {
-		if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
+	for _, network := range networkList.Items {
+		if networkingv1.GetNetworkType(&network) == networkingv1.NetworkTypeOverlay {
 			overlayNetID = network.Spec.NetID
 			break
 		}
@@ -185,22 +68,25 @@ func (c *Controller) reconcileNodeInfo() error {
 
 	// overlay network not exist, do nothing
 	if overlayNetID == nil {
-		return nil
+		return reconcile.Result{}, nil
 	}
 
-	link, err := netlink.LinkByName(c.config.NodeVxlanIfName)
+	link, err := netlink.LinkByName(r.controllerRef.config.NodeVxlanIfName)
 	if err != nil {
-		return fmt.Errorf("get node vxlan interface %v failed: %v", c.config.NodeVxlanIfName, err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("get node vxlan interface %v failed: %v",
+			r.controllerRef.config.NodeVxlanIfName, err)
 	}
 
 	// Use parent's valid ipv4 address first, try ipv6 address if no valid ipv4 address exist.
 	existParentAddrList, err := containernetwork.ListAllAddress(link)
 	if err != nil {
-		return fmt.Errorf("list address for vxlan parent link %v failed %v", link.Attrs().Name, err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("list address for vxlan parent link %v failed %v",
+			link.Attrs().Name, err)
 	}
 
 	if len(existParentAddrList) == 0 {
-		return fmt.Errorf("there is no available ip for vxlan parent link %v", link.Attrs().Name)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("there is no available ip for vxlan parent link %v",
+			link.Attrs().Name)
 	}
 
 	var vtepIP net.IP
@@ -211,9 +97,10 @@ func (c *Controller) reconcileNodeInfo() error {
 		}
 	}
 
-	thisNode, err := c.nodeLister.Get(c.config.NodeName)
-	if err != nil {
-		return fmt.Errorf("get this node %v object failed: %v", c.config.NodeName, err)
+	thisNode := &corev1.Node{}
+	if err := r.Get(ctx, types.NamespacedName{Name: r.controllerRef.config.NodeName}, thisNode); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("get this node %v object failed: %v",
+			r.controllerRef.config.NodeName, err)
 	}
 
 	preVtepIP, exist := thisNode.Annotations[constants.AnnotationNodeVtepIP]
@@ -228,18 +115,19 @@ func (c *Controller) reconcileNodeInfo() error {
 	}
 
 	if vtepIP == nil {
-		return fmt.Errorf("no availuable vtep ip can be used for link %v", link.Attrs().Name)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("no availuable vtep ip can be used for link %v",
+			link.Attrs().Name)
 	}
 	vtepMac := link.Attrs().HardwareAddr
 
-	vxlanLinkName, err := containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, overlayNetID)
+	vxlanLinkName, err := containernetwork.GenerateVxlanNetIfName(r.controllerRef.config.NodeVxlanIfName, overlayNetID)
 	if err != nil {
-		return fmt.Errorf("generate vxlan interface name failed: %v", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("generate vxlan interface name failed: %v", err)
 	}
 
 	existAllAddrList, err := containernetwork.ListLocalAddressExceptLink(vxlanLinkName)
 	if err != nil {
-		return fmt.Errorf("list address for all interfaces failed: %v", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("list address for all interfaces failed: %v", err)
 	}
 
 	var nodeLocalVxlanAddr []netlink.Addr
@@ -259,7 +147,7 @@ func (c *Controller) reconcileNodeInfo() error {
 		}
 
 		// Add extra node local vxlan ip.
-		for _, cidr := range c.config.ExtraNodeLocalVxlanIPCidrs {
+		for _, cidr := range r.controllerRef.config.ExtraNodeLocalVxlanIPCidrs {
 			if cidr.Contains(addr.IP) {
 				nodeLocalVxlanAddr = append(nodeLocalVxlanAddr, addr)
 			}
@@ -271,21 +159,22 @@ func (c *Controller) reconcileNodeInfo() error {
 		constants.AnnotationNodeVtepMac, vtepMac.String(),
 		constants.AnnotationNodeLocalVxlanIPList, containernetwork.GenerateIPListString(nodeLocalVxlanAddr))
 
-	if _, err := c.config.KubeClient.CoreV1().Nodes().Patch(context.TODO(),
-		c.config.NodeName, types.StrategicMergePatchType,
+	if _, err := r.controllerRef.config.KubeClient.CoreV1().Nodes().Patch(context.TODO(),
+		r.controllerRef.config.NodeName, types.StrategicMergePatchType,
 		[]byte(patchData), metav1.PatchOptions{}); err != nil {
-		return fmt.Errorf("update node label error: %v", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("update node label error: %v", err)
 	}
 
-	nodeList, err := c.nodeLister.List(labels.Everything())
-	if err != nil {
-		return fmt.Errorf("list node failed: %v", err)
+	nodeList := &corev1.NodeList{}
+	if err := r.List(ctx, nodeList); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("list node failed: %v", err)
 	}
 
 	vxlanDev, err := vxlan.NewVxlanDevice(vxlanLinkName, int(*overlayNetID),
-		c.config.NodeVxlanIfName, vtepIP, c.config.VxlanUDPPort, c.config.VxlanBaseReachableTime, true)
+		r.controllerRef.config.NodeVxlanIfName, vtepIP, r.controllerRef.config.VxlanUDPPort,
+		r.controllerRef.config.VxlanBaseReachableTime, true)
 	if err != nil {
-		return fmt.Errorf("create vxlan device %v failed: %v", vxlanLinkName, err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("create vxlan device %v failed: %v", vxlanLinkName, err)
 	}
 
 	nodeLocalVxlanAddrMap := map[string]bool{}
@@ -295,7 +184,8 @@ func (c *Controller) reconcileNodeInfo() error {
 
 	vxlanDevAddrList, err := containernetwork.ListAllAddress(vxlanDev.Link())
 	if err != nil {
-		return fmt.Errorf("list address for vxlan interface %v failed: %v", vxlanDev.Link().Name, err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("list address for vxlan interface %v failed: %v",
+			vxlanDev.Link().Name, err)
 	}
 
 	existVxlanDevAddrMap := map[string]bool{}
@@ -311,7 +201,8 @@ func (c *Controller) reconcileNodeInfo() error {
 				Label: "",
 				Flags: unix.IFA_F_NOPREFIXROUTE,
 			}); err != nil {
-				return fmt.Errorf("set addr %v to link %v failed: %v", addr.IP.String(), vxlanDev.Link().Name, err)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("set addr %v to link %v failed: %v",
+					addr.IP.String(), vxlanDev.Link().Name, err)
 			}
 		}
 	}
@@ -320,12 +211,12 @@ func (c *Controller) reconcileNodeInfo() error {
 	for _, addr := range vxlanDevAddrList {
 		if _, exist := nodeLocalVxlanAddrMap[addr.IP.String()]; !exist {
 			if err := netlink.AddrDel(vxlanDev.Link(), &addr); err != nil {
-				return fmt.Errorf("del addr %v for link %v failed: %v", addr.IP.String(), vxlanDev.Link().Name, err)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("del addr %v for link %v failed: %v", addr.IP.String(), vxlanDev.Link().Name, err)
 			}
 		}
 	}
 
-	for _, node := range nodeList {
+	for _, node := range nodeList.Items {
 		if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
 			node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
 			node.Annotations[constants.AnnotationNodeLocalVxlanIPList] == "" {
@@ -335,12 +226,14 @@ func (c *Controller) reconcileNodeInfo() error {
 
 		vtepMac, err := net.ParseMAC(node.Annotations[constants.AnnotationNodeVtepMac])
 		if err != nil {
-			return fmt.Errorf("parse node vtep mac string %v failed: %v", node.Annotations[constants.AnnotationNodeVtepMac], err)
+			return reconcile.Result{Requeue: true}, fmt.Errorf("parse node vtep mac string %v failed: %v",
+				node.Annotations[constants.AnnotationNodeVtepMac], err)
 		}
 
 		vtepIP := net.ParseIP(node.Annotations[constants.AnnotationNodeVtepIP])
 		if vtepIP == nil {
-			return fmt.Errorf("parse node vtep ip string %v failed", node.Annotations[constants.AnnotationNodeVtepIP])
+			return reconcile.Result{Requeue: true}, fmt.Errorf("parse node vtep ip string %v failed",
+				node.Annotations[constants.AnnotationNodeVtepIP])
 		}
 
 		vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
@@ -349,35 +242,49 @@ func (c *Controller) reconcileNodeInfo() error {
 	var remoteVtepList []*networkingv1.RemoteVtep
 
 	if feature.MultiClusterEnabled() {
-		remoteVtepList, err = c.remoteVtepLister.List(labels.Everything())
-		if err != nil {
-			return fmt.Errorf("list remote vtep failed: %v", err)
+		remoteVtepList := &networkingv1.RemoteVtepList{}
+		if err = r.List(ctx, remoteVtepList); err != nil {
+			return reconcile.Result{Requeue: true}, fmt.Errorf("list remote vtep failed: %v", err)
 		}
 
-		for _, remoteVtep := range remoteVtepList {
+		for _, remoteVtep := range remoteVtepList.Items {
 			vtepMac, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
 			if err != nil {
-				return fmt.Errorf("parse remote vtep mac string %v failed: %v", remoteVtep.Spec.VtepMAC, err)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("parse remote vtep mac string %v failed: %v",
+					remoteVtep.Spec.VtepMAC, err)
 			}
 
 			vtepIP := net.ParseIP(remoteVtep.Spec.VtepIP)
 			if vtepIP == nil {
-				return fmt.Errorf("parse remote vtep ip string %v failed", remoteVtep.Spec.VtepIP)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("parse remote vtep ip string %v failed",
+					remoteVtep.Spec.VtepIP)
 			}
 
 			vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
 		}
 	}
 
-	if err := c.nodeIPCache.UpdateNodeIPs(nodeList, c.config.NodeName, remoteVtepList); err != nil {
-		return fmt.Errorf("update node ip cache failed: %v", err)
+	if err := r.controllerRef.nodeIPCache.UpdateNodeIPs(nodeList.Items, r.controllerRef.config.NodeName, remoteVtepList); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("update node ip cache failed: %v", err)
 	}
 
 	if err := vxlanDev.SyncVtepInfo(); err != nil {
-		return fmt.Errorf("sync vtep info for vxlan device %v failed: %v", vxlanDev.Link().Name, err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("sync vtep info for vxlan device %v failed: %v",
+			vxlanDev.Link().Name, err)
 	}
 
-	c.iptablesSyncTrigger()
+	r.controllerRef.iptablesSyncTrigger()
 
-	return nil
+	return reconcile.Result{}, nil
+}
+
+func checkNodeUpdate(updateEvent event.UpdateEvent) bool {
+	oldNode := updateEvent.ObjectOld.(*corev1.Node)
+	newNode := updateEvent.ObjectNew.(*corev1.Node)
+
+	if oldNode.Annotations[constants.AnnotationNodeVtepIP] != newNode.Annotations[constants.AnnotationNodeVtepIP] ||
+		oldNode.Annotations[constants.AnnotationNodeVtepMac] != newNode.Annotations[constants.AnnotationNodeVtepMac] {
+		return true
+	}
+	return false
 }

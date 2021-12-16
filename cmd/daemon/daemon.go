@@ -17,48 +17,65 @@
 package main
 
 import (
-	hybridnetinformer "github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
+	"os"
+
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/controller"
 	"github.com/alibaba/hybridnet/pkg/daemon/server"
 	"github.com/alibaba/hybridnet/pkg/feature"
-
-	"k8s.io/client-go/informers"
-	"k8s.io/klog"
 )
 
-var gitCommit string
+var (
+	setupLog = ctrl.Log.WithName("setup")
+
+	gitCommit string
+)
 
 func main() {
-	klog.InitFlags(nil)
-	defer klog.Flush()
-
-	klog.Infof("Starting hybridnet daemon with git commit: %v", gitCommit)
-	klog.Infof("known features: %v", feature.KnownFeatures())
+	setupLog.Info("Starting daemon with git commit", gitCommit)
+	setupLog.Info("known features: ", feature.KnownFeatures())
 
 	config, err := daemonconfig.ParseFlags()
 	if err != nil {
-		klog.Fatalf("parse config failed: %v", err)
+		setupLog.Error(err, "failed to parse config")
+		os.Exit(1)
 	}
 
-	// TODO: remove the stop channel
-	stopCh := make(chan struct{})
-	hybridnetInformerFactory := hybridnetinformer.NewSharedInformerFactory(config.HybridnetClient, 0)
-	kubeInformerFactory := informers.NewSharedInformerFactory(config.KubeClient, 0)
-
-	ctl, err := controller.NewController(config, hybridnetInformerFactory, kubeInformerFactory)
+	// setup manager
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{})
 	if err != nil {
-		klog.Fatalf("create controller failed %v", err)
+		setupLog.Error(err, "unable to start daemon manager")
+		os.Exit(1)
 	}
 
-	go hybridnetInformerFactory.Start(stopCh)
-	go kubeInformerFactory.Start(stopCh)
+	if err := clientgoscheme.AddToScheme(mgr.GetScheme()); err != nil {
+		setupLog.Error(err, "failed to add client-go to manager scheme")
+		os.Exit(1)
+	}
+
+	if err := networkingv1.AddToScheme(mgr.GetScheme()); err != nil {
+		setupLog.Error(err, "failed to add networking v1 to manager scheme")
+		os.Exit(1)
+	}
+
+	ctx := ctrl.SetupSignalHandler()
+
+	ctl, err := controller.NewController(config, mgr)
+	if err != nil {
+		setupLog.Error(err, "failed to create controller")
+		os.Exit(1)
+	}
 
 	go func() {
-		if err = ctl.Run(stopCh); err != nil {
-			klog.Fatalf("controller exit unusually %v", err)
+		if err = ctl.Run(ctx); err != nil {
+			setupLog.Error(err, "controller exit unusually")
+			os.Exit(1)
 		}
 	}()
 
-	server.RunServer(stopCh, config, ctl)
+	server.RunServer(ctx, config, ctl)
 }
