@@ -17,9 +17,8 @@
 package main
 
 import (
-	"os"
-
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/klog"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
@@ -29,51 +28,44 @@ import (
 	"github.com/alibaba/hybridnet/pkg/feature"
 )
 
-var (
-	setupLog = ctrl.Log.WithName("setup")
-
-	gitCommit string
-)
+var gitCommit string
 
 func main() {
-	setupLog.Info("Starting daemon with git commit", gitCommit)
-	setupLog.Info("known features: ", feature.KnownFeatures())
+	klog.InitFlags(nil)
+	defer klog.Flush()
+
+	klog.Infof("Starting hybridnet daemon with git commit: %v", gitCommit)
+	klog.Infof("known features: %v", feature.KnownFeatures())
 
 	config, err := daemonconfig.ParseFlags()
 	if err != nil {
-		setupLog.Error(err, "failed to parse config")
-		os.Exit(1)
+		klog.Fatalf("failed to parse config: %v", err)
 	}
 
 	// setup manager
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{})
 	if err != nil {
-		setupLog.Error(err, "unable to start daemon manager")
-		os.Exit(1)
+		klog.Fatalf("unable to start daemon manager %v", err)
 	}
 
 	if err := clientgoscheme.AddToScheme(mgr.GetScheme()); err != nil {
-		setupLog.Error(err, "failed to add client-go to manager scheme")
-		os.Exit(1)
+		klog.Fatalf("failed to add client-go to manager scheme %v", err)
 	}
 
 	if err := networkingv1.AddToScheme(mgr.GetScheme()); err != nil {
-		setupLog.Error(err, "failed to add networking v1 to manager scheme")
-		os.Exit(1)
+		klog.Fatalf("failed to add networking v1 to manager scheme %v", err)
 	}
 
 	ctx := ctrl.SetupSignalHandler()
 
 	ctl, err := controller.NewController(config, mgr)
 	if err != nil {
-		setupLog.Error(err, "failed to create controller")
-		os.Exit(1)
+		klog.Fatalf("failed to create controller %v", err)
 	}
 
 	go func() {
 		if err = ctl.Run(ctx); err != nil {
-			setupLog.Error(err, "controller exit unusually")
-			os.Exit(1)
+			klog.Fatalf("controller exit unusually %v", err)
 		}
 	}()
 

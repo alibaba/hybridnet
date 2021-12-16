@@ -23,8 +23,6 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/go-logr/logr"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
@@ -47,7 +45,6 @@ import (
 type nodeReconciler struct {
 	client.Client
 	controllerRef *Controller
-	logger        logr.Logger
 }
 
 func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {

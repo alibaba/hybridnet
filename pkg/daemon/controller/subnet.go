@@ -22,7 +22,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
@@ -36,11 +35,10 @@ import (
 type subnetReconciler struct {
 	client.Client
 	controllerRef *Controller
-	logger        logr.Logger
 }
 
 func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	r.logger.Info("Reconciling subnet information")
+	klog.Info("Reconciling subnet information")
 
 	subnetList := &networkingv1.SubnetList{}
 	if err := r.List(ctx, subnetList); err != nil {

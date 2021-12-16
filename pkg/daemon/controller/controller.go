@@ -26,6 +26,9 @@ import (
 	"syscall"
 	"time"
 
+	"k8s.io/klog/klogr"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+
 	"golang.org/x/sys/unix"
 
 	corev1 "k8s.io/api/core/v1"
@@ -41,7 +44,6 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
@@ -168,6 +170,7 @@ func NewController(config *daemonconfig.Configuration, mgr ctrl.Manager) (*Contr
 }
 
 func (c *Controller) Run(ctx context.Context) error {
+	klog.Info("Started controller")
 	c.runHealthyServer()
 
 	if err := c.setupControllers(); err != nil {
@@ -188,6 +191,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to start controller manager: %v", err)
 	}
 
+	klog.Info("Shutting down controller")
 	return nil
 }
 
@@ -198,7 +202,6 @@ func (c *Controller) setupControllers() error {
 	}
 
 	// create subnet controller
-	subnetReconcileLogger := ctrl.Log.WithName("subnet reconcile")
 	subnetControllerBuilder := ctrl.NewControllerManagedBy(c.mgr).
 		Named("subnet-controller").
 		Watches(&source.Kind{Type: &networkingv1.Subnet{}}, &fixedKeyHandler{key: ActionReconcileSubnet},
@@ -232,10 +235,9 @@ func (c *Controller) setupControllers() error {
 			},
 		}).
 		Watches(c.subnetControllerTriggerSource, &handler.Funcs{}).
-		WithOptions(controller.Options{Log: subnetReconcileLogger})
+		WithOptions(controller.Options{Log: klogr.New()})
 
 	// create ip instance controller
-	ipInstanceReconcileLogger := ctrl.Log.WithName("ip instance reconcile")
 	ipInstanceControllerBuilder := ctrl.NewControllerManagedBy(c.mgr).
 		Named("ipInstance-controller").
 		Watches(&source.Kind{Type: &networkingv1.IPInstance{}}, &fixedKeyHandler{key: ActionReconcileIPInstance},
@@ -271,10 +273,9 @@ func (c *Controller) setupControllers() error {
 					},
 				})).
 		Watches(c.ipInstanceControllerTriggerSource, &handler.Funcs{}).
-		WithOptions(controller.Options{Log: ipInstanceReconcileLogger})
+		WithOptions(controller.Options{Log: klogr.New()})
 
 	// create node controller
-	nodeReconcileLogger := ctrl.Log.WithName("node reconcile")
 	nodeControllerBuilder := ctrl.NewControllerManagedBy(c.mgr).
 		Named("node-controller").
 		Watches(&source.Kind{Type: &corev1.Node{}}, &fixedKeyHandler{key: ActionReconcileNode},
@@ -294,7 +295,7 @@ func (c *Controller) setupControllers() error {
 			},
 		}).
 		Watches(c.nodeControllerTriggerSource, &handler.Funcs{}).
-		WithOptions(controller.Options{Log: nodeReconcileLogger})
+		WithOptions(controller.Options{Log: klogr.New()})
 
 	// enable multicluster feature
 	if feature.MultiClusterEnabled() {
@@ -311,7 +312,6 @@ func (c *Controller) setupControllers() error {
 		Complete(&subnetReconciler{
 			Client:        c.mgr.GetClient(),
 			controllerRef: c,
-			logger:        subnetReconcileLogger,
 		}); err != nil {
 		return fmt.Errorf("failed to start subnet controller: %v", err)
 	}
@@ -320,7 +320,6 @@ func (c *Controller) setupControllers() error {
 		Complete(&ipInstanceReconciler{
 			Client:        c.mgr.GetClient(),
 			controllerRef: c,
-			logger:        ipInstanceReconcileLogger,
 		}); err != nil {
 		return fmt.Errorf("failed to start network controller: %v", err)
 	}
@@ -328,7 +327,6 @@ func (c *Controller) setupControllers() error {
 	if err := nodeControllerBuilder.Complete(&nodeReconciler{
 		Client:        c.mgr.GetClient(),
 		controllerRef: c,
-		logger:        nodeReconcileLogger,
 	}); err != nil {
 		return fmt.Errorf("failed to start node controller: %v", err)
 	}

@@ -30,8 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/go-logr/logr"
-
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
@@ -46,7 +44,6 @@ import (
 type ipInstanceReconciler struct {
 	client.Client
 	controllerRef *Controller
-	logger        logr.Logger
 }
 
 func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
