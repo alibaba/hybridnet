@@ -17,8 +17,12 @@
 package utils
 
 import (
+	"reflect"
+
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 )
 
 // IgnoreDeletePredicate will ignore the delete event, if finalizer is used,
@@ -29,4 +33,22 @@ type IgnoreDeletePredicate struct {
 
 func (IgnoreDeletePredicate) Delete(e event.DeleteEvent) bool {
 	return false
+}
+
+type NetworkSpecChangePredicate struct {
+	predicate.Funcs
+}
+
+func (NetworkSpecChangePredicate) Update(e event.UpdateEvent) bool {
+	oldNetwork, ok := e.ObjectOld.(*networkingv1.Network)
+	if !ok {
+		return false
+	}
+
+	newNetwork, ok := e.ObjectNew.(*networkingv1.Network)
+	if !ok {
+		return false
+	}
+
+	return !reflect.DeepEqual(oldNetwork.Spec.NetID, newNetwork.Spec.NetID) || !reflect.DeepEqual(oldNetwork.Spec.NodeSelector, newNetwork.Spec.NodeSelector)
 }
