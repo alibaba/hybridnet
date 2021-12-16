@@ -25,22 +25,37 @@ import (
 
 // SubnetSpec defines the desired state of Subnet
 type SubnetSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Subnet. Edit subnet_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// +kubebuilder:validation:Required
+	Range AddressRange `json:"range"`
+	// +kubebuilder:validation:Optional
+	NetID *uint32 `json:"netID"`
+	// +kubebuilder:validation:Required
+	Network string `json:"network"`
+	// +kubebuilder:validation:Optional
+	Config *SubnetConfig `json:"config"`
 }
 
 // SubnetStatus defines the observed state of Subnet
 type SubnetStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// +kubebuilder:validation:Optional
+	Count `json:",inline"`
+	// +kubebuilder:validation:Optional
+	LastAllocatedIP string `json:"lastAllocatedIP"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:scope=Cluster
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.range.version`
+// +kubebuilder:printcolumn:name="CIDR",type=string,JSONPath=`.spec.range.cidr`
+// +kubebuilder:printcolumn:name="Start",type=string,JSONPath=`.spec.range.start`
+// +kubebuilder:printcolumn:name="End",type=string,JSONPath=`.spec.range.end`
+// +kubebuilder:printcolumn:name="Gateway",type=string,JSONPath=`.spec.range.gateway`
+// +kubebuilder:printcolumn:name="Total",type=integer,JSONPath=`.status.total`
+// +kubebuilder:printcolumn:name="Used",type=integer,JSONPath=`.status.used`
+// +kubebuilder:printcolumn:name="Available",type=integer,JSONPath=`.status.available`
+// +kubebuilder:printcolumn:name="NetID",type=integer,JSONPath=`.spec.netID`
+// +kubebuilder:printcolumn:name="Network",type=string,JSONPath=`.spec.network`
 
 // Subnet is the Schema for the subnets API
 type Subnet struct {

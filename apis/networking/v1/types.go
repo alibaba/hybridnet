@@ -31,3 +31,40 @@ type Count struct {
 	// +kubebuilder:validation:Optional
 	Available int32 `json:"available"`
 }
+
+type IPVersion string
+
+const (
+	IPv4 = IPVersion("4")
+	IPv6 = IPVersion("6")
+)
+
+type AddressRange struct {
+	// +kubebuilder:validation:Required
+	Version IPVersion `json:"version"`
+	// +kubebuilder:validation:Optional
+	Start string `json:"start,omitempty"`
+	// +kubebuilder:validation:Optional
+	End string `json:"end,omitempty"`
+	// +kubebuilder:validation:Required
+	CIDR string `json:"cidr"`
+	// +kubebuilder:validation:Required
+	Gateway string `json:"gateway"`
+	// +kubebuilder:validation:Optional
+	ReservedIPs []string `json:"reservedIPs,omitempty"`
+	// +kubebuilder:validation:Optional
+	ExcludeIPs []string `json:"excludeIPs,omitempty"`
+}
+
+type SubnetConfig struct {
+	// +kubebuilder:validation:Optional
+	GatewayType string `json:"gatewayType"`
+	// +kubebuilder:validation:Optional
+	GatewayNode string `json:"gatewayNode"`
+	// +kubebuilder:validation:Optional
+	AutoNatOutgoing *bool `json:"autoNatOutgoing"`
+	// +kubebuilder:validation:Optional
+	Private *bool `json:"private"`
+	// +kubebuilder:validation:Optional
+	AllowSubnets []string `json:"allowSubnets"`
+}
