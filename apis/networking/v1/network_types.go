@@ -20,27 +20,45 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // NetworkSpec defines the desired state of Network
 type NetworkSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Network. Edit network_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// +kubebuilder:validation:Optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// +kubebuilder:validation:Optional
+	NetID *int32 `json:"netID"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Type=string
+	SwitchID string `json:"switchID"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Type=string
+	Type NetworkType `json:"type,omitempty"`
 }
 
 // NetworkStatus defines the observed state of Network
 type NetworkStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Type=string
+	LastAllocatedSubnet string `json:"lastAllocatedSubnet"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Type=string
+	LastAllocatedIPv6Subnet string `json:"lastAllocatedIPv6Subnet,omitempty"`
+	// +kubebuilder:validation:Optional
+	SubnetList []string `json:"subnetList"`
+	// +kubebuilder:validation:Optional
+	NodeList []string `json:"nodeList"`
+	// +kubebuilder:validation:Optional
+	Statistics *Count `json:"statistics"`
+	// +kubebuilder:validation:Optional
+	IPv6Statistics *Count `json:"ipv6Statistics,omitempty"`
+	// +kubebuilder:validation:Optional
+	DualStackStatistics *Count `json:"dualStackStatistics,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:scope=Cluster
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="NetID",type=integer,JSONPath=`.spec.netID`
+// +kubebuilder:printcolumn:name="SwitchID",type=string,JSONPath=`.spec.switchID`
 
 // Network is the Schema for the networks API
 type Network struct {
