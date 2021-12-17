@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	clientset "github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 	"github.com/alibaba/hybridnet/pkg/utils"
@@ -33,14 +32,10 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/vishvananda/netlink"
 
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 )
 
 const (
-	UserAgent           = "hybridnet-daemon"
 	DefaultBindPort     = 11021
 	DefaultVxlanUDPPort = 8472
 
@@ -60,9 +55,8 @@ const (
 
 // Configuration is the daemon conf
 type Configuration struct {
-	BindSocket     string
-	KubeConfigFile string
-	NodeName       string
+	BindSocket string
+	NodeName   string
 
 	VlanMTU  int
 	VxlanMTU int
@@ -88,9 +82,6 @@ type Configuration struct {
 	// Use fixed table num to mark "overlay-mark-table rule"
 	OverlayMarkTableNum int
 
-	KubeClient      kubernetes.Interface
-	HybridnetClient clientset.Interface
-
 	NeighGCThresh1 int
 	NeighGCThresh2 int
 	NeighGCThresh3 int
@@ -103,7 +94,6 @@ func ParseFlags() (*Configuration, error) {
 		argPreferVlanInterfaces                 = pflag.String("prefer-vlan-interfaces", "", "The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
 		argPreferVxlanInterfaces                = pflag.String("prefer-vxlan-interfaces", "", "The preferred vxlan interfaces used to inter-host pod communication, default: the default route interface")
 		argBindSocket                           = pflag.String("bind-socket", "/var/run/hybridnet.sock", "The socket daemon bind to.")
-		argKubeConfigFile                       = pflag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information. If not set use the inCluster token.")
 		argBindPort                             = pflag.Int("healthy-server-port", DefaultBindPort, "The port which daemon server bind")
 		argLocalDirectTableNum                  = pflag.Int("local-direct-table", DefaultLocalDirectTableNum, "The number of local-pod-direct route table")
 		argIptableCheckDuration                 = pflag.Duration("iptables-check-duration", DefaultIptablesCheckDuration, "The time period for iptables manager to check iptables rules")
@@ -147,7 +137,6 @@ func ParseFlags() (*Configuration, error) {
 
 	config := &Configuration{
 		BindSocket:                           *argBindSocket,
-		KubeConfigFile:                       *argKubeConfigFile,
 		NodeName:                             nodeName,
 		NodeVlanIfName:                       *argPreferVlanInterfaces,
 		NodeVxlanIfName:                      *argPreferVxlanInterfaces,
@@ -179,10 +168,6 @@ func ParseFlags() (*Configuration, error) {
 	}
 
 	if err := config.initNicConfig(); err != nil {
-		return nil, err
-	}
-
-	if err := config.initKubeClient(); err != nil {
 		return nil, err
 	}
 
@@ -234,35 +219,6 @@ func (config *Configuration) initNicConfig() error {
 	// VXLAN uses a 50-byte header
 	if config.VxlanMTU == 0 || config.VxlanMTU > vxlanNodeInterface.MTU-50 {
 		config.VxlanMTU = vxlanNodeInterface.MTU - 50
-	}
-
-	return nil
-}
-
-func (config *Configuration) initKubeClient() error {
-	var cfg *rest.Config
-	var err error
-	if cfg, err = clientcmd.BuildConfigFromFlags("", config.KubeConfigFile); err != nil {
-		klog.Errorf("build config failed %v", err)
-		return err
-	}
-
-	// NOTE: be careful to avoid request pressure to api-server
-	cfg.QPS = 10
-	cfg.Burst = 20
-
-	config.HybridnetClient, err = clientset.NewForConfig(rest.AddUserAgent(cfg, UserAgent))
-	if err != nil {
-		klog.Errorf("init hybridnet client failed %v", err)
-		return err
-	}
-
-	cfg.ContentType = "application/vnd.kubernetes.protobuf"
-	cfg.AcceptContentTypes = "application/vnd.kubernetes.protobuf,application/json"
-	config.KubeClient, err = kubernetes.NewForConfig(rest.AddUserAgent(cfg, UserAgent))
-	if err != nil {
-		klog.Errorf("init kubernetes client failed %v", err)
-		return err
 	}
 
 	return nil

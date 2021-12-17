@@ -32,19 +32,17 @@ import (
 	"golang.org/x/sys/unix"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
@@ -161,8 +159,8 @@ func NewController(config *daemonconfig.Configuration, mgr ctrl.Manager) (*Contr
 		nodeIPCache: NewNodeIPCache(),
 	}
 
-	_, err = config.KubeClient.CoreV1().Nodes().Get(context.TODO(), config.NodeName, metav1.GetOptions{})
-	if err != nil {
+	thisNode := &corev1.Node{}
+	if err = mgr.GetAPIReader().Get(context.TODO(), types.NamespacedName{Name: config.NodeName}, thisNode); err != nil {
 		return nil, fmt.Errorf("failed to get node %s info %v", config.NodeName, err)
 	}
 
@@ -324,10 +322,11 @@ func (c *Controller) setupControllers() error {
 		return fmt.Errorf("failed to start network controller: %v", err)
 	}
 
-	if err := nodeControllerBuilder.Complete(&nodeReconciler{
-		Client:        c.mgr.GetClient(),
-		controllerRef: c,
-	}); err != nil {
+	if err := nodeControllerBuilder.
+		Complete(&nodeReconciler{
+			Client:        c.mgr.GetClient(),
+			controllerRef: c,
+		}); err != nil {
 		return fmt.Errorf("failed to start node controller: %v", err)
 	}
 
@@ -340,6 +339,10 @@ func (c *Controller) CacheSynced(ctx context.Context) bool {
 
 func (c *Controller) GetMgrClient() client.Client {
 	return c.mgr.GetClient()
+}
+
+func (c *Controller) GetMgrAPIReader() client.Reader {
+	return c.mgr.GetAPIReader()
 }
 
 // Once node network interface is set from down to up for some reasons, the routes and neigh caches for this interface

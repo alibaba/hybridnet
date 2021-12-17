@@ -63,6 +63,8 @@ func main() {
 		klog.Fatalf("failed to create controller %v", err)
 	}
 
+	mgr.GetAPIReader()
+
 	go func() {
 		if err = ctl.Run(ctx); err != nil {
 			klog.Fatalf("controller exit unusually %v", err)

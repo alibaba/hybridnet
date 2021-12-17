@@ -23,12 +23,13 @@ import (
 	"net/http"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	clientset "github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
@@ -36,25 +37,20 @@ import (
 	"github.com/alibaba/hybridnet/pkg/request"
 
 	"github.com/emicklei/go-restful"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 )
 
 type cniDaemonHandler struct {
-	config           *daemonconfig.Configuration
-	kubeClient       kubernetes.Interface
-	networkingClient clientset.Interface
-
-	mgrClient client.Client
+	config       *daemonconfig.Configuration
+	mgrClient    client.Client
+	mgrAPIReader client.Reader
 }
 
 func createCniDaemonHandler(ctx context.Context, config *daemonconfig.Configuration, ctrlRef *controller.Controller) (*cniDaemonHandler, error) {
 	cdh := &cniDaemonHandler{
-		kubeClient:       config.KubeClient,
-		networkingClient: config.HybridnetClient,
-		config:           config,
-		mgrClient:        ctrlRef.GetMgrClient(),
+		config:       config,
+		mgrClient:    ctrlRef.GetMgrClient(),
+		mgrAPIReader: ctrlRef.GetMgrAPIReader(),
 	}
 
 	if ok := ctrlRef.CacheSynced(ctx); !ok {
@@ -93,8 +89,8 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		time.Sleep(backOffBase)
 		backOffBase = backOffBase * 2
 
-		pod, err := cdh.kubeClient.CoreV1().Pods(podRequest.PodNamespace).Get(context.TODO(), podRequest.PodName, metav1.GetOptions{})
-		if err != nil {
+		pod := &corev1.Pod{}
+		if err := cdh.mgrAPIReader.Get(context.TODO(), types.NamespacedName{Name: podRequest.PodName}, pod); err != nil {
 			errMsg := fmt.Errorf("get pod %v/%v failed: %v", podRequest.PodName, podRequest.PodNamespace, err)
 			klog.Error(errMsg)
 			_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})
@@ -256,8 +252,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		}
 
 		newIPInstance.Status.SandboxID = podRequest.ContainerID
-		_, err = cdh.networkingClient.NetworkingV1().IPInstances(newIPInstance.Namespace).UpdateStatus(context.TODO(), newIPInstance, metav1.UpdateOptions{})
-		if err != nil {
+		if err = cdh.mgrClient.Status().Update(context.TODO(), newIPInstance); err != nil {
 			errMsg := fmt.Errorf("failed to update IPInstance crd for %s, %v", newIPInstance.Name, err)
 			klog.Error(errMsg)
 			_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})

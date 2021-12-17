@@ -21,10 +21,9 @@ import (
 	"fmt"
 	"net"
 
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
@@ -37,7 +36,6 @@ import (
 	"github.com/vishvananda/netlink"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog"
 )
@@ -156,9 +154,8 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		constants.AnnotationNodeVtepMac, vtepMac.String(),
 		constants.AnnotationNodeLocalVxlanIPList, containernetwork.GenerateIPListString(nodeLocalVxlanAddr))
 
-	if _, err := r.controllerRef.config.KubeClient.CoreV1().Nodes().Patch(context.TODO(),
-		r.controllerRef.config.NodeName, types.StrategicMergePatchType,
-		[]byte(patchData), metav1.PatchOptions{}); err != nil {
+	if err := r.controllerRef.mgr.GetClient().Patch(context.TODO(),
+		thisNode, client.RawPatch(types.StrategicMergePatchType, []byte(patchData))); err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("update node label error: %v", err)
 	}
 
