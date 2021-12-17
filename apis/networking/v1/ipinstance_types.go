@@ -25,21 +25,36 @@ import (
 
 // IPInstanceSpec defines the desired state of IPInstance
 type IPInstanceSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of IPInstance. Edit ipinstance_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// +kubebuilder:validation:Required
+	Network string `json:"network"`
+	// +kubebuilder:validation:Required
+	Subnet string `json:"subnet"`
+	// +kubebuilder:validation:Required
+	Address Address `json:"address"`
 }
 
 // IPInstanceStatus defines the observed state of IPInstance
 type IPInstanceStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// +kubebuilder:validation:Optional
+	NodeName string `json:"nodeName"`
+	// +kubebuilder:validation:Optional
+	Phase IPPhase `json:"phase"`
+	// +kubebuilder:validation:Optional
+	PodName string `json:"podName"`
+	// +kubebuilder:validation:Optional
+	PodNamespace string `json:"podNamespace"`
+	// +kubebuilder:validation:Optional
+	SandboxID string `json:"sandboxID"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.spec.address.ip`
+// +kubebuilder:printcolumn:name="Gateway",type=string,JSONPath=`.spec.address.gateway`
+// +kubebuilder:printcolumn:name="PodName",type=string,JSONPath=`.status.podName`
+// +kubebuilder:printcolumn:name="Node",type=string,JSONPath=`.status.nodeName`
+// +kubebuilder:printcolumn:name="Subnet",type=string,JSONPath=`.spec.subnet`
+// +kubebuilder:printcolumn:name="Network",type=string,JSONPath=`.spec.network`
 
 // IPInstance is the Schema for the ipinstances API
 type IPInstance struct {

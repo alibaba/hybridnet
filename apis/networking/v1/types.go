@@ -68,3 +68,23 @@ type SubnetConfig struct {
 	// +kubebuilder:validation:Optional
 	AllowSubnets []string `json:"allowSubnets"`
 }
+
+type Address struct {
+	// +kubebuilder:validation:Required
+	Version IPVersion `json:"version"`
+	// +kubebuilder:validation:Required
+	IP string `json:"ip"`
+	// +kubebuilder:validation:Required
+	Gateway string `json:"gateway"`
+	// +kubebuilder:validation:Required
+	NetID *int32 `json:"netID"`
+	// +kubebuilder:validation:Required
+	MAC string `json:"mac"`
+}
+
+type IPPhase string
+
+const (
+	IPPhaseUsing    = IPPhase("Using")
+	IPPhaseReserved = IPPhase("Reserved")
+)
