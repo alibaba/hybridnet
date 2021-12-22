@@ -23,17 +23,22 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/controllers/utils"
+	"github.com/alibaba/hybridnet/pkg/feature"
 )
 
 // IPInstanceReconciler reconciles a IPInstance object
 type IPInstanceReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	// TODO: construct
+	IPAMManager IPAMManager
+	IPAMStore   IPAMStore
 }
 
 //+kubebuilder:rbac:groups=networking.alibaba.com,resources=ipinstances,verbs=get;list;watch;create;update;patch;delete
@@ -41,7 +46,7 @@ type IPInstanceReconciler struct {
 //+kubebuilder:rbac:groups=networking.alibaba.com,resources=ipinstances/finalizers,verbs=update
 
 func (r *IPInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	log := ctrllog.FromContext(ctx)
 
 	var err error
 	var ip networkingv1.IPInstance
@@ -51,10 +56,40 @@ func (r *IPInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if !ip.DeletionTimestamp.IsZero() {
-		// release IP in IPAM
+		if err = r.releaseIP(&ip); err != nil {
+			log.Error(err, "unable to release IPInstance")
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *IPInstanceReconciler) releaseIP(ipInstance *networkingv1.IPInstance) (err error) {
+	if feature.DualStackEnabled() {
+		if err = r.IPAMManager.DualStack().Release(utils.ToIPFamilyMode(networkingv1.IsIPv6IPInstance(ipInstance)),
+			ipInstance.Spec.Network,
+			[]string{
+				ipInstance.Spec.Subnet,
+			},
+			[]string{
+				utils.ToIPFormat(ipInstance.Name),
+			},
+		); err != nil {
+			return err
+		}
+		if err = r.IPAMStore.DualStack().IPUnBind(ipInstance.Namespace, ipInstance.Name); err != nil {
+			return err
+		}
+	} else {
+		if err = r.IPAMManager.Release(ipInstance.Spec.Network, ipInstance.Spec.Subnet, utils.ToIPFormat(ipInstance.Name)); err != nil {
+			return err
+		}
+		if err = r.IPAMStore.IPUnBind(ipInstance.Namespace, ipInstance.Name); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
