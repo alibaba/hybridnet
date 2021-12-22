@@ -28,12 +28,44 @@ import (
 	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 )
 
-func ListNetworks(client client.Client) (*networkingv1.NetworkList, error) {
+func ListNetworks(client client.Client, opts ...client.ListOption) (*networkingv1.NetworkList, error) {
 	var networkList = networkingv1.NetworkList{}
-	if err := client.List(context.TODO(), &networkList); err != nil {
+	if err := client.List(context.TODO(), &networkList, opts...); err != nil {
 		return nil, err
 	}
 	return &networkList, nil
+}
+
+func GetNetwork(client client.Client, name string) (*networkingv1.Network, error) {
+	var network = networkingv1.Network{}
+	if err := client.Get(context.TODO(), types.NamespacedName{Name: name}, &network); err != nil {
+		return nil, err
+	}
+	return &network, nil
+}
+
+func ListSubnets(client client.Client, opts ...client.ListOption) (*networkingv1.SubnetList, error) {
+	var subnetList = networkingv1.SubnetList{}
+	if err := client.List(context.TODO(), &subnetList, opts...); err != nil {
+		return nil, err
+	}
+	return &subnetList, nil
+}
+
+func GetSubnet(client client.Client, name string) (*networkingv1.Subnet, error) {
+	var subnet = networkingv1.Subnet{}
+	if err := client.Get(context.TODO(), types.NamespacedName{Name: name}, &subnet); err != nil {
+		return nil, err
+	}
+	return &subnet, nil
+}
+
+func ListIPInstances(client client.Client, opts ...client.ListOption) (*networkingv1.IPInstanceList, error) {
+	var ipList = networkingv1.IPInstanceList{}
+	if err := client.List(context.TODO(), &ipList, opts...); err != nil {
+		return nil, err
+	}
+	return &ipList, nil
 }
 
 func ListNodesToReconcileRequests(client client.Client) []reconcile.Request {

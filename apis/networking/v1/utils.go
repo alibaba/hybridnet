@@ -16,10 +16,48 @@
 
 package v1
 
+import "net"
+
+// TODO: unit tests
+
 func IsPrivateSubnet(subnet *Subnet) bool {
 	if subnet == nil || subnet.Spec.Config == nil || subnet.Spec.Config.Private == nil {
 		return false
 	}
 
 	return *subnet.Spec.Config.Private
+}
+
+func IsIPv6Subnet(subnet *Subnet) bool {
+	if subnet == nil {
+		return false
+	}
+	if subnet.Spec.Range.Version == IPv6 {
+		return true
+	}
+	if gateway := net.ParseIP(subnet.Spec.Range.Gateway); gateway != nil {
+		return gateway.To4() == nil
+	}
+	return false
+}
+
+func GetNetworkType(networkObj *Network) NetworkType {
+	if networkObj == nil || len(networkObj.Spec.Type) == 0 {
+		return NetworkTypeUnderlay
+	}
+
+	return networkObj.Spec.Type
+}
+
+func IsIPv6IPInstance(ip *IPInstance) bool {
+	if ip == nil {
+		return false
+	}
+	if ip.Spec.Address.Version == IPv6 {
+		return true
+	}
+	if tempIP, _, _ := net.ParseCIDR(ip.Spec.Address.IP); tempIP != nil {
+		return tempIP.To4() == nil
+	}
+	return false
 }

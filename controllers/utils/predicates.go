@@ -50,5 +50,28 @@ func (NetworkSpecChangePredicate) Update(e event.UpdateEvent) bool {
 		return false
 	}
 
+	// change indicators
+	// 1. netID
+	// 2. node selector
 	return !reflect.DeepEqual(oldNetwork.Spec.NetID, newNetwork.Spec.NetID) || !reflect.DeepEqual(oldNetwork.Spec.NodeSelector, newNetwork.Spec.NodeSelector)
+}
+
+type SubnetSpecChangePredicate struct {
+	predicate.Funcs
+}
+
+func (SubnetSpecChangePredicate) Update(e event.UpdateEvent) bool {
+	oldSubnet, ok := e.ObjectOld.(*networkingv1.Subnet)
+	if !ok {
+		return false
+	}
+	newSubnet, ok := e.ObjectNew.(*networkingv1.Subnet)
+	if !ok {
+		return false
+	}
+
+	// change indicators
+	// 1. address range
+	// 2. private
+	return !reflect.DeepEqual(oldSubnet.Spec.Range, newSubnet.Spec.Range) || networkingv1.IsPrivateSubnet(oldSubnet) != networkingv1.IsPrivateSubnet(newSubnet)
 }

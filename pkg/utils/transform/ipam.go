@@ -18,7 +18,7 @@ package transform
 import (
 	"net"
 
-	v1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	v1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
@@ -36,14 +36,14 @@ func TransferSubnetForIPAM(in *v1.Subnet) *ipamtypes.Subnet {
 		utils.StringSliceToMap(in.Spec.Range.ReservedIPs),
 		utils.StringSliceToMap(in.Spec.Range.ExcludeIPs),
 		net.ParseIP(in.Status.LastAllocatedIP),
-		v1.IsPrivateSubnet(&in.Spec),
-		v1.IsIPv6Subnet(&in.Spec),
+		v1.IsPrivateSubnet(in),
+		v1.IsIPv6Subnet(in),
 	)
 }
 
 func TransferNetworkForIPAM(in *v1.Network) *ipamtypes.Network {
 	return ipamtypes.NewNetwork(in.Name,
-		in.Spec.NetID,
+		int32pTouint32p(in.Spec.NetID),
 		in.Status.LastAllocatedSubnet,
 		ipamtypes.ParseNetworkTypeFromString(string(v1.GetNetworkType(in))),
 	)
@@ -53,11 +53,19 @@ func TransferIPInstanceForIPAM(in *v1.IPInstance) *ipamtypes.IP {
 	return &ipamtypes.IP{
 		Address:      utils.StringToIPNet(in.Spec.Address.IP),
 		Gateway:      net.ParseIP(in.Spec.Address.Gateway),
-		NetID:        in.Spec.Address.NetID,
+		NetID:        int32pTouint32p(in.Spec.Address.NetID),
 		Subnet:       in.Spec.Subnet,
 		Network:      in.Spec.Network,
 		PodName:      in.Status.PodName,
 		PodNamespace: in.Status.PodNamespace,
 		Status:       string(in.Status.Phase),
 	}
+}
+
+func int32pTouint32p(in *int32) *uint32 {
+	if in == nil {
+		return nil
+	}
+	temp := uint32(*in)
+	return &temp
 }
