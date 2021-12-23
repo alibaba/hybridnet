@@ -85,6 +85,15 @@ func ListNodesToReconcileRequests(client client.Client) []reconcile.Request {
 	return requests
 }
 
+func FindUnderlayNetworkForNodeName(client client.Client, nodeName string) (underlayNetworkName string, err error) {
+	var node = &corev1.Node{}
+	if err = client.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node); err != nil {
+		return "", err
+	}
+
+	return FindUnderlayNetworkForNode(client, node.GetLabels())
+}
+
 func FindUnderlayNetworkForNode(client client.Client, nodeLabels map[string]string) (underlayNetworkName string, err error) {
 	networkList, err := ListNetworks(client)
 	if err != nil {
@@ -130,4 +139,57 @@ func DetectNetworkAttachmentOfNode(client client.Client, node *corev1.Node) (und
 	}
 
 	return underlayNetworkName != "", overlayNetworkName != "", nil
+}
+
+func ListAllocatedIPInstancesOfPod(c client.Client, pod *corev1.Pod) (ips []*networkingv1.IPInstance, err error) {
+	var ipList *networkingv1.IPInstanceList
+	if ipList, err = ListIPInstances(c, client.InNamespace(pod.Namespace)); err != nil {
+		return
+	}
+	for i := range ipList.Items {
+		var ip = &ipList.Items[i]
+		// terminating ip should not be picked ip
+		if ip.Status.PodName == pod.Name && ip.DeletionTimestamp == nil {
+			ips = append(ips, ip.DeepCopy())
+		}
+	}
+	return
+}
+
+func GetIPOfPod(c client.Client, pod *corev1.Pod) (string, error) {
+	ipList, err := ListIPInstances(c, client.InNamespace(pod.Namespace))
+	if err != nil {
+		return "", err
+	}
+
+	for i := range ipList.Items {
+		var ip = &ipList.Items[i]
+		// terminating ip should not be picked ip
+		if ip.Status.PodName == pod.Name && ip.DeletionTimestamp == nil {
+			return ToIPFormat(ip.Name), nil
+		}
+	}
+	return "", nil
+}
+
+func ListIPsOfPod(c client.Client, pod *corev1.Pod) ([]string, error) {
+	ipList, err := ListIPInstances(c, client.InNamespace(pod.Namespace))
+	if err != nil {
+		return nil, err
+	}
+
+	var v4, v6 []string
+	for i := range ipList.Items {
+		var ip = &ipList.Items[i]
+		// terminating ip should not be picked ip
+		if ip.Status.PodName == pod.Name && ip.DeletionTimestamp == nil {
+			ipStr, isIPv6 := ToIPFormatWithFamily(ip.Name)
+			if isIPv6 {
+				v6 = append(v6, ipStr)
+			} else {
+				v4 = append(v4, ipStr)
+			}
+		}
+	}
+	return append(v4, v6...), nil
 }

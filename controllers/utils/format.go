@@ -17,7 +17,9 @@
 package utils
 
 import (
+	"math"
 	"net"
+	"strconv"
 	"strings"
 
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
@@ -31,9 +33,28 @@ func ToIPFormat(name string) string {
 	return strings.ReplaceAll(name, "-", ".")
 }
 
+func ToIPFormatWithFamily(name string) (string, bool) {
+	const IPv6SeparatorCount = 7
+	if isIPv6 := strings.Count(name, "-") == IPv6SeparatorCount; isIPv6 {
+		return net.ParseIP(strings.ReplaceAll(name, "-", ":")).String(), true
+	}
+	return strings.ReplaceAll(name, "-", "."), false
+}
+
 func ToIPFamilyMode(isIPv6 bool) types.IPFamilyMode {
 	if isIPv6 {
 		return types.IPv6Only
 	}
 	return types.IPv4Only
+}
+
+func GetIndexFromName(name string) int {
+	nameSlice := strings.Split(name, "-")
+	indexStr := nameSlice[len(nameSlice)-1]
+
+	index, err := strconv.Atoi(indexStr)
+	if err != nil {
+		return math.MaxInt32
+	}
+	return index
 }

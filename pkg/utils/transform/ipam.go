@@ -62,6 +62,14 @@ func TransferIPInstanceForIPAM(in *v1.IPInstance) *ipamtypes.IP {
 	}
 }
 
+func TransferIPInstancesForIPAM(ips []*v1.IPInstance) []*ipamtypes.IP {
+	ret := make([]*ipamtypes.IP, len(ips))
+	for idx, ip := range ips {
+		ret[idx] = TransferIPInstanceForIPAM(ip)
+	}
+	return ret
+}
+
 func int32pTouint32p(in *int32) *uint32 {
 	if in == nil {
 		return nil
