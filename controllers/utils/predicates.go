@@ -19,6 +19,7 @@ package utils
 import (
 	"reflect"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -32,6 +33,15 @@ type IgnoreDeletePredicate struct {
 }
 
 func (IgnoreDeletePredicate) Delete(e event.DeleteEvent) bool {
+	return false
+}
+
+type IgnoreUpdatePredicate struct {
+	predicate.Funcs
+}
+
+// IgnoreUpdatePredicate will ignore the update event
+func (IgnoreUpdatePredicate) Update(e event.UpdateEvent) bool {
 	return false
 }
 
@@ -74,4 +84,24 @@ func (SubnetSpecChangePredicate) Update(e event.UpdateEvent) bool {
 	// 1. address range
 	// 2. private
 	return !reflect.DeepEqual(oldSubnet.Spec.Range, newSubnet.Spec.Range) || networkingv1.IsPrivateSubnet(oldSubnet) != networkingv1.IsPrivateSubnet(newSubnet)
+}
+
+type NetworkOfNodeChangePredicate struct {
+	Client client.Client
+	predicate.Funcs
+}
+
+func (n NetworkOfNodeChangePredicate) Update(e event.UpdateEvent) bool {
+	oldNetwork, err := FindUnderlayNetworkForNode(n.Client, e.ObjectOld.GetLabels())
+	if err != nil {
+		// TODO: log here
+		return true
+	}
+	newNetwork, err := FindUnderlayNetworkForNode(n.Client, e.ObjectNew.GetLabels())
+	if err != nil {
+		// TODO: log here
+		return true
+	}
+
+	return newNetwork != oldNetwork
 }

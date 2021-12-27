@@ -23,7 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 )
@@ -68,21 +67,30 @@ func ListIPInstances(client client.Client, opts ...client.ListOption) (*networki
 	return &ipList, nil
 }
 
-func ListNodesToReconcileRequests(client client.Client) []reconcile.Request {
+func ListNodesToNames(client client.Client, opts ...client.ListOption) ([]string, error) {
 	var nodeList = corev1.NodeList{}
-	if err := client.List(context.TODO(), &nodeList); err != nil {
+	if err := client.List(context.TODO(), &nodeList, opts...); err != nil {
 		// TODO: handle error here
-		return nil
+		return nil, err
 	}
-	var requests = make([]reconcile.Request, len(nodeList.Items))
+	var names = make([]string, len(nodeList.Items))
 	for i := range nodeList.Items {
-		requests[i] = reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name: nodeList.Items[i].Name,
-			},
-		}
+		names[i] = nodeList.Items[i].GetName()
 	}
-	return requests
+	return names, nil
+}
+
+func ListSubnetsToNames(client client.Client, opts ...client.ListOption) ([]string, error) {
+	subnetList, err := ListSubnets(client, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	var names = make([]string, len(subnetList.Items))
+	for i := range subnetList.Items {
+		names[i] = subnetList.Items[i].GetName()
+	}
+	return names, nil
 }
 
 func FindUnderlayNetworkForNodeName(client client.Client, nodeName string) (underlayNetworkName string, err error) {

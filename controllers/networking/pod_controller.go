@@ -82,9 +82,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	)
 
 	defer func() {
-		if err != nil && pod != nil {
+		if err != nil {
 			log.Error(err, "reconciliation fails")
-			r.Recorder.Event(pod, corev1.EventTypeWarning, ReasonIPAllocationFail, err.Error())
+			if len(pod.UID) > 0 {
+				r.Recorder.Event(pod, corev1.EventTypeWarning, ReasonIPAllocationFail, err.Error())
+			}
 		}
 	}()
 
@@ -436,12 +438,7 @@ func squashIPSliceToSubnets(ips []*types.IP) (ret []string) {
 	return
 }
 
-func wrapError(wrapMessage string, err error) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("%s: %v", wrapMessage, err)
-}
+
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {

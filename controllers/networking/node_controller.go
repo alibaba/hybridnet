@@ -21,10 +21,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -91,37 +91,40 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	return ctrl.Result{}, nil
 }
 
+func nodeNamesToReconcileRequests(nodeNames []string) []reconcile.Request {
+	ret := make([]reconcile.Request, len(nodeNames))
+	for i := range nodeNames {
+		ret[i] = reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name: nodeNames[i],
+			},
+		}
+	}
+	return ret
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *NodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Node{}, builder.WithPredicates(
-			&utils.IgnoreDeletePredicate{},
-			&predicate.ResourceVersionChangedPredicate{},
-			&predicate.LabelChangedPredicate{},
-			&predicate.Funcs{
-				UpdateFunc: func(event event.UpdateEvent) bool {
-					oldNetwork, err := utils.FindUnderlayNetworkForNode(r, event.ObjectOld.GetLabels())
-					if err != nil {
-						// TODO: log here
-						return true
-					}
-					newNetwork, err := utils.FindUnderlayNetworkForNode(r, event.ObjectNew.GetLabels())
-					if err != nil {
-						// TODO: log here
-						return true
-					}
-
-					return newNetwork != oldNetwork
+		For(&corev1.Node{},
+			builder.WithPredicates(
+				&utils.IgnoreDeletePredicate{},
+				&predicate.ResourceVersionChangedPredicate{},
+				&predicate.LabelChangedPredicate{},
+				&utils.NetworkOfNodeChangePredicate{Client: r},
+			)).
+		Watches(&source.Kind{Type: &networkingv1.Network{}},
+			handler.EnqueueRequestsFromMapFunc(
+				// enqueue all nodes here
+				func(_ client.Object) []reconcile.Request {
+					// TODO: handle error here
+					nodeNames, _ := utils.ListNodesToNames(r)
+					return nodeNamesToReconcileRequests(nodeNames)
 				},
-			})).
-		Watches(&source.Kind{Type: &networkingv1.Network{}}, handler.EnqueueRequestsFromMapFunc(
-			// enqueue all nodes here
-			func(_ client.Object) []reconcile.Request {
-				return utils.ListNodesToReconcileRequests(r)
-			},
-		), builder.WithPredicates(
-			&predicate.GenerationChangedPredicate{},
-			&utils.NetworkSpecChangePredicate{},
-		)).
+			),
+			builder.WithPredicates(
+				&predicate.GenerationChangedPredicate{},
+				&utils.NetworkSpecChangePredicate{},
+			)).
 		Complete(r)
 }

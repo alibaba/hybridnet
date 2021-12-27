@@ -38,6 +38,7 @@ type Refresh interface {
 
 type Usage interface {
 	Usage(network string) (*types.Usage, map[string]*types.Usage, error)
+	SubnetUsage(network, subnet string) (*types.Usage, error)
 }
 
 type DualStackInterface interface {
@@ -54,6 +55,7 @@ type DualStackInterface interface {
 
 type DualStackUsage interface {
 	Usage(network string) ([3]*types.Usage, map[string]*types.Usage, error)
+	SubnetUsage(network, subnet string) (*types.Usage, error)
 }
 
 type Store interface {

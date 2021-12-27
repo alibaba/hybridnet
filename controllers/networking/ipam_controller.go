@@ -66,7 +66,6 @@ func (r *IPAMReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(
 				&predicate.GenerationChangedPredicate{},
 				&utils.NetworkSpecChangePredicate{},
-
 			)).
 		Watches(&source.Kind{Type: &networkingv1.Subnet{}},
 			handler.EnqueueRequestsFromMapFunc(func(object client.Object) []reconcile.Request {
