@@ -17,6 +17,8 @@
 package containernetwork
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"strings"
@@ -359,13 +361,20 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 	return nil
 }
 
-func GenerateContainerVethPair(containerID string) (string, string) {
-	return fmt.Sprintf("%s%s", ContainerHostLinkPrefix, containerID[0:12]), fmt.Sprintf("%s%s", containerID[0:12], ContainerInitLinkSuffix)
+func GenerateContainerVethPair(podNamespace, podName string) (string, string) {
+	// A SHA1 is always 20 bytes long, and so is sufficient for generating the
+	// veth name and mac addr.
+	h := sha1.New()
+	h.Write([]byte(fmt.Sprintf("%s.%s", podNamespace, podName)))
+
+	return fmt.Sprintf("%s%s", ContainerHostLinkPrefix, hex.EncodeToString(h.Sum(nil))[:11]),
+		fmt.Sprintf("%s%s", hex.EncodeToString(h.Sum(nil))[:11], ContainerInitLinkSuffix)
 }
 
 func CheckIfContainerNetworkLink(linkName string) bool {
-	// TODO: "_h" suffix is deprecated, need to be removed further
+	// TODO: suffix "_h" and prefix "h_" is deprecated, need to be removed further
 	return strings.HasSuffix(linkName, "_h") ||
+		strings.HasPrefix(linkName, "h_") ||
 		strings.HasPrefix(linkName, ContainerHostLinkPrefix) ||
 		strings.HasSuffix(linkName, ContainerInitLinkSuffix) ||
 		strings.HasPrefix(linkName, "veth") ||

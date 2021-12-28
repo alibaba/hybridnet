@@ -87,6 +87,20 @@ spec:
               mountPropagation: HostToContainer
               name: host-docker-netns
           # TODO: add liveness probe
+        - name: policy
+          image: "hybridnetdev/hybridnet:latest"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /hybridnet/policyinit.sh
+          env:
+            - name: NODENAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+            runAsUser: 0
       nodeSelector:
         kubernetes.io/os: "linux"
       volumes:
