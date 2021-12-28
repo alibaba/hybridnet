@@ -264,6 +264,7 @@ func (mgr *Manager) SyncRules() error {
 		//
 		// Append rules.
 		writeLine(natRules, generateSkipMasqueradeRuleSpec()...)
+		writeLine(natRules, generateOldSkipMasqueradeRuleSpec()...)
 		writeLine(natRules, generateMasqueradeRuleSpec(mgr.overlayIfName, mgr.protocol)...)
 		writeLine(filterRules, generateVxlanFilterRuleSpec(mgr.overlayIfName, mgr.protocol)...)
 		writeLine(mangleRules, generateVxlanPodToNodeReplyMarkRuleSpec(mgr.protocol)...)
@@ -381,6 +382,12 @@ func generateMasqueradeRuleSpec(vxlanIf string, protocol Protocol) []string {
 func generateSkipMasqueradeRuleSpec() []string {
 	return []string{"-A", ChainHybridnetPostRouting, "-m", "comment", "--comment", `"skip masquerade if traffic is to local pod"`,
 		"-o", containernetwork.ContainerHostLinkPrefix + "+", "-j", "RETURN"}
+}
+
+// TODO: update logic, need to be removed further
+func generateOldSkipMasqueradeRuleSpec() []string {
+	return []string{"-A", ChainHybridnetPostRouting, "-m", "comment", "--comment", `"skip masquerade if traffic is to exist old local pod"`,
+		"-o", "h_+", "-j", "RETURN"}
 }
 
 func generateVxlanFilterRuleSpec(vxlanIf string, protocol Protocol) []string {
