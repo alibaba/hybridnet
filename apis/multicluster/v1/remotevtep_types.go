@@ -20,27 +20,36 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // RemoteVtepSpec defines the desired state of RemoteVtep
 type RemoteVtepSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of RemoteVtep. Edit remotevtep_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// ClusterName is the name of parent cluster who owns this remote VTEP.
+	// +kubebuilder:validation:Required
+	ClusterName string `json:"clusterName,omitempty"`
+	// NodeName is the name of corresponding node in remote cluster.
+	// +kubebuilder:validation:Required
+	NodeName string `json:"nodeName,omitempty"`
+	// VTEPInfo is the basic information of this VTEP.
+	VTEPInfo VTEPInfo `json:",inline"`
+	// EndpointIPList is the IP list of all local endpoints of this VTEP.
+	// +kubebuilder:validation:Optional
+	EndpointIPList []string `json:"endpointIPList,omitempty"`
 }
 
 // RemoteVtepStatus defines the observed state of RemoteVtep
 type RemoteVtepStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// LastModifyTime shows the last timestamp when the remote VTEP was updated.
+	// +kubebuilder:validation:Optional
+	LastModifyTime metav1.Time `json:"lastModifyTime,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:scope=Cluster
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="MAC",type=string,JSONPath=`.spec.mac`
+// +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.spec.ip`
+// +kubebuilder:printcolumn:name="NodeName",type=string,JSONPath=`.spec.nodeName`
+// +kubebuilder:printcolumn:name="ClusterName",type=string,JSONPath=`.spec.clusterName`
+// +kubebuilder:printcolumn:name="LastModifyTime",type=date,JSONPath=`.status.lastModifyTime`
 
 // RemoteVtep is the Schema for the remotevteps API
 type RemoteVtep struct {
