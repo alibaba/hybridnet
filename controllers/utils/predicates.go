@@ -36,11 +36,11 @@ func (IgnoreDeletePredicate) Delete(e event.DeleteEvent) bool {
 	return false
 }
 
+// IgnoreUpdatePredicate will ignore the update event
 type IgnoreUpdatePredicate struct {
 	predicate.Funcs
 }
 
-// IgnoreUpdatePredicate will ignore the update event
 func (IgnoreUpdatePredicate) Update(e event.UpdateEvent) bool {
 	return false
 }
@@ -104,4 +104,66 @@ func (n NetworkOfNodeChangePredicate) Update(e event.UpdateEvent) bool {
 	}
 
 	return newNetwork != oldNetwork
+}
+
+type SpecifiedAnnotationChangedPredicate struct {
+	predicate.Funcs
+	AnnotationKeys []string
+}
+
+// Update implements default UpdateEvent filter for validating specified annotations change
+func (s SpecifiedAnnotationChangedPredicate) Update(e event.UpdateEvent) bool {
+	if e.ObjectOld == nil {
+		return false
+	}
+	if e.ObjectNew == nil {
+		return false
+	}
+
+	for _, annotationKey := range s.AnnotationKeys {
+		if e.ObjectNew.GetAnnotations()[annotationKey] != e.ObjectOld.GetAnnotations()[annotationKey] {
+			return true
+		}
+	}
+	return false
+}
+
+type SpecifiedLabelChangedPredicate struct {
+	predicate.Funcs
+	LabelKeys []string
+}
+
+// Update implements default UpdateEvent filter for validating specified annotations change
+func (s SpecifiedLabelChangedPredicate) Update(e event.UpdateEvent) bool {
+	if e.ObjectOld == nil {
+		return false
+	}
+	if e.ObjectNew == nil {
+		return false
+	}
+
+	for _, labelKey := range s.LabelKeys {
+		if e.ObjectNew.GetLabels()[labelKey] != e.ObjectOld.GetLabels()[labelKey] {
+			return true
+		}
+	}
+	return false
+}
+
+type IPInstancePhaseChangePredicate struct {
+	predicate.Funcs
+}
+
+// Update implements default UpdateEvent filter for checking whether IPInstance phase change
+func (IPInstancePhaseChangePredicate) Update(e event.UpdateEvent) bool {
+	oldIPInstance, ok := e.ObjectOld.(*networkingv1.IPInstance)
+	if !ok {
+		return false
+	}
+	newIPInstance, ok := e.ObjectNew.(*networkingv1.IPInstance)
+	if !ok {
+		return false
+	}
+
+	return oldIPInstance.Status.Phase != newIPInstance.Status.Phase
 }

@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 )
 
@@ -91,6 +92,22 @@ func ListSubnetsToNames(client client.Client, opts ...client.ListOption) ([]stri
 		names[i] = subnetList.Items[i].GetName()
 	}
 	return names, nil
+}
+
+func ListRemoteSubnets(client client.Client, opts ...client.ListOption) (*multiclusterv1.RemoteSubnetList, error) {
+	var remoteSubnetList = multiclusterv1.RemoteSubnetList{}
+	if err := client.List(context.TODO(), &remoteSubnetList, opts...); err != nil {
+		return nil, err
+	}
+	return &remoteSubnetList, nil
+}
+
+func ListRemoteVteps(client client.Client, opts ...client.ListOption) (*multiclusterv1.RemoteVtepList, error) {
+	var remoteVtepList = multiclusterv1.RemoteVtepList{}
+	if err := client.List(context.TODO(), &remoteVtepList, opts...); err != nil {
+		return nil, err
+	}
+	return &remoteVtepList, nil
 }
 
 func FindUnderlayNetworkForNodeName(client client.Client, nodeName string) (underlayNetworkName string, err error) {
