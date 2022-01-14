@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 )
 
@@ -166,4 +167,21 @@ func (IPInstancePhaseChangePredicate) Update(e event.UpdateEvent) bool {
 	}
 
 	return oldIPInstance.Status.Phase != newIPInstance.Status.Phase
+}
+
+type RemoteClusterUUIDChangePredicate struct {
+	predicate.Funcs
+}
+
+func (RemoteClusterUUIDChangePredicate) Update(e event.UpdateEvent) bool {
+	oldRemoteCluster, ok := e.ObjectOld.(*multiclusterv1.RemoteCluster)
+	if !ok {
+		return false
+	}
+	newRemoteCluster, ok := e.ObjectNew.(*multiclusterv1.RemoteCluster)
+	if !ok {
+		return false
+	}
+
+	return oldRemoteCluster.Status.UUID != newRemoteCluster.Status.UUID
 }

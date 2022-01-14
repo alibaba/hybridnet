@@ -110,6 +110,14 @@ func ListRemoteVteps(client client.Client, opts ...client.ListOption) (*multiclu
 	return &remoteVtepList, nil
 }
 
+func ListRemoteClusters(client client.Client, opts ...client.ListOption) (*multiclusterv1.RemoteClusterList, error) {
+	var remoteClusterList = multiclusterv1.RemoteClusterList{}
+	if err := client.List(context.TODO(), &remoteClusterList, opts...); err != nil {
+		return nil, err
+	}
+	return &remoteClusterList, nil
+}
+
 func FindUnderlayNetworkForNodeName(client client.Client, nodeName string) (underlayNetworkName string, err error) {
 	var node = &corev1.Node{}
 	if err = client.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node); err != nil {
@@ -217,4 +225,12 @@ func ListIPsOfPod(c client.Client, pod *corev1.Pod) ([]string, error) {
 		}
 	}
 	return append(v4, v6...), nil
+}
+
+func GetClusterUUID(c client.Client) (types.UID, error) {
+	var namespace = &corev1.Namespace{}
+	if err := c.Get(context.TODO(), types.NamespacedName{Name: "kube-system"}, namespace); err != nil {
+		return "", err
+	}
+	return namespace.UID, nil
 }
