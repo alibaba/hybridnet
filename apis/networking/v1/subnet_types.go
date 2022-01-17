@@ -28,7 +28,7 @@ type SubnetSpec struct {
 	// +kubebuilder:validation:Required
 	Range AddressRange `json:"range"`
 	// +kubebuilder:validation:Optional
-	NetID *uint32 `json:"netID"`
+	NetID *int32 `json:"netID"`
 	// +kubebuilder:validation:Required
 	Network string `json:"network"`
 	// +kubebuilder:validation:Optional

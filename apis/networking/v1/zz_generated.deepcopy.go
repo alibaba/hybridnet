@@ -395,7 +395,7 @@ func (in *SubnetSpec) DeepCopyInto(out *SubnetSpec) {
 	in.Range.DeepCopyInto(&out.Range)
 	if in.NetID != nil {
 		in, out := &in.NetID, &out.NetID
-		*out = new(uint32)
+		*out = new(int32)
 		**out = **in
 	}
 	if in.Config != nil {
