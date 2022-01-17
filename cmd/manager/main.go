@@ -29,8 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/controllers/networking"
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/feature"
 )
 
@@ -129,6 +129,10 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		entryLog.Error(err, "unable to inject controller", "controller", "SubnetStatus")
 		os.Exit(1)
+	}
+
+	if feature.MultiClusterEnabled() {
+		// TODO: run multi-cluster controllers
 	}
 
 	// TODO: migrate to manager

@@ -13,6 +13,7 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 */
+
 package utils
 
 import (
@@ -21,7 +22,7 @@ import (
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/gogf/gf/container/gset"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 )
 
 func StringToIPNet(in string) *net.IPNet {

@@ -28,7 +28,7 @@ func TransferSubnetForIPAM(in *v1.Subnet) *ipamtypes.Subnet {
 
 	return ipamtypes.NewSubnet(in.Name,
 		in.Spec.Network,
-		in.Spec.NetID,
+		int32pTouint32p(in.Spec.NetID),
 		net.ParseIP(in.Spec.Range.Start),
 		net.ParseIP(in.Spec.Range.End),
 		net.ParseIP(in.Spec.Range.Gateway),
