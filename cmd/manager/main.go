@@ -75,7 +75,6 @@ func main() {
 
 	if err = (&networking.IPAMReconciler{
 		Client:  mgr.GetClient(),
-		Scheme:  mgr.GetScheme(),
 		Refresh: ipamManager,
 	}).SetupWithManager(mgr); err != nil {
 		entryLog.Error(err, "unable to inject controller", "controller", "IPAM")
@@ -84,7 +83,6 @@ func main() {
 
 	if err = (&networking.IPInstanceReconciler{
 		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
 		IPAMManager: ipamManager,
 		IPAMStore:   ipamStore,
 	}).SetupWithManager(mgr); err != nil {
@@ -94,7 +92,6 @@ func main() {
 
 	if err = (&networking.NodeReconciler{
 		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		entryLog.Error(err, "unable to inject controller", "controller", "Node")
 		os.Exit(1)
@@ -102,7 +99,6 @@ func main() {
 
 	if err = (&networking.PodReconciler{
 		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
 		Recorder:    mgr.GetEventRecorderFor("PodController"),
 		IPAMStore:   ipamStore,
 		IPAMManager: ipamManager,
@@ -113,7 +109,6 @@ func main() {
 
 	if err = (&networking.NetworkStatusReconciler{
 		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
 		IPAMManager: ipamManager,
 		Recorder:    mgr.GetEventRecorderFor("NetworkStatusController"),
 	}).SetupWithManager(mgr); err != nil {
@@ -123,7 +118,6 @@ func main() {
 
 	if err = (&networking.SubnetStatusReconciler{
 		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
 		IPAMManager: ipamManager,
 		Recorder:    mgr.GetEventRecorderFor("SubnetStatusController"),
 	}).SetupWithManager(mgr); err != nil {

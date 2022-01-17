@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
@@ -42,7 +41,6 @@ import (
 // RemoteClusterReconciler reconciles a RemoteCluster object
 type RemoteClusterReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
 
 	Recorder record.EventRecorder
 

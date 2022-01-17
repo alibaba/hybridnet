@@ -23,7 +23,6 @@ import (
 	"sort"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
@@ -46,7 +45,6 @@ import (
 // NetworkStatusReconciler reconciles status of network objects
 type NetworkStatusReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
 
 	IPAMManager IPAMManager
 	Recorder    record.EventRecorder

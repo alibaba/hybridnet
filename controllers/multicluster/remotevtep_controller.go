@@ -28,7 +28,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -60,7 +59,6 @@ const indexerFieldNode = "node"
 // RemoteVtepReconciler reconciles a Node object to RemoveVtep in parent cluster
 type RemoteVtepReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
 
 	ClusterName string
 

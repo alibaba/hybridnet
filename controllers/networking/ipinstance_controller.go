@@ -19,7 +19,6 @@ package networking
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -34,7 +33,6 @@ import (
 // IPInstanceReconciler reconciles a IPInstance object
 type IPInstanceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
 
 	// TODO: construct
 	IPAMManager IPAMManager
