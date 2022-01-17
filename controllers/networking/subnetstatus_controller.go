@@ -29,6 +29,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -55,7 +56,7 @@ type SubnetStatusReconciler struct {
 //+kubebuilder:rbac:groups=networking.alibaba.com,resources=subnets/finalizers,verbs=update
 
 func (r *SubnetStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
-	log := ctrllog.FromContext(ctx).WithValues("SubnetStatus", req.String())
+	log := ctrllog.FromContext(ctx)
 
 	var subnet = &networkingv1.Subnet{}
 
@@ -139,6 +140,11 @@ func (r *SubnetStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}),
 			builder.WithPredicates(
 				&utils.IgnoreUpdatePredicate{},
-			)).
+			),
+		).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 1,
+			Log:                     mgr.GetLogger().WithName("SubnetStatusController"),
+		}).
 		Complete(r)
 }

@@ -28,6 +28,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -66,7 +67,7 @@ type RemoteClusterReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *RemoteClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
-	log := ctrllog.FromContext(ctx).WithValues("Cluster", req.Name)
+	log := ctrllog.FromContext(ctx)
 
 	defer func() {
 		if err != nil {
@@ -151,6 +152,10 @@ func (r *RemoteClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				&utils.RemoteClusterUUIDChangePredicate{},
 			),
 		).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 1,
+			Log:                     mgr.GetLogger().WithName("RemoteClusterController"),
+		}).
 		Complete(r)
 }
 

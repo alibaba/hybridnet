@@ -29,6 +29,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -46,7 +47,7 @@ type RemoteClusterUUIDReconciler struct {
 }
 
 func (r *RemoteClusterUUIDReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
-	log := ctrllog.FromContext(ctx).WithValues("Cluster", req.Name)
+	log := ctrllog.FromContext(ctx)
 
 	defer func() {
 		if err != nil {
@@ -120,5 +121,9 @@ func (r *RemoteClusterUUIDReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				&predicate.GenerationChangedPredicate{},
 			),
 		).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 1,
+			Log:                     mgr.GetLogger().WithName("RemoteClusterUUIDController"),
+		}).
 		Complete(r)
 }

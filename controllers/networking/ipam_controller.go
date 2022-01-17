@@ -88,6 +88,7 @@ func (r *IPAMReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(
 			controller.Options{
 				MaxConcurrentReconciles: 1,
+				Log:                     mgr.GetLogger().WithName("IPAMController"),
 			}).
 		Complete(r)
 }

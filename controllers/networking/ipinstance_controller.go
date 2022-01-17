@@ -100,6 +100,7 @@ func (r *IPInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
+			Log:                     mgr.GetLogger().WithName("IPInstanceController"),
 		}).
 		Complete(r)
 }

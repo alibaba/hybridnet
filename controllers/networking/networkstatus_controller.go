@@ -30,6 +30,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -56,7 +57,7 @@ type NetworkStatusReconciler struct {
 //+kubebuilder:rbac:groups=networking.alibaba.com,resources=networks/finalizers,verbs=update
 
 func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
-	log := ctrllog.FromContext(ctx).WithValues("NetworkStatus", req.String())
+	log := ctrllog.FromContext(ctx)
 
 	var network = &networkingv1.Network{}
 
@@ -145,10 +146,6 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-func (r *NetworkStatusReconciler) SyncSubnetStatus(subnetUsages map[string]*ipamtypes.Usage) error {
-
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -220,5 +217,11 @@ func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				&predicate.LabelChangedPredicate{},
 				&utils.NetworkOfNodeChangePredicate{Client: r},
 			)).
+		WithOptions(
+			controller.Options{
+				MaxConcurrentReconciles: 1,
+				Log:                     mgr.GetLogger().WithName("NetworkStatusController"),
+			},
+		).
 		Complete(r)
 }

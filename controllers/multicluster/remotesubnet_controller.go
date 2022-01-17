@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -69,7 +70,7 @@ type RemoteSubnetReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *RemoteSubnetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
-	log := ctrllog.FromContext(ctx).WithValues("Cluster", r.ClusterName, "Subnet", req.Name)
+	log := ctrllog.FromContext(ctx).WithValues("Cluster", r.ClusterName)
 
 	defer func() {
 		if err != nil {
@@ -206,6 +207,10 @@ func (r *RemoteSubnetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Channel{Source: garbageEvent, DestBufferSize: 100},
 			&handler.EnqueueRequestForObject{},
 		).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 1,
+			Log:                     mgr.GetLogger().WithName("RemoteSubnetController"),
+		}).
 		Complete(r)
 }
 

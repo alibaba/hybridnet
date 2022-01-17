@@ -25,6 +25,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -125,6 +126,11 @@ func (r *NodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(
 				&predicate.GenerationChangedPredicate{},
 				&utils.NetworkSpecChangePredicate{},
-			)).
+			),
+		).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 1,
+			Log:                     mgr.GetLogger().WithName("NodeController"),
+		}).
 		Complete(r)
 }

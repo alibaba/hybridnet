@@ -30,6 +30,7 @@ import (
 	"k8s.io/klog"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
@@ -74,7 +75,7 @@ type PodReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
-	log := ctrllog.FromContext(ctx).WithValues("Pod", req.String())
+	log := ctrllog.FromContext(ctx)
 
 	var (
 		pod         = &corev1.Pod{}
@@ -438,11 +439,13 @@ func squashIPSliceToSubnets(ips []*types.IP) (ret []string) {
 	return
 }
 
-
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 1,
+			Log:                     mgr.GetLogger().WithName("PodController"),
+		}).
 		Complete(r)
 }

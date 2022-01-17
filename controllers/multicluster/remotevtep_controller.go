@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -67,7 +68,7 @@ type RemoteVtepReconciler struct {
 }
 
 func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
-	log := ctrllog.FromContext(ctx).WithValues("Cluster", r.ClusterName, "Node", req.String())
+	log := ctrllog.FromContext(ctx).WithValues("Cluster", r.ClusterName)
 
 	defer func() {
 		if err != nil {
@@ -292,6 +293,10 @@ func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				),
 			),
 		).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 1,
+			Log:                     mgr.GetLogger().WithName("RemoteVTEPController"),
+		}).
 		Complete(r)
 }
 
