@@ -16,11 +16,6 @@
 
 package utils
 
-import (
-	"github.com/gogf/gf/container/gset"
-	jsoniter "github.com/json-iterator/go"
-)
-
 func PickFirstNonEmptyString(ss ...string) string {
 	for _, s := range ss {
 		if len(s) > 0 {
@@ -28,20 +23,4 @@ func PickFirstNonEmptyString(ss ...string) string {
 		}
 	}
 	return ""
-}
-
-func ToJSONString(i interface{}) string {
-	s, _ := jsoniter.MarshalToString(i)
-	return s
-}
-
-// CheckStringSliceDifferent returns if two string slice contains different item,
-// return true for two string slices are different.
-func CheckStringSliceDifferent(a, b []string) bool {
-	if len(a) != len(b) {
-		return true
-	}
-	aSet := gset.NewStrSetFrom(a)
-	bSet := gset.NewStrSetFrom(b)
-	return !aSet.Equal(bSet)
 }
