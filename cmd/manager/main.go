@@ -30,8 +30,10 @@ import (
 
 	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
+	"github.com/alibaba/hybridnet/controllers/multicluster"
 	"github.com/alibaba/hybridnet/controllers/networking"
 	"github.com/alibaba/hybridnet/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/managerruntime"
 )
 
 var (
@@ -53,8 +55,9 @@ func main() {
 	ctrllog.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	var entryLog = ctrllog.Log.WithName("entry")
-
 	entryLog.Info("starting hybridnet manager", "known-features", feature.KnownFeatures(), "commit-id", gitCommit)
+
+	signalContext := ctrl.SetupSignalHandler()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
@@ -126,13 +129,37 @@ func main() {
 	}
 
 	if feature.MultiClusterEnabled() {
-		// TODO: run multi-cluster controllers
+		uuidMutex, err := multicluster.NewUUIDMutexFromClient(mgr.GetClient())
+		if err != nil {
+			entryLog.Error(err, "unable to create cluster UUID mutex")
+			os.Exit(1)
+		}
+
+		if err = (&multicluster.RemoteClusterUUIDReconciler{
+			Client:    mgr.GetClient(),
+			Recorder:  mgr.GetEventRecorderFor("RemoteClusterUUIDController"),
+			UUIDMutex: uuidMutex,
+		}).SetupWithManager(mgr); err != nil {
+			entryLog.Error(err, "unable to inject controller", "controller", "RemoteClusterUUID")
+			os.Exit(1)
+		}
+
+		if err = (&multicluster.RemoteClusterReconciler{
+			Client:       mgr.GetClient(),
+			Recorder:     mgr.GetEventRecorderFor("RemoteCluster"),
+			UUIDMutex:    uuidMutex,
+			DaemonHub:    managerruntime.NewDaemonHub(signalContext),
+			LocalManager: mgr,
+		}).SetupWithManager(mgr); err != nil {
+			entryLog.Error(err, "unable to inject controller", "controller", "RemoteCluster")
+			os.Exit(1)
+		}
 	}
 
 	// TODO: migrate to manager
 	go startMetricsServer()
 
-	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err = mgr.Start(signalContext); err != nil {
 		entryLog.Error(err, "manager exit unexpectedly")
 		os.Exit(1)
 	}

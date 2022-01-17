@@ -199,7 +199,6 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(name string, re
 	// inject RemoteSubnetReconciler
 	if err = (&RemoteSubnetReconciler{
 		Client:        managerRuntime.GetClient(),
-		Scheme:        managerRuntime.GetScheme(),
 		ClusterName:   name,
 		ParentCluster: r.LocalManager,
 	}).SetupWithManager(managerRuntime); err != nil {
@@ -209,7 +208,6 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(name string, re
 	// inject RemoteVtepReconciler
 	if err = (&RemoteVtepReconciler{
 		Client:        managerRuntime.GetClient(),
-		Scheme:        managerRuntime.GetScheme(),
 		ClusterName:   name,
 		ParentCluster: r.LocalManager,
 	}).SetupWithManager(managerRuntime); err != nil {
