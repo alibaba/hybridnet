@@ -24,6 +24,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/ipam"
 	"github.com/alibaba/hybridnet/pkg/ipam/allocator"
+	"github.com/alibaba/hybridnet/pkg/ipam/store"
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/utils/transform"
@@ -123,3 +124,18 @@ type IPAMStore interface {
 	DualStack() ipam.DualStackStore
 }
 
+type ipamStore struct {
+	ipam.Store
+	dualStack ipam.DualStackStore
+}
+
+func (i *ipamStore) DualStack() ipam.DualStackStore {
+	return i.dualStack
+}
+
+func NewIPAMStore(c client.Client) IPAMStore {
+	return &ipamStore{
+		Store:     store.NewWorker(c),
+		dualStack: store.NewDualStackWorker(c),
+	}
+}
