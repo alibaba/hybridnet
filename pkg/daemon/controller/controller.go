@@ -43,8 +43,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
-	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
+	"github.com/heptiolabs/healthcheck"
+	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
+
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/addr"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
@@ -53,9 +57,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/daemon/neigh"
 	"github.com/alibaba/hybridnet/pkg/daemon/route"
 	"github.com/alibaba/hybridnet/pkg/feature"
-	"github.com/heptiolabs/healthcheck"
-	"github.com/vishvananda/netlink"
-	"github.com/vishvananda/netns"
 )
 
 const (

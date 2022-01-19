@@ -22,17 +22,19 @@ import (
 	"strings"
 	"time"
 
-	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/containernetworking/plugins/pkg/ipam"
 	"github.com/containernetworking/plugins/pkg/ns"
 
-	"github.com/alibaba/hybridnet/pkg/daemon/arp"
-	"github.com/alibaba/hybridnet/pkg/daemon/ndp"
-	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/vishvananda/netlink"
+
+	"github.com/alibaba/hybridnet/pkg/daemon/arp"
+	"github.com/alibaba/hybridnet/pkg/daemon/ndp"
+	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 )
 
 func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*IPInfo, localDirectTableNum int) error {

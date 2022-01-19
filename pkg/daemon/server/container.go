@@ -20,10 +20,11 @@ import (
 	"fmt"
 	"net"
 
-	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 
 	"k8s.io/klog"
 )

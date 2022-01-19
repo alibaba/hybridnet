@@ -24,7 +24,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
-	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 )
 
 type enqueueRequestForRemoteSubnet struct {

@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"testing"
 
-	v1 "github.com/alibaba/hybridnet/apis/networking/v1"
+	v1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 )
 
 func TestStringToIPNet(t *testing.T) {

@@ -19,7 +19,7 @@ package transform
 import (
 	"net"
 
-	v1 "github.com/alibaba/hybridnet/apis/networking/v1"
+	v1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
