@@ -90,7 +90,10 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		backOffBase = backOffBase * 2
 
 		pod := &corev1.Pod{}
-		if err := cdh.mgrAPIReader.Get(context.TODO(), types.NamespacedName{Name: podRequest.PodName}, pod); err != nil {
+		if err := cdh.mgrAPIReader.Get(context.TODO(), types.NamespacedName{
+			Name:      podRequest.PodName,
+			Namespace: podRequest.PodNamespace,
+		}, pod); err != nil {
 			errMsg := fmt.Errorf("failed to get pod %v/%v: %v", podRequest.PodName, podRequest.PodNamespace, err)
 			klog.Error(errMsg)
 			_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})

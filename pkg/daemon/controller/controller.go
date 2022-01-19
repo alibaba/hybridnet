@@ -26,6 +26,8 @@ import (
 	"syscall"
 	"time"
 
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
 	"github.com/go-logr/logr"
 
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -71,6 +73,15 @@ const (
 	AddrUpdateChainSize = 200
 
 	NetlinkSubscribeRetryInterval = 10 * time.Second
+)
+
+var (
+	reconcileSubnetRequest = reconcile.Request{NamespacedName: types.NamespacedName{
+		Name: ActionReconcileSubnet,
+	}}
+	reconcileNodeRequest = reconcile.Request{NamespacedName: types.NamespacedName{
+		Name: ActionReconcileNode,
+	}}
 )
 
 type CtrlHub struct {
@@ -267,7 +278,7 @@ func (c *CtrlHub) setupSubnetController() error {
 	if err := subnetController.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.Funcs{
 		UpdateFunc: func(updateEvent event.UpdateEvent, q workqueue.RateLimitingInterface) {
 			if checkNodeUpdate(updateEvent) {
-				q.Add(ActionReconcileSubnet)
+				q.Add(reconcileSubnetRequest)
 			}
 		},
 	}); err != nil {
@@ -346,7 +357,7 @@ func (c *CtrlHub) setupIPInstanceController() error {
 
 func (c *CtrlHub) setupNodeController() error {
 	nodeController, err := controller.New("node-controller", c.mgr, controller.Options{
-		Reconciler: &subnetReconciler{
+		Reconciler: &nodeReconciler{
 			Client:     c.mgr.GetClient(),
 			ctrlHubRef: c,
 		},
@@ -548,7 +559,8 @@ func (c *CtrlHub) handleVxlanInterfaceNeighEvent() error {
 
 	ipSearchExecWrapper := func(ip net.IP, link netlink.Link) {
 		if err := ipSearch(ip, link); err != nil {
-			c.logger.Error(err, "failed to proxy resolve overlay neigh")
+			// print as info
+			c.logger.Info("failed to proxy resolve overlay neigh", "message", err)
 		}
 	}
 

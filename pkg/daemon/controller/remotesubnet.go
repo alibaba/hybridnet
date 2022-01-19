@@ -32,7 +32,7 @@ type enqueueRequestForRemoteSubnet struct {
 }
 
 func (e enqueueRequestForRemoteSubnet) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
-	q.Add(ActionReconcileSubnet)
+	q.Add(reconcileSubnetRequest)
 }
 
 func (e enqueueRequestForRemoteSubnet) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
@@ -46,10 +46,10 @@ func (e enqueueRequestForRemoteSubnet) Update(evt event.UpdateEvent, q workqueue
 	if oldRs.Spec.ClusterName != newRs.Spec.ClusterName ||
 		!reflect.DeepEqual(oldRs.Spec.Range, newRs.Spec.Range) ||
 		multiclusterv1.GetRemoteSubnetType(oldRs) != multiclusterv1.GetRemoteSubnetType(newRs) {
-		q.Add(ActionReconcileSubnet)
+		q.Add(reconcileSubnetRequest)
 	}
 }
 
 func (e enqueueRequestForRemoteSubnet) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
-	q.Add(ActionReconcileSubnet)
+	q.Add(reconcileSubnetRequest)
 }

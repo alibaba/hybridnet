@@ -32,7 +32,7 @@ type enqueueRequestForRemoteVtep struct {
 }
 
 func (e enqueueRequestForRemoteVtep) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
-	q.Add(ActionReconcileNode)
+	q.Add(reconcileNodeRequest)
 }
 
 func (e enqueueRequestForRemoteVtep) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
@@ -43,10 +43,10 @@ func (e enqueueRequestForRemoteVtep) Update(evt event.UpdateEvent, q workqueue.R
 		oldRemoteVtep.Spec.VTEPInfo.MAC != newRemoteVtep.Spec.VTEPInfo.MAC ||
 		oldRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] != newRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] ||
 		!isIPListEqual(oldRemoteVtep.Spec.EndpointIPList, newRemoteVtep.Spec.EndpointIPList) {
-		q.Add(ActionReconcileNode)
+		q.Add(reconcileNodeRequest)
 	}
 }
 
 func (e enqueueRequestForRemoteVtep) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
-	q.Add(ActionReconcileNode)
+	q.Add(reconcileNodeRequest)
 }
