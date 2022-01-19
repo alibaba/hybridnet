@@ -29,7 +29,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
@@ -72,7 +72,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 	klog.Infof("Add port request %v", podRequest)
 
 	var macAddr string
-	var netID *uint32
+	var netID *int32
 	var affectedIPInstances []*networkingv1.IPInstance
 
 	allocatedIPs := map[networkingv1.IPVersion]*containernetwork.IPInfo{

@@ -26,7 +26,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/alibaba/hybridnet/pkg/feature"
 
@@ -110,7 +111,7 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 	if feature.MultiClusterEnabled() {
 		logger.Info("Reconciling remote subnet information")
 
-		remoteSubnetList := &networkingv1.RemoteSubnetList{}
+		remoteSubnetList := &multiclusterv1.RemoteSubnetList{}
 		if err := r.List(ctx, remoteSubnetList); err != nil {
 			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list remote subnet %v", err)
 		}
@@ -123,7 +124,7 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse subnet %v spec range meta: %v", remoteSubnet.Name, err)
 			}
 
-			var isOverlay = networkingv1.GetRemoteSubnetType(&remoteSubnet) == networkingv1.NetworkTypeOverlay
+			var isOverlay = multiclusterv1.GetRemoteSubnetType(&remoteSubnet) == networkingv1.NetworkTypeOverlay
 
 			routeManager := r.ctrlHubRef.getRouterManager(remoteSubnet.Spec.Range.Version)
 			err = routeManager.AddRemoteSubnetInfo(subnetCidr, gatewayIP, startIP, endIP, excludeIPs, isOverlay)

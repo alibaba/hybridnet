@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"net"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
@@ -30,7 +30,7 @@ import (
 
 // ipAddr is a CIDR notation IP address and prefix length
 func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, containerID, mac string,
-	netID *uint32, allocatedIPs map[networkingv1.IPVersion]*containernetwork.IPInfo, networkType networkingv1.NetworkType) (string, error) {
+	netID *int32, allocatedIPs map[networkingv1.IPVersion]*containernetwork.IPInfo, networkType networkingv1.NetworkType) (string, error) {
 
 	var err error
 	var nodeIfName string

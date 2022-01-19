@@ -26,7 +26,7 @@ import (
 
 	"github.com/vishvananda/netlink"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 
 	"github.com/alibaba/hybridnet/pkg/request"
 

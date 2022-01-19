@@ -34,7 +34,8 @@ import (
 	"github.com/gogf/gf/container/gset"
 	"github.com/vishvananda/netlink"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/daemon/iptables"
 	"github.com/alibaba/hybridnet/pkg/daemon/neigh"
 	"github.com/alibaba/hybridnet/pkg/daemon/route"
@@ -120,10 +121,10 @@ func (c *CtrlHub) getIPInstanceByAddress(address net.IP) (*networkingv1.IPInstan
 	return nil, fmt.Errorf("ip instance for address %v not found", address.String())
 }
 
-func (c *CtrlHub) getRemoteVtepByEndpointAddress(address net.IP) (*networkingv1.RemoteVtep, error) {
+func (c *CtrlHub) getRemoteVtepByEndpointAddress(address net.IP) (*multiclusterv1.RemoteVtep, error) {
 	// try to find remote pod ip
 	ctx := context.Background()
-	remoteVtepList := &networkingv1.RemoteVtepList{}
+	remoteVtepList := &multiclusterv1.RemoteVtepList{}
 	if err := c.mgr.GetClient().List(ctx, remoteVtepList, client.MatchingFields{EndpointIPIndex: address.String()}); err != nil {
 		return nil, fmt.Errorf("get remote vtep by ip %v indexer failed: %v", address.String(), err)
 	}
@@ -131,7 +132,7 @@ func (c *CtrlHub) getRemoteVtepByEndpointAddress(address net.IP) (*networkingv1.
 	if len(remoteVtepList.Items) > 1 {
 		// pick up valid remoteVtep
 		for _, remoteVtep := range remoteVtepList.Items {
-			remoteSubnetList := &networkingv1.RemoteSubnetList{}
+			remoteSubnetList := &multiclusterv1.RemoteSubnetList{}
 			if err := c.mgr.GetClient().List(ctx, remoteSubnetList,
 				client.MatchingLabels{constants.LabelCluster: remoteVtep.Spec.ClusterName}); err != nil {
 				return nil, fmt.Errorf("failed to list remoteSubnet %v", err)

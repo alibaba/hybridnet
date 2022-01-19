@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/containernetworking/plugins/pkg/ipam"
 	"github.com/containernetworking/plugins/pkg/ns"
 
@@ -154,7 +154,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*I
 
 // ipAddr is a CIDR notation IP address and prefix length
 func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, allocatedIPs map[networkingv1.IPVersion]*IPInfo,
-	macAddr net.HardwareAddr, netID *uint32, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration,
+	macAddr net.HardwareAddr, netID *int32, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration,
 	networkType networkingv1.NetworkType, neighGCThresh1, neighGCThresh2, neighGCThresh3 int) error {
 
 	var defaultRouteNets []*types.Route

@@ -17,7 +17,7 @@
 package controller
 
 import (
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"

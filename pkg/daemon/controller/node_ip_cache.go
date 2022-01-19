@@ -19,7 +19,7 @@ import (
 	"strings"
 	"sync"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -37,7 +37,7 @@ func NewNodeIPCache() *NodeIPCache {
 	}
 }
 
-func (nic *NodeIPCache) UpdateNodeIPs(nodeList []corev1.Node, localNodeName string, remoteVtepList []*networkingv1.RemoteVtep) error {
+func (nic *NodeIPCache) UpdateNodeIPs(nodeList []corev1.Node, localNodeName string, remoteVtepList []*multiclusterv1.RemoteVtep) error {
 	nic.mu.Lock()
 	defer nic.mu.Unlock()
 
@@ -69,13 +69,13 @@ func (nic *NodeIPCache) UpdateNodeIPs(nodeList []corev1.Node, localNodeName stri
 	}
 
 	for _, remoteVtep := range remoteVtepList {
-		macAddr, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
+		macAddr, err := net.ParseMAC(remoteVtep.Spec.VTEPInfo.MAC)
 		if err != nil {
-			return fmt.Errorf("failed to parse remote node vtep mac %v: %v", remoteVtep.Spec.VtepMAC, err)
+			return fmt.Errorf("failed to parse remote node vtep mac %v: %v", remoteVtep.Spec.VTEPInfo.MAC, err)
 		}
 
 		if _, exist := remoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
-			nic.nodeIPMap[remoteVtep.Spec.VtepIP] = macAddr
+			nic.nodeIPMap[remoteVtep.Spec.VTEPInfo.IP] = macAddr
 			continue
 		}
 

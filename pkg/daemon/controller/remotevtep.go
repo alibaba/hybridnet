@@ -17,7 +17,7 @@
 package controller
 
 import (
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -35,11 +35,11 @@ func (e enqueueRequestForRemoteVtep) Create(evt event.CreateEvent, q workqueue.R
 }
 
 func (e enqueueRequestForRemoteVtep) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
-	oldRemoteVtep := evt.ObjectOld.(*networkingv1.RemoteVtep)
-	newRemoteVtep := evt.ObjectNew.(*networkingv1.RemoteVtep)
+	oldRemoteVtep := evt.ObjectOld.(*multiclusterv1.RemoteVtep)
+	newRemoteVtep := evt.ObjectNew.(*multiclusterv1.RemoteVtep)
 
-	if oldRemoteVtep.Spec.VtepIP != newRemoteVtep.Spec.VtepIP ||
-		oldRemoteVtep.Spec.VtepMAC != newRemoteVtep.Spec.VtepMAC ||
+	if oldRemoteVtep.Spec.VTEPInfo.IP != newRemoteVtep.Spec.VTEPInfo.IP ||
+		oldRemoteVtep.Spec.VTEPInfo.MAC != newRemoteVtep.Spec.VTEPInfo.MAC ||
 		oldRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] != newRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] ||
 		!isIPListEqual(oldRemoteVtep.Spec.EndpointIPList, newRemoteVtep.Spec.EndpointIPList) {
 		q.Add(ActionReconcileNode)

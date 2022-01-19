@@ -43,7 +43,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/addr"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
@@ -295,10 +296,10 @@ func (c *CtrlHub) setupControllers() error {
 
 	// enable multicluster feature
 	if feature.MultiClusterEnabled() {
-		subnetControllerBuilder.Watches(&source.Kind{Type: &networkingv1.RemoteSubnet{}}, &enqueueRequestForRemoteSubnet{})
-		nodeControllerBuilder.Watches(&source.Kind{Type: &networkingv1.RemoteVtep{}}, &enqueueRequestForRemoteVtep{})
+		subnetControllerBuilder.Watches(&source.Kind{Type: &multiclusterv1.RemoteSubnet{}}, &enqueueRequestForRemoteSubnet{})
+		nodeControllerBuilder.Watches(&source.Kind{Type: &multiclusterv1.RemoteVtep{}}, &enqueueRequestForRemoteVtep{})
 
-		if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.RemoteVtep{}, EndpointIPIndex, endpointIPIndexer); err != nil {
+		if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &multiclusterv1.RemoteVtep{}, EndpointIPIndex, endpointIPIndexer); err != nil {
 			return fmt.Errorf("failed to add endpoint ip indexer to manager: %v", err)
 		}
 	}
@@ -463,9 +464,9 @@ func (c *CtrlHub) handleVxlanInterfaceNeighEvent() error {
 				}
 
 				if vtep != nil {
-					vtepMac, err = net.ParseMAC(vtep.Spec.VtepMAC)
+					vtepMac, err = net.ParseMAC(vtep.Spec.VTEPInfo.MAC)
 					if err != nil {
-						return fmt.Errorf("failed to parse vtep mac %v: %v", vtep.Spec.VtepMAC, err)
+						return fmt.Errorf("failed to parse vtep mac %v: %v", vtep.Spec.VTEPInfo.MAC, err)
 					}
 				}
 			}
@@ -654,20 +655,20 @@ func (c *CtrlHub) iptablesSyncLoop() {
 				// If remote overlay network des not exist, the rcmanager will not fetch
 				// RemoteSubnet and RemoteVtep. Thus, existence check is redundant here.
 
-				remoteSubnetList := &networkingv1.RemoteSubnetList{}
+				remoteSubnetList := &multiclusterv1.RemoteSubnetList{}
 				if err := c.mgr.GetClient().List(context.TODO(), remoteSubnetList); err != nil {
 					return fmt.Errorf("failed to list remote network: %v", err)
 				}
 
 				// Record remote vtep ip.
-				vtepList := &networkingv1.RemoteVtepList{}
+				vtepList := &multiclusterv1.RemoteVtepList{}
 				if err := c.mgr.GetClient().List(context.TODO(), vtepList); err != nil {
 					return fmt.Errorf("failed to list remote vtep: %v", err)
 				}
 
 				for _, vtep := range vtepList.Items {
 					if _, exist := vtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
-						ip := net.ParseIP(vtep.Spec.VtepIP)
+						ip := net.ParseIP(vtep.Spec.VTEPInfo.IP)
 						if ip.To4() != nil {
 							// v4 address
 							c.iptablesV4Manager.RecordRemoteNodeIP(ip)
@@ -699,7 +700,7 @@ func (c *CtrlHub) iptablesSyncLoop() {
 					}
 
 					c.getIPtablesManager(remoteSubnet.Spec.Range.Version).
-						RecordRemoteSubnet(cidr, networkingv1.GetRemoteSubnetType(&remoteSubnet) == networkingv1.NetworkTypeOverlay)
+						RecordRemoteSubnet(cidr, multiclusterv1.GetRemoteSubnetType(&remoteSubnet) == networkingv1.NetworkTypeOverlay)
 				}
 			}
 		}
@@ -773,7 +774,7 @@ func instanceIPIndexer(obj client.Object) []string {
 }
 
 func endpointIPIndexer(obj client.Object) []string {
-	vtep, ok := obj.(*networkingv1.RemoteVtep)
+	vtep, ok := obj.(*multiclusterv1.RemoteVtep)
 	if ok {
 		endpointIPs := vtep.Spec.EndpointIPList
 		if len(endpointIPs) > 0 {

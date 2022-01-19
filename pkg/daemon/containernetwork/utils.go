@@ -35,7 +35,7 @@ type IPInfo struct {
 	Cidr *net.IPNet
 }
 
-func GenerateVlanNetIfName(parentName string, vlanID *uint32) (string, error) {
+func GenerateVlanNetIfName(parentName string, vlanID *int32) (string, error) {
 	if vlanID == nil {
 		return "", fmt.Errorf("vlan id should not be nil")
 	}
@@ -51,12 +51,12 @@ func GenerateVlanNetIfName(parentName string, vlanID *uint32) (string, error) {
 	return fmt.Sprintf("%s.%v", parentName, *vlanID), nil
 }
 
-func GenerateVxlanNetIfName(parentName string, vlanID *uint32) (string, error) {
+func GenerateVxlanNetIfName(parentName string, vlanID *int32) (string, error) {
 	if vlanID == nil || *vlanID == 0 {
 		return "", fmt.Errorf("vxlan id should not be nil or zero")
 	}
 
-	maxVxlanID := uint32(1<<24 - 1)
+	maxVxlanID := int32(1<<24 - 1)
 	if *vlanID > maxVxlanID {
 		return "", fmt.Errorf("vxlan id's value range is from 1 to %d", maxVxlanID)
 	}
@@ -64,7 +64,7 @@ func GenerateVxlanNetIfName(parentName string, vlanID *uint32) (string, error) {
 	return fmt.Sprintf("%s%s%v", parentName, VxlanLinkInfix, *vlanID), nil
 }
 
-func EnsureVlanIf(nodeIfName string, vlanID *uint32) (string, error) {
+func EnsureVlanIf(nodeIfName string, vlanID *int32) (string, error) {
 	nodeIf, err := netlink.LinkByName(nodeIfName)
 	if err != nil {
 		return "", err

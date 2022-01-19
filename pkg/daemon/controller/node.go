@@ -27,7 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/alibaba/hybridnet/pkg/daemon/vxlan"
@@ -55,7 +56,7 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list network %v", err)
 	}
 
-	var overlayNetID *uint32
+	var overlayNetID *int32
 	for _, network := range networkList.Items {
 		if networkingv1.GetNetworkType(&network) == networkingv1.NetworkTypeOverlay {
 			overlayNetID = network.Spec.NetID
@@ -235,25 +236,25 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
 	}
 
-	var remoteVtepList []*networkingv1.RemoteVtep
+	var remoteVtepList []*multiclusterv1.RemoteVtep
 
 	if feature.MultiClusterEnabled() {
-		remoteVtepList := &networkingv1.RemoteVtepList{}
+		remoteVtepList := &multiclusterv1.RemoteVtepList{}
 		if err = r.List(ctx, remoteVtepList); err != nil {
 			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list remote vtep: %v", err)
 		}
 
 		for _, remoteVtep := range remoteVtepList.Items {
-			vtepMac, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
+			vtepMac, err := net.ParseMAC(remoteVtep.Spec.VTEPInfo.MAC)
 			if err != nil {
 				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse remote vtep mac string %v: %v",
-					remoteVtep.Spec.VtepMAC, err)
+					remoteVtep.Spec.VTEPInfo.MAC, err)
 			}
 
-			vtepIP := net.ParseIP(remoteVtep.Spec.VtepIP)
+			vtepIP := net.ParseIP(remoteVtep.Spec.VTEPInfo.IP)
 			if vtepIP == nil {
 				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse remote vtep ip string %v",
-					remoteVtep.Spec.VtepIP)
+					remoteVtep.Spec.VTEPInfo.IP)
 			}
 
 			vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
