@@ -32,8 +32,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
-	"github.com/alibaba/hybridnet/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 )
 
 // NodeReconciler reconciles a Node object

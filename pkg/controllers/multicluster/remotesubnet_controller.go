@@ -42,8 +42,8 @@ import (
 
 	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
-	"github.com/alibaba/hybridnet/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 )
 
 // RemoteSubnetReconciler reconciles a RemoteSubnet object

@@ -33,8 +33,8 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
-	"github.com/alibaba/hybridnet/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
 	"github.com/alibaba/hybridnet/pkg/ipam/types"

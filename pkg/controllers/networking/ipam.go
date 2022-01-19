@@ -19,8 +19,8 @@ package networking
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/alibaba/hybridnet/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/ipam"
 	"github.com/alibaba/hybridnet/pkg/ipam/allocator"

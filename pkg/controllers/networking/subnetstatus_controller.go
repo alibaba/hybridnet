@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
-	"github.com/alibaba/hybridnet/controllers/utils"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 )
