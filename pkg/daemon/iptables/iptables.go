@@ -226,7 +226,7 @@ func (mgr *Manager) SyncRules() error {
 		nodeIPs, ipset.TypeHashIP, ipset.OptionTimeout, "0")
 
 	if err := mgr.ensureBasicRuleAndChains(); err != nil {
-		return fmt.Errorf("ensure basic rules and chains failed: %v", err)
+		return fmt.Errorf("failed to ensure basic rules and chains: %v", err)
 	}
 
 	iptablesData := bytes.NewBuffer(nil)
@@ -300,42 +300,42 @@ func (mgr *Manager) SyncRules() error {
 func (mgr *Manager) ensureBasicRuleAndChains() error {
 	// ensure base chain and rule for HYBRIDNET-POSTROUTING in nat table
 	if _, err := mgr.executor.EnsureChain(TableNAT, ChainHybridnetPostRouting); err != nil {
-		return fmt.Errorf("ensule %v chain in %v table failed: %v", ChainHybridnetPostRouting, TableNAT, err)
+		return fmt.Errorf("failed to ensule %v chain in %v table: %v", ChainHybridnetPostRouting, TableNAT, err)
 	}
 
 	if _, err := mgr.executor.EnsureRule(utiliptables.Append, TableNAT, ChainPostRouting,
 		generateHybridnetPostRoutingBaseRuleSpec()...); err != nil {
-		return fmt.Errorf("ensure %v rule in %v table failed: %v", ChainHybridnetPostRouting, TableNAT, err)
+		return fmt.Errorf("failed to ensure %v rule in %v table: %v", ChainHybridnetPostRouting, TableNAT, err)
 	}
 
 	// ensure base chain and rule for HYBRIDNET-FORWARD in filter table
 	if _, err := mgr.executor.EnsureChain(TableFilter, ChainHybridnetForward); err != nil {
-		return fmt.Errorf("ensule %v chain in %v table failed: %v", ChainHybridnetForward, TableFilter, err)
+		return fmt.Errorf("failed to ensule %v chain in %v table: %v", ChainHybridnetForward, TableFilter, err)
 	}
 
 	if _, err := mgr.executor.EnsureRule(utiliptables.Append, TableFilter, ChainForward,
 		generateHybridnetForwardBaseRuleSpec()...); err != nil {
-		return fmt.Errorf("ensure %v rule in %v table failed: %v", ChainHybridnetForward, TableFilter, err)
+		return fmt.Errorf("failed to ensure %v rule in %v table: %v", ChainHybridnetForward, TableFilter, err)
 	}
 
 	// ensure base chain and rule for HYBRIDNET-PREROUTING in mangle table
 	if _, err := mgr.executor.EnsureChain(TableMangle, ChainHybridnetPreRouting); err != nil {
-		return fmt.Errorf("ensule %v chain in %v table failed: %v", ChainHybridnetPreRouting, TableMangle, err)
+		return fmt.Errorf("failed to ensule %v chain in %v table: %v", ChainHybridnetPreRouting, TableMangle, err)
 	}
 
 	if _, err := mgr.executor.EnsureRule(utiliptables.Append, TableMangle, ChainPreRouting,
 		generateHybridnetPreRoutingBaseRuleSpec()...); err != nil {
-		return fmt.Errorf("ensure %v rule in %v table failed: %v", ChainHybridnetPreRouting, TableMangle, err)
+		return fmt.Errorf("failed to ensure %v rule in %v table: %v", ChainHybridnetPreRouting, TableMangle, err)
 	}
 
 	// ensure base chain and rule for HYBRIDNET-POSTROUTING in mangle table
 	if _, err := mgr.executor.EnsureChain(TableMangle, ChainHybridnetPostRouting); err != nil {
-		return fmt.Errorf("ensule %v chain in %v table failed: %v", ChainHybridnetPostRouting, TableMangle, err)
+		return fmt.Errorf("failed to ensule %v chain in %v table: %v", ChainHybridnetPostRouting, TableMangle, err)
 	}
 
 	if _, err := mgr.executor.EnsureRule(utiliptables.Append, TableMangle, ChainPostRouting,
 		generateHybridnetPostRoutingBaseRuleSpec()...); err != nil {
-		return fmt.Errorf("ensure %v rule in %v table failed: %v", ChainHybridnetPostRouting, TableMangle, err)
+		return fmt.Errorf("failed to ensure %v rule in %v table: %v", ChainHybridnetPostRouting, TableMangle, err)
 	}
 
 	return nil

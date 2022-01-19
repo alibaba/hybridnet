@@ -52,7 +52,7 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 
 	containerNicName, hostNicName, podNS, err := initContainerNic(podName, netns, containerID, mtu)
 	if err != nil {
-		return "", fmt.Errorf("init container nic for pod %v failed: %v", podName, err)
+		return "", fmt.Errorf("failed to init container nic for pod %v: %v", podName, err)
 	}
 
 	if err = containernetwork.ConfigureHostNic(hostNicName, allocatedIPs, cdh.config.LocalDirectTableNum); err != nil {
@@ -132,7 +132,7 @@ func initContainerNic(podName, netns, containerID string, mtu int) (string, stri
 			PeerName: containerNicName,
 		}
 		if err = netlink.LinkAdd(&veth); err != nil {
-			return fmt.Errorf("create veth pair in netns %v for pod %v failed: %v", podNS.Path(), podName, err)
+			return fmt.Errorf("failed to create veth pair in netns %v for pod %v: %v", podNS.Path(), podName, err)
 		}
 
 		containerHostLink, err := netlink.LinkByName(hostNicName)
@@ -146,7 +146,7 @@ func initContainerNic(podName, netns, containerID string, mtu int) (string, stri
 
 		return nil
 	}); err != nil {
-		return "", "", nil, fmt.Errorf("generate veth pair for pod %v failed: %v", podName, err)
+		return "", "", nil, fmt.Errorf("failed to generate veth pair for pod %v: %v", podName, err)
 	}
 
 	return containerNicName, hostNicName, podNS, nil

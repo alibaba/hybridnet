@@ -32,7 +32,7 @@ func checkIfEnhancedAddr(link netlink.Link, addr netlink.Addr, family int) (bool
 	}, netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF|netlink.RT_FILTER_SRC)
 
 	if err != nil {
-		return false, fmt.Errorf("list local routes for interface %v and src %v failed: %v",
+		return false, fmt.Errorf("failed to list local routes for interface %v and src %v: %v",
 			link.Attrs().Name, addr.IP.String(), err)
 	}
 
@@ -66,13 +66,13 @@ func ensureSubnetEnhancedAddr(link netlink.Link, newEnhancedAddr, outOfDateEnhan
 	}
 
 	if err := netlink.AddrAdd(link, newEnhancedAddr); err != nil {
-		return fmt.Errorf("add enhanced addr %v for interface %v failed: %v",
+		return fmt.Errorf("failed to add enhanced addr %v for interface %v: %v",
 			newEnhancedAddr.IP.String(), link.Attrs().Name, err)
 	}
 
 	if outOfDateEnhancedAddr != nil {
 		if err := netlink.AddrDel(link, outOfDateEnhancedAddr); err != nil {
-			return fmt.Errorf("del out-of-date enhanced addr %v for interface %v failed: %v",
+			return fmt.Errorf("failed to del out-of-date enhanced addr %v for interface %v: %v",
 				outOfDateEnhancedAddr.IP.String(), link.Attrs().Name, err)
 		}
 	}
@@ -89,13 +89,13 @@ func ensureSubnetEnhancedAddr(link netlink.Link, newEnhancedAddr, outOfDateEnhan
 	}, netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF|netlink.RT_FILTER_SRC)
 
 	if err != nil {
-		return fmt.Errorf("list local routes for interface %v and src %v failed: %v",
+		return fmt.Errorf("failed to list local routes for interface %v and src %v: %v",
 			link.Attrs().Name, newEnhancedAddr.IP.String(), err)
 	}
 
 	for _, route := range routeList {
 		if err := netlink.RouteDel(&route); err != nil {
-			return fmt.Errorf("delete local route %v failed: %v", route.String(), err)
+			return fmt.Errorf("failed to delete local route %v: %v", route.String(), err)
 		}
 	}
 

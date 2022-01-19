@@ -59,7 +59,7 @@ func (nic *NodeIPCache) UpdateNodeIPs(nodeList []corev1.Node, localNodeName stri
 
 		macAddr, err := net.ParseMAC(node.Annotations[constants.AnnotationNodeVtepMac])
 		if err != nil {
-			return fmt.Errorf("parse node vtep mac %v failed: %v", node.Annotations[constants.AnnotationNodeVtepMac], err)
+			return fmt.Errorf("failed to parse node vtep mac %v: %v", node.Annotations[constants.AnnotationNodeVtepMac], err)
 		}
 
 		ipStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
@@ -71,7 +71,7 @@ func (nic *NodeIPCache) UpdateNodeIPs(nodeList []corev1.Node, localNodeName stri
 	for _, remoteVtep := range remoteVtepList {
 		macAddr, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
 		if err != nil {
-			return fmt.Errorf("parse remote node vtep mac %v failed: %v", remoteVtep.Spec.VtepMAC, err)
+			return fmt.Errorf("failed to parse remote node vtep mac %v: %v", remoteVtep.Spec.VtepMAC, err)
 		}
 
 		if _, exist := remoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {

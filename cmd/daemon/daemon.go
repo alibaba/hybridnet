@@ -17,57 +17,66 @@
 package main
 
 import (
+	"os"
+
+	"github.com/alibaba/hybridnet/pkg/feature"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/klog"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/controller"
 	"github.com/alibaba/hybridnet/pkg/daemon/server"
-	"github.com/alibaba/hybridnet/pkg/feature"
 )
 
 var gitCommit string
 
 func main() {
-	klog.InitFlags(nil)
-	defer klog.Flush()
+	log.SetLogger(zap.New(zap.UseDevMode(true)))
 
-	klog.Infof("Starting hybridnet daemon with git commit: %v", gitCommit)
-	klog.Infof("known features: %v", feature.KnownFeatures())
+	var entryLog = log.Log.WithName("entry")
+	entryLog.Info("starting hybridnet daemon",
+		"known-features", feature.KnownFeatures(), "commit-id", gitCommit)
 
 	config, err := daemonconfig.ParseFlags()
 	if err != nil {
-		klog.Fatalf("failed to parse config: %v", err)
+		entryLog.Error(err, "failed to parse config")
+		os.Exit(1)
 	}
 
 	// setup manager
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{})
 	if err != nil {
-		klog.Fatalf("unable to start daemon manager %v", err)
+		entryLog.Error(err, "unable to start daemon manager")
+		os.Exit(1)
 	}
 
 	if err := clientgoscheme.AddToScheme(mgr.GetScheme()); err != nil {
-		klog.Fatalf("failed to add client-go to manager scheme %v", err)
+		entryLog.Error(err, "failed to add client-go to manager scheme")
+		os.Exit(1)
 	}
 
 	if err := networkingv1.AddToScheme(mgr.GetScheme()); err != nil {
-		klog.Fatalf("failed to add networking v1 to manager scheme %v", err)
+		entryLog.Error(err, "failed to add networking v1 to manager scheme")
+		os.Exit(1)
 	}
 
 	ctx := ctrl.SetupSignalHandler()
 
-	ctl, err := controller.NewController(config, mgr)
+	ctl, err := controller.NewCtrlHub(config, mgr, log.Log.WithName("CtrlHub"))
 	if err != nil {
-		klog.Fatalf("failed to create controller %v", err)
+		entryLog.Error(err, "failed to create controller")
+		os.Exit(1)
 	}
 
 	mgr.GetAPIReader()
 
 	go func() {
 		if err = ctl.Run(ctx); err != nil {
-			klog.Fatalf("controller exit unusually %v", err)
+			entryLog.Error(err, "CtrlHub exit unusually")
+			os.Exit(1)
 		}
 	}()
 

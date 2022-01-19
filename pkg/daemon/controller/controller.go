@@ -26,7 +26,8 @@ import (
 	"syscall"
 	"time"
 
-	"k8s.io/klog/klogr"
+	"github.com/go-logr/logr"
+
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	"golang.org/x/sys/unix"
@@ -34,8 +35,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/klog"
-
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -73,8 +72,7 @@ const (
 	NetlinkSubscribeRetryInterval = 10 * time.Second
 )
 
-// Controller is a set of kubernetes controllers
-type Controller struct {
+type CtrlHub struct {
 	config *daemonconfig.Configuration
 	mgr    ctrl.Manager
 
@@ -98,10 +96,11 @@ type Controller struct {
 	nodeIPCache *NodeIPCache
 
 	upgradeWorkDone bool
+
+	logger logr.Logger
 }
 
-// NewController returns a Controller to watch kubernetes CRD object events
-func NewController(config *daemonconfig.Configuration, mgr ctrl.Manager) (*Controller, error) {
+func NewCtrlHub(config *daemonconfig.Configuration, mgr ctrl.Manager, logger logr.Logger) (*CtrlHub, error) {
 	routeV4Manager, err := route.CreateRouteManager(config.LocalDirectTableNum,
 		config.ToOverlaySubnetTableNum,
 		config.OverlayMarkTableNum,
@@ -135,7 +134,7 @@ func NewController(config *daemonconfig.Configuration, mgr ctrl.Manager) (*Contr
 
 	addrV4Manager := addr.CreateAddrManager(netlink.FAMILY_V4, config.NodeName)
 
-	controller := &Controller{
+	controller := &CtrlHub{
 		config: config,
 		mgr:    mgr,
 
@@ -157,6 +156,8 @@ func NewController(config *daemonconfig.Configuration, mgr ctrl.Manager) (*Contr
 		iptablesSyncTicker: time.NewTicker(config.IptablesCheckDuration),
 
 		nodeIPCache: NewNodeIPCache(),
+
+		logger: logger,
 	}
 
 	thisNode := &corev1.Node{}
@@ -167,8 +168,7 @@ func NewController(config *daemonconfig.Configuration, mgr ctrl.Manager) (*Contr
 	return controller, nil
 }
 
-func (c *Controller) Run(ctx context.Context) error {
-	klog.Info("Started controller")
+func (c *CtrlHub) Run(ctx context.Context) error {
 	c.runHealthyServer()
 
 	if err := c.setupControllers(); err != nil {
@@ -188,13 +188,11 @@ func (c *Controller) Run(ctx context.Context) error {
 	if err := c.mgr.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start controller manager: %v", err)
 	}
-
-	klog.Info("Shutting down controller")
 	return nil
 }
 
 // StartControllers sets up the controllers.
-func (c *Controller) setupControllers() error {
+func (c *CtrlHub) setupControllers() error {
 	if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.IPInstance{}, InstanceIPIndex, instanceIPIndexer); err != nil {
 		return fmt.Errorf("failed to add instance ip indexer to manager: %v", err)
 	}
@@ -233,7 +231,7 @@ func (c *Controller) setupControllers() error {
 			},
 		}).
 		Watches(c.subnetControllerTriggerSource, &handler.Funcs{}).
-		WithOptions(controller.Options{Log: klogr.New()})
+		WithOptions(controller.Options{Log: c.mgr.GetLogger().WithName("SubnetController")})
 
 	// create ip instance controller
 	ipInstanceControllerBuilder := ctrl.NewControllerManagedBy(c.mgr).
@@ -271,7 +269,7 @@ func (c *Controller) setupControllers() error {
 					},
 				})).
 		Watches(c.ipInstanceControllerTriggerSource, &handler.Funcs{}).
-		WithOptions(controller.Options{Log: klogr.New()})
+		WithOptions(controller.Options{Log: c.mgr.GetLogger().WithName("IPInstanceController")})
 
 	// create node controller
 	nodeControllerBuilder := ctrl.NewControllerManagedBy(c.mgr).
@@ -293,7 +291,7 @@ func (c *Controller) setupControllers() error {
 			},
 		}).
 		Watches(c.nodeControllerTriggerSource, &handler.Funcs{}).
-		WithOptions(controller.Options{Log: klogr.New()})
+		WithOptions(controller.Options{Log: c.mgr.GetLogger().WithName("NodeController")})
 
 	// enable multicluster feature
 	if feature.MultiClusterEnabled() {
@@ -308,24 +306,24 @@ func (c *Controller) setupControllers() error {
 	// run subnet controller
 	if err := subnetControllerBuilder.
 		Complete(&subnetReconciler{
-			Client:        c.mgr.GetClient(),
-			controllerRef: c,
+			Client:     c.mgr.GetClient(),
+			ctrlHubRef: c,
 		}); err != nil {
 		return fmt.Errorf("failed to start subnet controller: %v", err)
 	}
 
 	if err := ipInstanceControllerBuilder.
 		Complete(&ipInstanceReconciler{
-			Client:        c.mgr.GetClient(),
-			controllerRef: c,
+			Client:     c.mgr.GetClient(),
+			ctrlHubRef: c,
 		}); err != nil {
 		return fmt.Errorf("failed to start network controller: %v", err)
 	}
 
 	if err := nodeControllerBuilder.
 		Complete(&nodeReconciler{
-			Client:        c.mgr.GetClient(),
-			controllerRef: c,
+			Client:     c.mgr.GetClient(),
+			ctrlHubRef: c,
 		}); err != nil {
 		return fmt.Errorf("failed to start node controller: %v", err)
 	}
@@ -333,15 +331,15 @@ func (c *Controller) setupControllers() error {
 	return nil
 }
 
-func (c *Controller) CacheSynced(ctx context.Context) bool {
+func (c *CtrlHub) CacheSynced(ctx context.Context) bool {
 	return c.mgr.GetCache().WaitForCacheSync(ctx)
 }
 
-func (c *Controller) GetMgrClient() client.Client {
+func (c *CtrlHub) GetMgrClient() client.Client {
 	return c.mgr.GetClient()
 }
 
-func (c *Controller) GetMgrAPIReader() client.Reader {
+func (c *CtrlHub) GetMgrAPIReader() client.Reader {
 	return c.mgr.GetAPIReader()
 }
 
@@ -350,10 +348,10 @@ func (c *Controller) GetMgrAPIReader() client.Reader {
 // triggering subnet and ip instance reconcile loop will be the best way to recover routes and neigh caches.
 //
 // Restart of vxlan interface will also trigger subnet and ip instance reconcile loop.
-func (c *Controller) handleLocalNetworkDeviceEvent() error {
+func (c *CtrlHub) handleLocalNetworkDeviceEvent() error {
 	hostNetNs, err := netns.Get()
 	if err != nil {
-		return fmt.Errorf("get root netns failed: %v", err)
+		return fmt.Errorf("failed to get root netns: %v", err)
 	}
 
 	go func() {
@@ -362,7 +360,7 @@ func (c *Controller) handleLocalNetworkDeviceEvent() error {
 			exitCh := make(chan struct{})
 
 			errorCallback := func(err error) {
-				klog.Errorf("subscribe netlink link event exit with error: %v", err)
+				c.logger.Error(err, "subscribe netlink link event exit with error")
 				close(exitCh)
 			}
 
@@ -370,7 +368,7 @@ func (c *Controller) handleLocalNetworkDeviceEvent() error {
 				Namespace:     &hostNetNs,
 				ErrorCallback: errorCallback,
 			}); err != nil {
-				klog.Errorf("subscribe link update event failed %v", err)
+				c.logger.Error(err, "failed to subscribe link update event")
 				time.Sleep(NetlinkSubscribeRetryInterval)
 				continue
 			}
@@ -399,7 +397,7 @@ func (c *Controller) handleLocalNetworkDeviceEvent() error {
 			exitCh := make(chan struct{})
 
 			errorCallback := func(err error) {
-				klog.Errorf("subscribe netlink addr event exit with error: %v", err)
+				c.logger.Error(err, "subscribe netlink addr event exit with error")
 				close(exitCh)
 			}
 
@@ -407,7 +405,7 @@ func (c *Controller) handleLocalNetworkDeviceEvent() error {
 				Namespace:     &hostNetNs,
 				ErrorCallback: errorCallback,
 			}); err != nil {
-				klog.Errorf("subscribe address update event failed %v", err)
+				c.logger.Error(err, "failed to subscribe address update event")
 				time.Sleep(NetlinkSubscribeRetryInterval)
 				continue
 			}
@@ -430,7 +428,7 @@ func (c *Controller) handleLocalNetworkDeviceEvent() error {
 	return nil
 }
 
-func (c *Controller) handleVxlanInterfaceNeighEvent() error {
+func (c *CtrlHub) handleVxlanInterfaceNeighEvent() error {
 
 	ipSearch := func(ip net.IP, link netlink.Link) error {
 		var vtepMac net.HardwareAddr
@@ -441,7 +439,7 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 		} else {
 			ipInstance, err := c.getIPInstanceByAddress(ip)
 			if err != nil {
-				return fmt.Errorf("get ip instance by address %v failed: %v", ip.String(), err)
+				return fmt.Errorf("failed to get ip instance by address %v: %v", ip.String(), err)
 			}
 
 			if ipInstance != nil {
@@ -449,25 +447,25 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 				nodeName := ipInstance.Labels[constants.LabelNode]
 
 				if err := c.mgr.GetClient().Get(context.TODO(), types.NamespacedName{Name: nodeName}, node); err != nil {
-					return fmt.Errorf("get node %v failed: %v", nodeName, err)
+					return fmt.Errorf("failed to get node %v: %v", nodeName, err)
 				}
 
 				vtepMac, err = net.ParseMAC(node.Annotations[constants.AnnotationNodeVtepMac])
 				if err != nil {
-					return fmt.Errorf("parse vtep mac %v failed: %v",
+					return fmt.Errorf("failed to parse vtep mac %v: %v",
 						node.Annotations[constants.AnnotationNodeVtepMac], err)
 				}
 			} else if feature.MultiClusterEnabled() {
 				// try to find remote vtep according to pod ip
 				vtep, err := c.getRemoteVtepByEndpointAddress(ip)
 				if err != nil {
-					return fmt.Errorf("get remote vtep by address %s failed: %v", ip.String(), err)
+					return fmt.Errorf("failed to get remote vtep by address %s: %v", ip.String(), err)
 				}
 
 				if vtep != nil {
 					vtepMac, err = net.ParseMAC(vtep.Spec.VtepMAC)
 					if err != nil {
-						return fmt.Errorf("parse vtep mac %v failed: %v", vtep.Spec.VtepMAC, err)
+						return fmt.Errorf("failed to parse vtep mac %v: %v", vtep.Spec.VtepMAC, err)
 					}
 				}
 			}
@@ -476,7 +474,7 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 		if len(vtepMac) == 0 {
 			// if ip not exist, try to clear it's neigh entries
 			if err := neigh.ClearStaleNeighEntryByIP(link.Attrs().Index, ip); err != nil {
-				return fmt.Errorf("clear stale neigh for link %v and ip %v failed: %v",
+				return fmt.Errorf("failed to clear stale neigh for link %v and ip %v: %v",
 					link.Attrs().Name, ip.String(), err)
 			}
 
@@ -491,27 +489,27 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 			HardwareAddr: vtepMac,
 		}
 		if err := netlink.NeighSet(&neighEntry); err != nil {
-			return fmt.Errorf("set neigh %v failed: %v", neighEntry.String(), err)
+			return fmt.Errorf("failed to set neigh %v: %v", neighEntry.String(), err)
 		}
 
-		klog.V(4).Infof("resolve ip %v from user space success, target vtep mac %v", ip.String(), vtepMac.String())
+		c.logger.V(4).Info("neigh proxy resolve success", "ip", ip.String(), "mac", vtepMac.String())
 
 		return nil
 	}
 
 	ipSearchExecWrapper := func(ip net.IP, link netlink.Link) {
 		if err := ipSearch(ip, link); err != nil {
-			klog.Errorf("overlay proxy neigh failed: %v", err)
+			c.logger.Error(err, "failed to proxy resolve overlay neigh")
 		}
 	}
 
 	hostNetNs, err := netns.Get()
 	if err != nil {
-		return fmt.Errorf("get root netns failed: %v", err)
+		return fmt.Errorf("failed to get root netns: %v", err)
 	}
 
 	timer := time.NewTicker(c.config.VxlanExpiredNeighCachesClearInterval)
-	errorMessageWrapper := initErrorMessageWrapper("handle vxlan interface neigh event failed: ")
+	errorMessageWrapper := initErrorMessageWrapper("failed to handle vxlan interface neigh event: ")
 
 	go func() {
 		for {
@@ -519,14 +517,14 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 			// Once neigh subscribe failed (include the goroutine exit), it's most probably because of
 			// "No buffer space available" problem, we need to clean expired neigh caches.
 			if err := clearVxlanExpiredNeighCaches(); err != nil {
-				klog.Errorf("clear vxlan expired neigh caches failed: %v", err)
+				c.logger.Error(err, "failed to clear vxlan expired neigh caches")
 			}
 
 			neighCh := make(chan netlink.NeighUpdate, NeighUpdateChanSize)
 			exitCh := make(chan struct{})
 
 			errorCallback := func(err error) {
-				klog.Errorf("subscribe netlink neigh event exit with error: %v", err)
+				c.logger.Error(err, "subscribe netlink neigh event exit with error")
 				close(exitCh)
 			}
 
@@ -534,7 +532,7 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 				Namespace:     &hostNetNs,
 				ErrorCallback: errorCallback,
 			}); err != nil {
-				klog.Errorf("subscribe neigh update event failed: %v", err)
+				c.logger.Error(err, "failed to subscribe neigh update event")
 				time.Sleep(NetlinkSubscribeRetryInterval)
 				continue
 			}
@@ -550,7 +548,7 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 
 						link, err := netlink.LinkByIndex(update.LinkIndex)
 						if err != nil {
-							klog.Errorf(errorMessageWrapper("get link by index %v failed: %v", update.LinkIndex, err))
+							c.logger.Error(err, errorMessageWrapper("failed to get link by index %v", update.LinkIndex))
 							continue
 						}
 
@@ -560,7 +558,7 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 					}
 				case <-timer.C:
 					if err := clearVxlanExpiredNeighCaches(); err != nil {
-						klog.Errorf("clear vxlan expired neigh caches failed: %v", err)
+						c.logger.Error(err, "failed to clear vxlan expired neigh caches")
 					}
 				case <-exitCh:
 					break neighLoop
@@ -572,14 +570,14 @@ func (c *Controller) handleVxlanInterfaceNeighEvent() error {
 	return nil
 }
 
-func (c *Controller) iptablesSyncLoop() {
+func (c *CtrlHub) iptablesSyncLoop() {
 	iptablesSyncFunc := func() error {
 		c.iptablesV4Manager.Reset()
 		c.iptablesV6Manager.Reset()
 
 		networkList := &networkingv1.NetworkList{}
 		if err := c.mgr.GetClient().List(context.TODO(), networkList); err != nil {
-			return fmt.Errorf("list network failed: %v", err)
+			return fmt.Errorf("failed to list network: %v", err)
 		}
 
 		var overlayExist bool
@@ -589,7 +587,7 @@ func (c *Controller) iptablesSyncLoop() {
 
 				overlayIfName, err := containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
 				if err != nil {
-					return fmt.Errorf("generate vxlan forward node if name failed: %v", err)
+					return fmt.Errorf("failed to generate vxlan forward node if name: %v", err)
 				}
 
 				c.iptablesV4Manager.SetOverlayIfName(overlayIfName)
@@ -605,7 +603,7 @@ func (c *Controller) iptablesSyncLoop() {
 			// Record node ips.
 			nodeList := &corev1.NodeList{}
 			if err := c.mgr.GetClient().List(context.TODO(), nodeList); err != nil {
-				return fmt.Errorf("list node failed: %v", err)
+				return fmt.Errorf("failed to list node: %v", err)
 			}
 
 			for _, node := range nodeList.Items {
@@ -614,7 +612,7 @@ func (c *Controller) iptablesSyncLoop() {
 				if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
 					node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
 					node.Annotations[constants.AnnotationNodeLocalVxlanIPList] == "" {
-					klog.Infof("node %v's vtep information has not been updated", node.Name)
+					c.logger.Info("node's vtep information has not been updated", "node", node.Name)
 					continue
 				}
 
@@ -634,13 +632,13 @@ func (c *Controller) iptablesSyncLoop() {
 			// Record subnet cidr.
 			subnetList := &networkingv1.SubnetList{}
 			if err := c.mgr.GetClient().List(context.TODO(), subnetList); err != nil {
-				return fmt.Errorf("list subnet failed: %v", err)
+				return fmt.Errorf("failed to list subnet: %v", err)
 			}
 
 			for _, subnet := range subnetList.Items {
 				_, cidr, err := net.ParseCIDR(subnet.Spec.Range.CIDR)
 				if err != nil {
-					return fmt.Errorf("parse subnet cidr %v failed: %v", subnet.Spec.Range.CIDR, err)
+					return fmt.Errorf("failed to parse subnet cidr %v: %v", subnet.Spec.Range.CIDR, err)
 				}
 
 				network := &networkingv1.Network{}
@@ -658,13 +656,13 @@ func (c *Controller) iptablesSyncLoop() {
 
 				remoteSubnetList := &networkingv1.RemoteSubnetList{}
 				if err := c.mgr.GetClient().List(context.TODO(), remoteSubnetList); err != nil {
-					return fmt.Errorf("list remote network failed: %v", err)
+					return fmt.Errorf("failed to list remote network: %v", err)
 				}
 
 				// Record remote vtep ip.
 				vtepList := &networkingv1.RemoteVtepList{}
 				if err := c.mgr.GetClient().List(context.TODO(), vtepList); err != nil {
-					return fmt.Errorf("list remote vtep failed: %v", err)
+					return fmt.Errorf("failed to list remote vtep: %v", err)
 				}
 
 				for _, vtep := range vtepList.Items {
@@ -697,7 +695,7 @@ func (c *Controller) iptablesSyncLoop() {
 				for _, remoteSubnet := range remoteSubnetList.Items {
 					_, cidr, err := net.ParseCIDR(remoteSubnet.Spec.Range.CIDR)
 					if err != nil {
-						return fmt.Errorf("parse remote subnet cidr %v failed: %v", remoteSubnet.Spec.Range.CIDR, err)
+						return fmt.Errorf("failed to parse remote subnet cidr %v: %v", remoteSubnet.Spec.Range.CIDR, err)
 					}
 
 					c.getIPtablesManager(remoteSubnet.Spec.Range.Version).
@@ -708,17 +706,17 @@ func (c *Controller) iptablesSyncLoop() {
 
 		// Sync rules.
 		if err := c.iptablesV4Manager.SyncRules(); err != nil {
-			return fmt.Errorf("sync v4 iptables rule failed: %v", err)
+			return fmt.Errorf("failed to sync v4 iptables rule: %v", err)
 		}
 
 		globalDisabled, err := containernetwork.CheckIPv6GlobalDisabled()
 		if err != nil {
-			return fmt.Errorf("check ipv6 global disabled failed: %v", err)
+			return fmt.Errorf("failed to check ipv6 global disabled: %v", err)
 		}
 
 		if !globalDisabled {
 			if err := c.iptablesV6Manager.SyncRules(); err != nil {
-				return fmt.Errorf("sync v6 iptables rule failed: %v", err)
+				return fmt.Errorf("failed to sync v6 iptables rule: %v", err)
 			}
 		}
 
@@ -730,7 +728,7 @@ func (c *Controller) iptablesSyncLoop() {
 			select {
 			case <-c.iptablesSyncCh:
 				if err := iptablesSyncFunc(); err != nil {
-					klog.Errorf("sync iptables rule failed: %v", err)
+					c.logger.Error(err, "failed to sync iptables rule")
 				}
 			case <-c.iptablesSyncTicker.C:
 				c.iptablesSyncTrigger()
@@ -739,21 +737,21 @@ func (c *Controller) iptablesSyncLoop() {
 	}()
 }
 
-func (c *Controller) iptablesSyncTrigger() {
+func (c *CtrlHub) iptablesSyncTrigger() {
 	select {
 	case c.iptablesSyncCh <- struct{}{}:
 	default:
 	}
 }
 
-func (c *Controller) runHealthyServer() {
+func (c *CtrlHub) runHealthyServer() {
 	health := healthcheck.NewHandler()
 
 	go func() {
 		_ = http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", c.config.BindPort), health)
 	}()
 
-	klog.Infof("Listen on port: %d", c.config.BindPort)
+	c.logger.Info("Listen on port", "port", c.config.BindPort)
 }
 
 func isNeighResolving(state int) bool {
@@ -788,24 +786,24 @@ func endpointIPIndexer(obj client.Object) []string {
 func clearVxlanExpiredNeighCaches() error {
 	linkList, err := netlink.LinkList()
 	if err != nil {
-		return fmt.Errorf("list link failed: %v", err)
+		return fmt.Errorf("failed to list link: %v", err)
 	}
 
 	for _, link := range linkList {
 		if strings.Contains(link.Attrs().Name, containernetwork.VxlanLinkInfix) {
 			if err := neigh.ClearStaleAddFailedNeighEntries(link.Attrs().Index, netlink.FAMILY_V4); err != nil {
-				return fmt.Errorf("clear v4 expired neigh entries for link %v failed: %v",
+				return fmt.Errorf("failed to clear v4 expired neigh entries for link %v: %v",
 					link.Attrs().Name, err)
 			}
 
 			ipv6Disabled, err := containernetwork.CheckIPv6Disabled(link.Attrs().Name)
 			if err != nil {
-				return fmt.Errorf("check ipv6 disables for link %v failed: %v", link.Attrs().Name, err)
+				return fmt.Errorf("failed to check ipv6 disables for link %v: %v", link.Attrs().Name, err)
 			}
 
 			if !ipv6Disabled {
 				if err := neigh.ClearStaleAddFailedNeighEntries(link.Attrs().Index, netlink.FAMILY_V6); err != nil {
-					return fmt.Errorf("clear v6 expired neigh entries for link %v failed: %v",
+					return fmt.Errorf("failed to clear v6 expired neigh entries for link %v: %v",
 						link.Attrs().Name, err)
 				}
 			}

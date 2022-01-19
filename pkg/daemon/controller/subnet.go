@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -28,25 +30,25 @@ import (
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/alibaba/hybridnet/pkg/feature"
 
-	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type subnetReconciler struct {
 	client.Client
-	controllerRef *Controller
+	ctrlHubRef *CtrlHub
 }
 
 func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	klog.Info("Reconciling subnet information")
+	logger := log.FromContext(ctx)
+	logger.Info("Reconciling subnet information")
 
 	subnetList := &networkingv1.SubnetList{}
 	if err := r.List(ctx, subnetList); err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list subnet %v", err)
 	}
 
-	r.controllerRef.routeV4Manager.ResetInfos()
-	r.controllerRef.routeV6Manager.ResetInfos()
+	r.ctrlHubRef.routeV4Manager.ResetInfos()
+	r.ctrlHubRef.routeV6Manager.ResetInfos()
 
 	for _, subnet := range subnetList.Items {
 		network := &networkingv1.Network{}
@@ -58,7 +60,7 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 		if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeUnderlay {
 			// check if this node belongs to the subnet
 			for _, n := range network.Status.NodeList {
-				if n == r.controllerRef.config.NodeName {
+				if n == r.ctrlHubRef.config.NodeName {
 					isUnderlayOnHost = true
 					break
 				}
@@ -76,7 +78,7 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 			_, err := parseSubnetSpecRangeMeta(&subnet.Spec.Range)
 
 		if err != nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("parse subnet %v spec range meta failed: %v", subnet.Name, err)
+			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse subnet %v spec range meta: %v", subnet.Name, err)
 		}
 
 		var forwardNodeIfName string
@@ -85,28 +87,28 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 		switch networkingv1.GetNetworkType(network) {
 		case networkingv1.NetworkTypeUnderlay:
 			if isUnderlayOnHost {
-				forwardNodeIfName, err = containernetwork.EnsureVlanIf(r.controllerRef.config.NodeVlanIfName, netID)
+				forwardNodeIfName, err = containernetwork.EnsureVlanIf(r.ctrlHubRef.config.NodeVlanIfName, netID)
 				if err != nil {
-					return reconcile.Result{Requeue: true}, fmt.Errorf("ensure vlan forward node if failed: %v", err)
+					return reconcile.Result{Requeue: true}, fmt.Errorf("failed to ensure vlan forward node interface: %v", err)
 				}
 			}
 		case networkingv1.NetworkTypeOverlay:
-			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(r.controllerRef.config.NodeVxlanIfName, netID)
+			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
 			if err != nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("generate vxlan forward node if name failed: %v", err)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan forward node if name: %v", err)
 			}
 			isOverlay = true
 			autoNatOutgoing = networkingv1.IsSubnetAutoNatOutgoing(&subnet.Spec)
 		}
 
 		// create policy route
-		routeManager := r.controllerRef.getRouterManager(subnet.Spec.Range.Version)
+		routeManager := r.ctrlHubRef.getRouterManager(subnet.Spec.Range.Version)
 		routeManager.AddSubnetInfo(subnetCidr, gatewayIP, startIP, endIP, excludeIPs,
 			forwardNodeIfName, autoNatOutgoing, isOverlay, isUnderlayOnHost)
 	}
 
 	if feature.MultiClusterEnabled() {
-		klog.Info("Reconciling remote subnet information")
+		logger.Info("Reconciling remote subnet information")
 
 		remoteSubnetList := &networkingv1.RemoteSubnetList{}
 		if err := r.List(ctx, remoteSubnetList); err != nil {
@@ -118,12 +120,12 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 				_, err := parseSubnetSpecRangeMeta(&remoteSubnet.Spec.Range)
 
 			if err != nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("parse subnet %v spec range meta failed: %v", remoteSubnet.Name, err)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse subnet %v spec range meta: %v", remoteSubnet.Name, err)
 			}
 
 			var isOverlay = networkingv1.GetRemoteSubnetType(&remoteSubnet) == networkingv1.NetworkTypeOverlay
 
-			routeManager := r.controllerRef.getRouterManager(remoteSubnet.Spec.Range.Version)
+			routeManager := r.ctrlHubRef.getRouterManager(remoteSubnet.Spec.Range.Version)
 			err = routeManager.AddRemoteSubnetInfo(subnetCidr, gatewayIP, startIP, endIP, excludeIPs, isOverlay)
 
 			if err != nil {
@@ -132,22 +134,22 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	if err := r.controllerRef.routeV4Manager.SyncRoutes(); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("sync ipv4 routes failed: %v", err)
+	if err := r.ctrlHubRef.routeV4Manager.SyncRoutes(); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv4 routes: %v", err)
 	}
 
 	globalDisabled, err := containernetwork.CheckIPv6GlobalDisabled()
 	if err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("check ipv6 global disabled failed: %v", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to check ipv6 global disabled: %v", err)
 	}
 
 	if !globalDisabled {
-		if err := r.controllerRef.routeV6Manager.SyncRoutes(); err != nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("sync ipv6 routes failed: %v", err)
+		if err := r.ctrlHubRef.routeV6Manager.SyncRoutes(); err != nil {
+			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv6 routes: %v", err)
 		}
 	}
 
-	r.controllerRef.iptablesSyncTrigger()
+	r.ctrlHubRef.iptablesSyncTrigger()
 
 	return reconcile.Result{}, nil
 }

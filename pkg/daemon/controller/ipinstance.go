@@ -25,9 +25,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
@@ -37,25 +40,25 @@ import (
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
-
-	"k8s.io/klog"
 )
 
 type ipInstanceReconciler struct {
 	client.Client
-	controllerRef *Controller
+	ctrlHubRef *CtrlHub
 }
 
 func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	logger := log.FromContext(ctx)
+
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
-		klog.Infof("IPInstance information reconciled, took %v", endTime)
+		logger.V(2).Info("IPInstance information reconciled", "time", endTime)
 	}()
 
 	networkList := &networkingv1.NetworkList{}
 	if err := r.List(ctx, networkList); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("list network failed: %v", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list network: %v", err)
 	}
 
 	var overlayExist bool
@@ -64,33 +67,33 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 	for _, network := range networkList.Items {
 		if networkingv1.GetNetworkType(&network) == networkingv1.NetworkTypeOverlay {
 			netID := network.Spec.NetID
-			overlayForwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(r.controllerRef.config.NodeVxlanIfName, netID)
+			overlayForwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
 			if err != nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("generate vxlan forward node if name failed: %v", err)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan forward node if name: %v", err)
 			}
 			overlayExist = true
 			break
 		}
 	}
 
-	if !r.controllerRef.upgradeWorkDone {
-		if err := ensureExistPodConfigs(r.controllerRef.config.LocalDirectTableNum); err != nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("ensure exist pod config failed: %v", err)
+	if !r.ctrlHubRef.upgradeWorkDone {
+		if err := ensureExistPodConfigs(r.ctrlHubRef.config.LocalDirectTableNum, logger); err != nil {
+			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to ensure exist pod config: %v", err)
 		}
-		r.controllerRef.upgradeWorkDone = true
+		r.ctrlHubRef.upgradeWorkDone = true
 	}
 
 	ipInstanceList := &networkingv1.IPInstanceList{}
 	if err := r.List(ctx, ipInstanceList,
-		client.MatchingLabels{constants.LabelNode: r.controllerRef.config.NodeName}); err != nil {
+		client.MatchingLabels{constants.LabelNode: r.ctrlHubRef.config.NodeName}); err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("list ip instances for node %v error: %v",
-			r.controllerRef.config.NodeName, err)
+			r.ctrlHubRef.config.NodeName, err)
 	}
 
-	r.controllerRef.neighV4Manager.ResetInfos()
-	r.controllerRef.neighV6Manager.ResetInfos()
+	r.ctrlHubRef.neighV4Manager.ResetInfos()
+	r.ctrlHubRef.neighV6Manager.ResetInfos()
 
-	r.controllerRef.addrV4Manager.ResetInfos()
+	r.ctrlHubRef.addrV4Manager.ResetInfos()
 
 	for _, ipInstance := range ipInstanceList.Items {
 		netID := ipInstance.Spec.Address.NetID
@@ -105,31 +108,31 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 
 		network := &networkingv1.Network{}
 		if err := r.Get(ctx, types.NamespacedName{Name: ipInstance.Spec.Network}, network); err != nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("get network for ip instance %v failed: %v",
+			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to get network for ip instance %v: %v",
 				ipInstance.Name, err)
 		}
 
 		var forwardNodeIfName string
 		switch networkingv1.GetNetworkType(network) {
 		case networkingv1.NetworkTypeUnderlay:
-			forwardNodeIfName, err = containernetwork.GenerateVlanNetIfName(r.controllerRef.config.NodeVlanIfName, netID)
+			forwardNodeIfName, err = containernetwork.GenerateVlanNetIfName(r.ctrlHubRef.config.NodeVlanIfName, netID)
 			if err != nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("generate vlan forward node interface name failed: %v", err)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vlan forward node interface name: %v", err)
 			}
 
 			if ipInstance.Spec.Address.Version == networkingv1.IPv4 {
-				r.controllerRef.addrV4Manager.TryAddPodInfo(forwardNodeIfName, subnetCidr, podIP)
+				r.ctrlHubRef.addrV4Manager.TryAddPodInfo(forwardNodeIfName, subnetCidr, podIP)
 			}
 
 		case networkingv1.NetworkTypeOverlay:
-			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(r.controllerRef.config.NodeVxlanIfName, netID)
+			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
 			if err != nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("generate vxlan forward node interface name failed: %v", err)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan forward node interface name: %v", err)
 			}
 		}
 
 		// create proxy neigh
-		neighManager := r.controllerRef.getNeighManager(ipInstance.Spec.Address.Version)
+		neighManager := r.ctrlHubRef.getNeighManager(ipInstance.Spec.Address.Version)
 
 		if overlayExist {
 			// Every underlay pod should also add a proxy neigh on overlay forward interface.
@@ -139,37 +142,39 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 		neighManager.AddPodInfo(podIP, forwardNodeIfName)
 	}
 
-	if err := r.controllerRef.neighV4Manager.SyncNeighs(); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("sync ipv4 neighs failed: %v", err)
+	if err := r.ctrlHubRef.neighV4Manager.SyncNeighs(); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv4 neighs: %v", err)
 	}
 
 	globalDisabled, err := containernetwork.CheckIPv6GlobalDisabled()
 	if err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("check ipv6 global disabled failed: %v", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to check ipv6 global disabled: %v", err)
 	}
 
 	if !globalDisabled {
-		if err := r.controllerRef.neighV6Manager.SyncNeighs(); err != nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("sync ipv6 neighs failed: %v", err)
+		if err := r.ctrlHubRef.neighV6Manager.SyncNeighs(); err != nil {
+			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv6 neighs: %v", err)
 		}
 	}
 
-	if err := r.controllerRef.addrV4Manager.SyncAddresses(r.controllerRef.getIPInstanceByAddress); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("sync ipv4 addresses failed: %v", err)
+	if err := r.ctrlHubRef.addrV4Manager.SyncAddresses(r.ctrlHubRef.getIPInstanceByAddress); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv4 addresses: %v", err)
 	}
 
 	return reconcile.Result{}, nil
 }
 
 // TODO: update logic, need to be removed further
-func ensureExistPodConfigs(localDirectTableNum int) error {
+func ensureExistPodConfigs(localDirectTableNum int, logger logr.Logger) error {
 	var netnsPaths []string
 	var netnsDir string
 
 	if daemonutils.ValidDockerNetnsDir(containernetwork.DockerNetnsDir) {
 		netnsDir = containernetwork.DockerNetnsDir
 	} else {
-		klog.Infof("%s not exist, try %s", containernetwork.DockerNetnsDir, containernetwork.ContainerdNetnsDir)
+		logger.Info("docker netns path not exist, try containerd netns path",
+			"docker-netns-path", containernetwork.DockerNetnsDir,
+			"containerd-netns-path", containernetwork.ContainerdNetnsDir)
 		netnsDir = containernetwork.ContainerdNetnsDir
 	}
 
@@ -188,7 +193,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 		}
 	}
 
-	klog.Infof("load exist netns: %v", netnsPaths)
+	logger.Info("load exist netns", "netns-path", netnsPaths)
 
 	var hostLinkIndex int
 	allocatedIPs := map[networkingv1.IPVersion]*containernetwork.IPInfo{}
@@ -207,7 +212,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 
 			v4Addrs, err := netlink.AddrList(link, netlink.FAMILY_V4)
 			if err != nil {
-				return fmt.Errorf("get v4 container interface addr failed: %v", err)
+				return fmt.Errorf("failed to get v4 container interface addr: %v", err)
 			}
 
 			var v4GatewayIP net.IP
@@ -216,7 +221,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 			} else {
 				defaultRoute, err := containernetwork.GetDefaultRoute(netlink.FAMILY_V4)
 				if err != nil {
-					return fmt.Errorf("get ipv4 default route failed: %v", err)
+					return fmt.Errorf("failed to get ipv4 default route: %v", err)
 				}
 				v4GatewayIP = defaultRoute.Gw
 			}
@@ -230,7 +235,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 
 			v6Addrs, err := netlink.AddrList(link, netlink.FAMILY_V6)
 			if err != nil {
-				return fmt.Errorf("get v6 container interface addr failed: %v", err)
+				return fmt.Errorf("failed to get v6 container interface addr: %v", err)
 			}
 
 			var v6GatewayIP net.IP
@@ -239,7 +244,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 			} else {
 				defaultRoute, err := containernetwork.GetDefaultRoute(netlink.FAMILY_V6)
 				if err != nil {
-					return fmt.Errorf("get ipv6 default route failed: %v", err)
+					return fmt.Errorf("failed to get ipv6 default route: %v", err)
 				}
 				v6GatewayIP = defaultRoute.Gw
 			}
@@ -260,7 +265,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 		})
 
 		if err != nil {
-			klog.Errorf("get pod addresses and host link index error: %v", err)
+			logger.Error(err, "get pod addresses and host link index error")
 		}
 
 		if hostLinkIndex == 0 {
@@ -269,7 +274,7 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 
 		hostLink, err := netlink.LinkByIndex(hostLinkIndex)
 		if err != nil {
-			return fmt.Errorf("get host link by index %v failed: %v", hostLinkIndex, err)
+			return fmt.Errorf("failed to get host link by index %v: %v", hostLinkIndex, err)
 		}
 
 		// this container doesn't belong to k8s
@@ -280,16 +285,16 @@ func ensureExistPodConfigs(localDirectTableNum int) error {
 		if hostLink.Attrs().MasterIndex != 0 {
 			bridge, err := netlink.LinkByIndex(hostLink.Attrs().MasterIndex)
 			if err != nil {
-				return fmt.Errorf("get bridge by index %v failed: %v", hostLink.Attrs().MasterIndex, err)
+				return fmt.Errorf("failed to get bridge by index %v: %v", hostLink.Attrs().MasterIndex, err)
 			}
 
 			if err := netlink.LinkDel(bridge); err != nil {
-				return fmt.Errorf("delete bridge %v failed: %v", bridge.Attrs().Name, err)
+				return fmt.Errorf("failed to delete bridge %v: %v", bridge.Attrs().Name, err)
 			}
 		}
 
 		if err := containernetwork.ConfigureHostNic(hostLink.Attrs().Name, allocatedIPs, localDirectTableNum); err != nil {
-			return fmt.Errorf("reconfigure host nic %v failed: %v", hostLink.Attrs().Name, err)
+			return fmt.Errorf("failed to reconfigure host nic %v: %v", hostLink.Attrs().Name, err)
 		}
 	}
 

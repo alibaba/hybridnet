@@ -46,7 +46,7 @@ type cniDaemonHandler struct {
 	mgrAPIReader client.Reader
 }
 
-func createCniDaemonHandler(ctx context.Context, config *daemonconfig.Configuration, ctrlRef *controller.Controller) (*cniDaemonHandler, error) {
+func createCniDaemonHandler(ctx context.Context, config *daemonconfig.Configuration, ctrlRef *controller.CtrlHub) (*cniDaemonHandler, error) {
 	cdh := &cniDaemonHandler{
 		config:       config,
 		mgrClient:    ctrlRef.GetMgrClient(),
@@ -64,7 +64,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 	podRequest := request.PodRequest{}
 	err := req.ReadEntity(&podRequest)
 	if err != nil {
-		errMsg := fmt.Errorf("parse add request failed: %v", err)
+		errMsg := fmt.Errorf("failed to parse add request: %v", err)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})
 		return
@@ -91,7 +91,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 
 		pod := &corev1.Pod{}
 		if err := cdh.mgrAPIReader.Get(context.TODO(), types.NamespacedName{Name: podRequest.PodName}, pod); err != nil {
-			errMsg := fmt.Errorf("get pod %v/%v failed: %v", podRequest.PodName, podRequest.PodNamespace, err)
+			errMsg := fmt.Errorf("failed to get pod %v/%v: %v", podRequest.PodName, podRequest.PodNamespace, err)
 			klog.Error(errMsg)
 			_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})
 			return
@@ -103,7 +103,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		if exist {
 			break
 		} else if i == retries-1 {
-			errMsg := fmt.Errorf("wait for pod %v/%v be coupled with ip failed: %v", podRequest.PodName, podRequest.PodNamespace, err)
+			errMsg := fmt.Errorf("failed to wait for pod %v/%v be coupled with ip: %v", podRequest.PodName, podRequest.PodNamespace, err)
 			klog.Error(errMsg)
 			_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})
 			return
@@ -115,7 +115,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		constants.LabelNode: cdh.config.NodeName,
 		constants.LabelPod:  podRequest.PodName,
 	}); err != nil {
-		errMsg := fmt.Errorf("list ip instance for pod %v failed: %v", cdh.config.NodeName, err)
+		errMsg := fmt.Errorf("failed to list ip instance for pod %v: %v", cdh.config.NodeName, err)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})
 		return
@@ -141,7 +141,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 
 			containerIP, cidrNet, err := net.ParseCIDR(ipInstance.Spec.Address.IP)
 			if err != nil {
-				errMsg := fmt.Errorf("parse ip address %v to cidr failed: %v", ipInstance.Spec.Address.IP, err)
+				errMsg := fmt.Errorf("failed to parse ip address %v to cidr: %v", ipInstance.Spec.Address.IP, err)
 				klog.Error(errMsg)
 				_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
 				return
@@ -149,7 +149,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 
 			gatewayIP := net.ParseIP(ipInstance.Spec.Address.Gateway)
 			if gatewayIP == nil {
-				errMsg := fmt.Errorf("parse gateway %v for ip %v failed: %v", ipInstance.Spec.Address.Gateway, ipInstance.Spec.Address.IP, err)
+				errMsg := fmt.Errorf("failed to parse gateway %v for ip %v: %v", ipInstance.Spec.Address.Gateway, ipInstance.Spec.Address.IP, err)
 				klog.Error(errMsg)
 				_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
 				return
@@ -235,7 +235,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 	hostInterface, err := cdh.configureNic(podRequest.PodName, podRequest.PodNamespace, podRequest.NetNs, podRequest.ContainerID,
 		macAddr, netID, allocatedIPs, networkingv1.GetNetworkType(network))
 	if err != nil {
-		errMsg := fmt.Errorf("configure nic failed: %v", err)
+		errMsg := fmt.Errorf("failed to configure nic: %v", err)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
 		return
@@ -270,7 +270,7 @@ func (cdh cniDaemonHandler) handleDel(req *restful.Request, resp *restful.Respon
 	podRequest := request.PodRequest{}
 	err := req.ReadEntity(&podRequest)
 	if err != nil {
-		errMsg := fmt.Errorf("parse del request failed: %v", err)
+		errMsg := fmt.Errorf("failed to parse del request: %v", err)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})
 		return
@@ -279,7 +279,7 @@ func (cdh cniDaemonHandler) handleDel(req *restful.Request, resp *restful.Respon
 	klog.Infof("delete port request %v", podRequest)
 	err = cdh.deleteNic(podRequest.NetNs)
 	if err != nil {
-		errMsg := fmt.Errorf("del container nic for %s failed: %v", fmt.Sprintf("%s.%s", podRequest.PodName, podRequest.PodNamespace), err)
+		errMsg := fmt.Errorf("failed to del container nic for %s: %v", fmt.Sprintf("%s.%s", podRequest.PodName, podRequest.PodNamespace), err)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
 		return

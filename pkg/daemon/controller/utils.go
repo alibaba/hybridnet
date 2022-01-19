@@ -76,28 +76,28 @@ func (h *fixedKeyHandler) Update(e event.UpdateEvent, q workqueue.RateLimitingIn
 	q.Add(h.key)
 }
 
-func (c *Controller) getRouterManager(ipVersion networkingv1.IPVersion) *route.Manager {
+func (c *CtrlHub) getRouterManager(ipVersion networkingv1.IPVersion) *route.Manager {
 	if ipVersion == networkingv1.IPv6 {
 		return c.routeV6Manager
 	}
 	return c.routeV4Manager
 }
 
-func (c *Controller) getNeighManager(ipVersion networkingv1.IPVersion) *neigh.Manager {
+func (c *CtrlHub) getNeighManager(ipVersion networkingv1.IPVersion) *neigh.Manager {
 	if ipVersion == networkingv1.IPv6 {
 		return c.neighV6Manager
 	}
 	return c.neighV4Manager
 }
 
-func (c *Controller) getIPtablesManager(ipVersion networkingv1.IPVersion) *iptables.Manager {
+func (c *CtrlHub) getIPtablesManager(ipVersion networkingv1.IPVersion) *iptables.Manager {
 	if ipVersion == networkingv1.IPv6 {
 		return c.iptablesV6Manager
 	}
 	return c.iptablesV4Manager
 }
 
-func (c *Controller) getIPInstanceByAddress(address net.IP) (*networkingv1.IPInstance, error) {
+func (c *CtrlHub) getIPInstanceByAddress(address net.IP) (*networkingv1.IPInstance, error) {
 	ctx := context.Background()
 	ipInstanceList := &networkingv1.IPInstanceList{}
 	if err := c.mgr.GetClient().List(ctx, ipInstanceList, client.MatchingFields{InstanceIPIndex: address.String()}); err != nil {
@@ -120,7 +120,7 @@ func (c *Controller) getIPInstanceByAddress(address net.IP) (*networkingv1.IPIns
 	return nil, fmt.Errorf("ip instance for address %v not found", address.String())
 }
 
-func (c *Controller) getRemoteVtepByEndpointAddress(address net.IP) (*networkingv1.RemoteVtep, error) {
+func (c *CtrlHub) getRemoteVtepByEndpointAddress(address net.IP) (*networkingv1.RemoteVtep, error) {
 	// try to find remote pod ip
 	ctx := context.Background()
 	remoteVtepList := &networkingv1.RemoteVtepList{}

@@ -44,7 +44,7 @@ func NewVxlanDevice(name string, vxlanID int, parent string, localAddr net.IP, p
 	learning bool) (*Device, error) {
 	parentLink, err := netlink.LinkByName(parent)
 	if err != nil {
-		return nil, fmt.Errorf("get parent link %v failed: %v", parent, err)
+		return nil, fmt.Errorf("failed to get parent link %v: %v", parent, err)
 	}
 
 	link := &netlink.Vxlan{
@@ -68,33 +68,33 @@ func NewVxlanDevice(name string, vxlanID int, parent string, localAddr net.IP, p
 
 	sysctlPath := fmt.Sprintf(containernetwork.IPv4AppSolicitSysctl, link.Name)
 	if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, 1); err != nil {
-		return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
+		return nil, fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 	}
 
 	sysctlPath = fmt.Sprintf(containernetwork.IPv4BaseReachableTimeMSSysctl, link.Name)
 	if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, int(1000*baseReachableTime.Seconds())); err != nil {
-		return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
+		return nil, fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 	}
 
 	ipv6Disabled, err := containernetwork.CheckIPv6Disabled(link.Name)
 	if err != nil {
-		return nil, fmt.Errorf("check ipv6 disables for link %v failed: %v", link.Name, err)
+		return nil, fmt.Errorf("failed to check ipv6 disables for link %v: %v", link.Name, err)
 	}
 
 	if !ipv6Disabled {
 		sysctlPath = fmt.Sprintf(containernetwork.IPv6AppSolicitSysctl, link.Name)
 		if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, 1); err != nil {
-			return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
+			return nil, fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}
 
 		sysctlPath = fmt.Sprintf(containernetwork.IPv6BaseReachableTimeMSSysctl, link.Name)
 		if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, int(1000*baseReachableTime.Seconds())); err != nil {
-			return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
+			return nil, fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}
 
 		sysctlPath = fmt.Sprintf(containernetwork.AcceptRASysctl, link.Name)
 		if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
-			return nil, fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
+			return nil, fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}
 	}
 
@@ -129,7 +129,7 @@ func (dev *Device) SyncVtepInfo() error {
 
 		// Duplicate append action will not case error.
 		if err := netlink.NeighAppend(&unicastFdbEntry); err != nil {
-			return fmt.Errorf("append unicast fdb entry %v for interface %v failed: %v", unicastFdbEntry.String(), dev.link.Name, err)
+			return fmt.Errorf("failed to append unicast fdb entry %v for interface %v: %v", unicastFdbEntry.String(), dev.link.Name, err)
 		}
 
 		broadcastFdbEntry := netlink.Neigh{
@@ -143,13 +143,13 @@ func (dev *Device) SyncVtepInfo() error {
 
 		// Duplicate append action will not case error.
 		if err := netlink.NeighAppend(&broadcastFdbEntry); err != nil {
-			return fmt.Errorf("append broadcast fdb entry %v for interface %v failed: %v", broadcastFdbEntry.String(), dev.link.Name, err)
+			return fmt.Errorf("failed to append broadcast fdb entry %v for interface %v: %v", broadcastFdbEntry.String(), dev.link.Name, err)
 		}
 	}
 
 	fdbEntryList, err := netlink.NeighList(dev.link.Attrs().Index, syscall.AF_BRIDGE)
 	if err != nil {
-		return fmt.Errorf("list neigh failed: %v", err)
+		return fmt.Errorf("failed to list neigh: %v", err)
 	}
 
 	for _, entry := range fdbEntryList {
@@ -159,7 +159,7 @@ func (dev *Device) SyncVtepInfo() error {
 				entry.HardwareAddr.String() != broadcastFdbMac.String() && entry.HardwareAddr != nil) {
 			entry.Family = syscall.AF_BRIDGE
 			if err := netlink.NeighDel(&entry); err != nil {
-				return fmt.Errorf("delete fdb entry %v for interface %v failed: %v", entry.String(), dev.link.Name, err)
+				return fmt.Errorf("failed to delete fdb entry %v for interface %v: %v", entry.String(), dev.link.Name, err)
 			}
 		}
 	}
@@ -179,7 +179,7 @@ func ensureLink(vxlan *netlink.Vxlan) (*netlink.Vxlan, error) {
 		incompat := vxlanLinksIncompat(vxlan, existing)
 		if incompat == "" {
 			if err := netlink.LinkSetUp(existing); err != nil {
-				return nil, fmt.Errorf("set link %v up failed: %v", existing.Attrs().Name, err)
+				return nil, fmt.Errorf("failed to set link %v up: %v", existing.Attrs().Name, err)
 			}
 
 			return existing.(*netlink.Vxlan), nil
@@ -210,7 +210,7 @@ func ensureLink(vxlan *netlink.Vxlan) (*netlink.Vxlan, error) {
 	}
 
 	if err := netlink.LinkSetUp(link); err != nil {
-		return nil, fmt.Errorf("set link %v up failed: %v", link.Attrs().Name, err)
+		return nil, fmt.Errorf("failed to set link %v up: %v", link.Attrs().Name, err)
 	}
 
 	return vxlan, nil

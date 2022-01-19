@@ -7,6 +7,7 @@ require (
 	github.com/containernetworking/plugins v0.0.0-00010101000000-000000000000
 	github.com/coreos/go-iptables v0.6.0
 	github.com/emicklei/go-restful v2.15.0+incompatible
+	github.com/go-logr/logr v0.3.0
 	github.com/gogf/gf v1.16.6
 	github.com/heptiolabs/healthcheck v0.0.0-20211123025425-613501dd5deb
 	github.com/json-iterator/go v1.1.12

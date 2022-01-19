@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"net"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -37,16 +39,16 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog"
 )
 
 type nodeReconciler struct {
 	client.Client
-	controllerRef *Controller
+	ctrlHubRef *CtrlHub
 }
 
 func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	klog.Info("Reconciling node information")
+	logger := log.FromContext(ctx)
+	logger.Info("Reconciling node information")
 
 	networkList := &networkingv1.NetworkList{}
 	if err := r.List(ctx, networkList); err != nil {
@@ -66,16 +68,16 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
-	link, err := netlink.LinkByName(r.controllerRef.config.NodeVxlanIfName)
+	link, err := netlink.LinkByName(r.ctrlHubRef.config.NodeVxlanIfName)
 	if err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("get node vxlan interface %v failed: %v",
-			r.controllerRef.config.NodeVxlanIfName, err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to get node vxlan interface %v: %v",
+			r.ctrlHubRef.config.NodeVxlanIfName, err)
 	}
 
 	// Use parent's valid ipv4 address first, try ipv6 address if no valid ipv4 address exist.
 	existParentAddrList, err := containernetwork.ListAllAddress(link)
 	if err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("list address for vxlan parent link %v failed %v",
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list address for vxlan parent link %v: %v",
 			link.Attrs().Name, err)
 	}
 
@@ -93,9 +95,9 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	thisNode := &corev1.Node{}
-	if err := r.Get(ctx, types.NamespacedName{Name: r.controllerRef.config.NodeName}, thisNode); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("get this node %v object failed: %v",
-			r.controllerRef.config.NodeName, err)
+	if err := r.Get(ctx, types.NamespacedName{Name: r.ctrlHubRef.config.NodeName}, thisNode); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to get this node %v object: %v",
+			r.ctrlHubRef.config.NodeName, err)
 	}
 
 	preVtepIP, exist := thisNode.Annotations[constants.AnnotationNodeVtepIP]
@@ -115,14 +117,14 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 	vtepMac := link.Attrs().HardwareAddr
 
-	vxlanLinkName, err := containernetwork.GenerateVxlanNetIfName(r.controllerRef.config.NodeVxlanIfName, overlayNetID)
+	vxlanLinkName, err := containernetwork.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, overlayNetID)
 	if err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("generate vxlan interface name failed: %v", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan interface name: %v", err)
 	}
 
 	existAllAddrList, err := containernetwork.ListLocalAddressExceptLink(vxlanLinkName)
 	if err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("list address for all interfaces failed: %v", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list address for all interfaces: %v", err)
 	}
 
 	var nodeLocalVxlanAddr []netlink.Addr
@@ -142,7 +144,7 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		}
 
 		// Add extra node local vxlan ip.
-		for _, cidr := range r.controllerRef.config.ExtraNodeLocalVxlanIPCidrs {
+		for _, cidr := range r.ctrlHubRef.config.ExtraNodeLocalVxlanIPCidrs {
 			if cidr.Contains(addr.IP) {
 				nodeLocalVxlanAddr = append(nodeLocalVxlanAddr, addr)
 			}
@@ -154,21 +156,21 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		constants.AnnotationNodeVtepMac, vtepMac.String(),
 		constants.AnnotationNodeLocalVxlanIPList, containernetwork.GenerateIPListString(nodeLocalVxlanAddr))
 
-	if err := r.controllerRef.mgr.GetClient().Patch(context.TODO(),
+	if err := r.ctrlHubRef.mgr.GetClient().Patch(context.TODO(),
 		thisNode, client.RawPatch(types.StrategicMergePatchType, []byte(patchData))); err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("update node label error: %v", err)
 	}
 
 	nodeList := &corev1.NodeList{}
 	if err := r.List(ctx, nodeList); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("list node failed: %v", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed list node: %v", err)
 	}
 
 	vxlanDev, err := vxlan.NewVxlanDevice(vxlanLinkName, int(*overlayNetID),
-		r.controllerRef.config.NodeVxlanIfName, vtepIP, r.controllerRef.config.VxlanUDPPort,
-		r.controllerRef.config.VxlanBaseReachableTime, true)
+		r.ctrlHubRef.config.NodeVxlanIfName, vtepIP, r.ctrlHubRef.config.VxlanUDPPort,
+		r.ctrlHubRef.config.VxlanBaseReachableTime, true)
 	if err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("create vxlan device %v failed: %v", vxlanLinkName, err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to create vxlan device %v: %v", vxlanLinkName, err)
 	}
 
 	nodeLocalVxlanAddrMap := map[string]bool{}
@@ -178,7 +180,7 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 
 	vxlanDevAddrList, err := containernetwork.ListAllAddress(vxlanDev.Link())
 	if err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("list address for vxlan interface %v failed: %v",
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list address for vxlan interface %v: %v",
 			vxlanDev.Link().Name, err)
 	}
 
@@ -195,7 +197,7 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 				Label: "",
 				Flags: unix.IFA_F_NOPREFIXROUTE,
 			}); err != nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("set addr %v to link %v failed: %v",
+				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to set addr %v to link %v: %v",
 					addr.IP.String(), vxlanDev.Link().Name, err)
 			}
 		}
@@ -205,7 +207,7 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	for _, addr := range vxlanDevAddrList {
 		if _, exist := nodeLocalVxlanAddrMap[addr.IP.String()]; !exist {
 			if err := netlink.AddrDel(vxlanDev.Link(), &addr); err != nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("del addr %v for link %v failed: %v", addr.IP.String(), vxlanDev.Link().Name, err)
+				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to del addr %v for link %v: %v", addr.IP.String(), vxlanDev.Link().Name, err)
 			}
 		}
 	}
@@ -214,19 +216,19 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
 			node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
 			node.Annotations[constants.AnnotationNodeLocalVxlanIPList] == "" {
-			klog.Infof("node %v's vtep information has not been updated", node.Name)
+			logger.Info("node's vtep information has not been updated", "node", node.Name)
 			continue
 		}
 
 		vtepMac, err := net.ParseMAC(node.Annotations[constants.AnnotationNodeVtepMac])
 		if err != nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("parse node vtep mac string %v failed: %v",
+			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse node vtep mac string %v: %v",
 				node.Annotations[constants.AnnotationNodeVtepMac], err)
 		}
 
 		vtepIP := net.ParseIP(node.Annotations[constants.AnnotationNodeVtepIP])
 		if vtepIP == nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("parse node vtep ip string %v failed",
+			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse node vtep ip string %v",
 				node.Annotations[constants.AnnotationNodeVtepIP])
 		}
 
@@ -238,19 +240,19 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	if feature.MultiClusterEnabled() {
 		remoteVtepList := &networkingv1.RemoteVtepList{}
 		if err = r.List(ctx, remoteVtepList); err != nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("list remote vtep failed: %v", err)
+			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list remote vtep: %v", err)
 		}
 
 		for _, remoteVtep := range remoteVtepList.Items {
 			vtepMac, err := net.ParseMAC(remoteVtep.Spec.VtepMAC)
 			if err != nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("parse remote vtep mac string %v failed: %v",
+				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse remote vtep mac string %v: %v",
 					remoteVtep.Spec.VtepMAC, err)
 			}
 
 			vtepIP := net.ParseIP(remoteVtep.Spec.VtepIP)
 			if vtepIP == nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("parse remote vtep ip string %v failed",
+				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse remote vtep ip string %v",
 					remoteVtep.Spec.VtepIP)
 			}
 
@@ -258,16 +260,16 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		}
 	}
 
-	if err := r.controllerRef.nodeIPCache.UpdateNodeIPs(nodeList.Items, r.controllerRef.config.NodeName, remoteVtepList); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("update node ip cache failed: %v", err)
+	if err := r.ctrlHubRef.nodeIPCache.UpdateNodeIPs(nodeList.Items, r.ctrlHubRef.config.NodeName, remoteVtepList); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to update node ip cache: %v", err)
 	}
 
 	if err := vxlanDev.SyncVtepInfo(); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("sync vtep info for vxlan device %v failed: %v",
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync vtep info for vxlan device %v: %v",
 			vxlanDev.Link().Name, err)
 	}
 
-	r.controllerRef.iptablesSyncTrigger()
+	r.ctrlHubRef.iptablesSyncTrigger()
 
 	return reconcile.Result{}, nil
 }

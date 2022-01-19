@@ -162,8 +162,8 @@ func ParseFlags() (*Configuration, error) {
 		var err error
 		config.ExtraNodeLocalVxlanIPCidrs, err = parseCidrString(*argExtraNodeLocalVxlanIPCidrs)
 		if err != nil {
-			klog.Errorf("parse extra node local vxlan ip cidrs failed: %v", err)
-			return nil, fmt.Errorf("parse extra node local vxlan ip cidrs failed: %v", err)
+			klog.Errorf("failed to parse extra node local vxlan ip cidrs: %v", err)
+			return nil, fmt.Errorf("failed to parse extra node local vxlan ip cidrs: %v", err)
 		}
 	}
 
@@ -178,12 +178,12 @@ func ParseFlags() (*Configuration, error) {
 func (config *Configuration) initNicConfig() error {
 	defaultGatewayIf, err := containernetwork.GetDefaultInterface(netlink.FAMILY_V4)
 	if err != nil && err != daemonutils.NotExist {
-		return fmt.Errorf("get ipv4 default gateway interface failed: %v", err)
+		return fmt.Errorf("failed to get ipv4 default gateway interface: %v", err)
 	} else if err == daemonutils.NotExist {
 		// IPv4 default gateway interface not found, check IPv6.
 		defaultGatewayIf, err = containernetwork.GetDefaultInterface(netlink.FAMILY_V6)
 		if err != nil && err != daemonutils.NotExist {
-			return fmt.Errorf("get ipv6 default gateway interface failed: %v", err)
+			return fmt.Errorf("failed to get ipv6 default gateway interface: %v", err)
 		}
 	}
 
@@ -197,14 +197,14 @@ func (config *Configuration) initNicConfig() error {
 
 	vlanNodeInterface, err := containernetwork.GetInterfaceByPreferString(config.NodeVlanIfName)
 	if err != nil {
-		return fmt.Errorf("get vlan node interface failed: %v", err)
+		return fmt.Errorf("failed to get vlan node interface: %v", err)
 	}
 	// To update prefer result interface.
 	config.NodeVlanIfName = vlanNodeInterface.Name
 
 	vxlanNodeInterface, err := containernetwork.GetInterfaceByPreferString(config.NodeVxlanIfName)
 	if err != nil {
-		return fmt.Errorf("get vxlan node interface failed: %v", err)
+		return fmt.Errorf("failed to get vxlan node interface: %v", err)
 	}
 	// To update prefer result interface.
 	config.NodeVxlanIfName = vxlanNodeInterface.Name
@@ -230,7 +230,7 @@ func parseCidrString(cidrListString string) ([]*net.IPNet, error) {
 	for _, cidrString := range cidrStringList {
 		_, cidr, err := net.ParseCIDR(cidrString)
 		if err != nil {
-			return nil, fmt.Errorf("parse cidr %v failed: %v", cidrString, err)
+			return nil, fmt.Errorf("failed to parse cidr %v: %v", cidrString, err)
 		}
 
 		cidrList = append(cidrList, cidr)
