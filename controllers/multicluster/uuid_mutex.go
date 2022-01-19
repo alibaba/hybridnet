@@ -101,13 +101,21 @@ func NewUUIDMutex() UUIDMutex {
 
 func NewUUIDMutexFromClient(c client.Client) (UUIDMutex, error) {
 	mutex := NewUUIDMutex()
+	localUUID, err := utils.GetClusterUUID(c)
+	if err != nil {
+		return nil, err
+	}
+	mutex.Lock(localUUID, "LocalCluster")
+
 	remoteClusterList, err := utils.ListRemoteClusters(c)
 	if err != nil {
 		return nil, err
 	}
 	for i := range remoteClusterList.Items {
 		var remoteCluster = &remoteClusterList.Items[i]
-		mutex.Lock(remoteCluster.Status.UUID, remoteCluster.Name)
+		if len(remoteCluster.Status.UUID) > 0 {
+			mutex.Lock(remoteCluster.Status.UUID, remoteCluster.Name)
+		}
 	}
 	return mutex, nil
 }
