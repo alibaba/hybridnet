@@ -174,6 +174,13 @@ func CalculateCapacity(ar *AddressRange) int64 {
 	return capacity(start, end) - int64(len(ar.ExcludeIPs))
 }
 
+func IsAvailable(statistics *Count) bool {
+	if statistics == nil {
+		return false
+	}
+	return statistics.Available > 0
+}
+
 func lastIP(subnet *net.IPNet) net.IP {
 	var end net.IP
 	for i := 0; i < len(subnet.IP); i++ {

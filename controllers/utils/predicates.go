@@ -67,6 +67,39 @@ func (NetworkSpecChangePredicate) Update(e event.UpdateEvent) bool {
 	return !reflect.DeepEqual(oldNetwork.Spec.NetID, newNetwork.Spec.NetID) || !reflect.DeepEqual(oldNetwork.Spec.NodeSelector, newNetwork.Spec.NodeSelector)
 }
 
+type NetworkStatusChangePredicate struct {
+	predicate.Funcs
+}
+
+func (NetworkStatusChangePredicate) Update(e event.UpdateEvent) bool {
+	oldNetwork, ok := e.ObjectOld.(*networkingv1.Network)
+	if !ok {
+		return false
+	}
+
+	newNetwork, ok := e.ObjectNew.(*networkingv1.Network)
+	if !ok {
+		return false
+	}
+
+	// change indicators
+	// 1. node list
+	// 2. statistics change between zero and non-zero
+	if !reflect.DeepEqual(oldNetwork.Status.NodeList, newNetwork.Status.NodeList) {
+		return true
+	}
+	if networkingv1.IsAvailable(oldNetwork.Status.Statistics) != networkingv1.IsAvailable(newNetwork.Status.Statistics) {
+		return true
+	}
+	if networkingv1.IsAvailable(oldNetwork.Status.IPv6Statistics) != networkingv1.IsAvailable(newNetwork.Status.IPv6Statistics) {
+		return true
+	}
+	if networkingv1.IsAvailable(oldNetwork.Status.DualStackStatistics) != networkingv1.IsAvailable(newNetwork.Status.DualStackStatistics) {
+		return true
+	}
+	return false
+}
+
 type SubnetSpecChangePredicate struct {
 	predicate.Funcs
 }

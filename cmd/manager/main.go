@@ -128,6 +128,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&networking.QuotaReconciler{
+		Client: mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		entryLog.Error(err, "unable to inject controller", "controller", "QuotaController")
+		os.Exit(1)
+	}
+
 	if feature.MultiClusterEnabled() {
 		uuidMutex, err := multicluster.NewUUIDMutexFromClient(mgr.GetClient())
 		if err != nil {
