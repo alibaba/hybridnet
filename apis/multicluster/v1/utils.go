@@ -14,13 +14,14 @@
  limitations under the License.
 */
 
-package utils
+package v1
 
-func PickFirstNonEmptyString(ss ...string) string {
-	for _, s := range ss {
-		if len(s) > 0 {
-			return s
-		}
+import networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
+
+func GetRemoteSubnetType(remoteSubnetObj *RemoteSubnet) networkingv1.NetworkType {
+	if remoteSubnetObj == nil || len(remoteSubnetObj.Spec.Type) == 0 {
+		return networkingv1.NetworkTypeUnderlay
 	}
-	return ""
+
+	return remoteSubnetObj.Spec.Type
 }

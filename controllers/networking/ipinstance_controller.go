@@ -19,44 +19,86 @@ package networking
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
+	"github.com/alibaba/hybridnet/controllers/utils"
+	"github.com/alibaba/hybridnet/pkg/feature"
 )
 
 // IPInstanceReconciler reconciles a IPInstance object
 type IPInstanceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+
+	// TODO: construct
+	IPAMManager IPAMManager
+	IPAMStore   IPAMStore
 }
 
 //+kubebuilder:rbac:groups=networking.alibaba.com,resources=ipinstances,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.alibaba.com,resources=ipinstances/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=networking.alibaba.com,resources=ipinstances/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the IPInstance object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *IPInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	log := ctrllog.FromContext(ctx)
 
-	// your logic here
+	var err error
+	var ip networkingv1.IPInstance
+	if err = r.Get(ctx, req.NamespacedName, &ip); err != nil {
+		log.Error(err, "unable to fetch IPInstance")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if !ip.DeletionTimestamp.IsZero() {
+		if err = r.releaseIP(&ip); err != nil {
+			log.Error(err, "unable to release IPInstance")
+			return ctrl.Result{}, err
+		}
+	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *IPInstanceReconciler) releaseIP(ipInstance *networkingv1.IPInstance) (err error) {
+	if feature.DualStackEnabled() {
+		if err = r.IPAMManager.DualStack().Release(utils.ToIPFamilyMode(networkingv1.IsIPv6IPInstance(ipInstance)),
+			ipInstance.Spec.Network,
+			[]string{
+				ipInstance.Spec.Subnet,
+			},
+			[]string{
+				utils.ToIPFormat(ipInstance.Name),
+			},
+		); err != nil {
+			return err
+		}
+		if err = r.IPAMStore.DualStack().IPUnBind(ipInstance.Namespace, ipInstance.Name); err != nil {
+			return err
+		}
+	} else {
+		if err = r.IPAMManager.Release(ipInstance.Spec.Network, ipInstance.Spec.Subnet, utils.ToIPFormat(ipInstance.Name)); err != nil {
+			return err
+		}
+		if err = r.IPAMStore.IPUnBind(ipInstance.Namespace, ipInstance.Name); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *IPInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1.IPInstance{}).
+		WithEventFilter(utils.IgnoreDeletePredicate{}).
+		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 1,
+			Log:                     mgr.GetLogger().WithName("IPInstanceController"),
+		}).
 		Complete(r)
 }

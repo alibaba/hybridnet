@@ -24,30 +24,25 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apitypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/utils/mac"
 )
 
 type DualStackWorker struct {
-	kubeClient      kubernetes.Interface
-	hybridnetClient versioned.Interface
-	worker          *Worker
+	client.Client
+	worker *Worker
 }
 
-func NewDualStackWorker(kubeClient kubernetes.Interface, hybridnetClient versioned.Interface) *DualStackWorker {
+func NewDualStackWorker(c client.Client) *DualStackWorker {
 	return &DualStackWorker{
-		kubeClient:      kubeClient,
-		hybridnetClient: hybridnetClient,
+		Client: c,
 		worker: &Worker{
-			kubeClient:      kubeClient,
-			hybridnetClient: hybridnetClient,
+			Client: c,
 		},
 	}
 }
@@ -159,8 +154,15 @@ func (d *DualStackWorker) SyncNetworkUsage(name string, usages [3]*types.Usage) 
 	)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err = d.hybridnetClient.NetworkingV1().Networks().Patch(context.TODO(), name, apitypes.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
-		return err
+		return d.Status().Patch(context.TODO(),
+			&networkingv1.Network{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: name,
+				},
+			}, client.RawPatch(
+				apitypes.MergePatchType,
+				[]byte(patchBody),
+			))
 	})
 }
 
@@ -174,17 +176,17 @@ func (d *DualStackWorker) SyncNetworkStatus(name, nodes, subnets string) (err er
 
 func (d *DualStackWorker) patchIPsToPod(pod *v1.Pod, IPs []*types.IP) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := d.kubeClient.CoreV1().Pods(pod.Namespace).Patch(context.TODO(),
-			pod.Name,
-			apitypes.MergePatchType,
-			[]byte(fmt.Sprintf(
-				`{"metadata":{"annotations":{%q:%q}}}`,
-				constants.AnnotationIP,
-				marshalIPs(IPs),
-			)),
-			metav1.PatchOptions{},
+		return d.Patch(context.TODO(),
+			pod,
+			client.RawPatch(
+				apitypes.MergePatchType,
+				[]byte(fmt.Sprintf(
+					`{"metadata":{"annotations":{%q:%q}}}`,
+					constants.AnnotationIP,
+					marshalIPs(IPs),
+				)),
+			),
 		)
-		return err
 	})
 }
 

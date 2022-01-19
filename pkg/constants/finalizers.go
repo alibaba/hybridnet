@@ -17,3 +17,4 @@
 package constants
 
 const FinalizerIPAllocated = "networking.alibaba.com/ip-allocated"
+const FinalizerManagerRuntimeRegistered = "multicluster.alibaba.com/manager-runtime-registered"

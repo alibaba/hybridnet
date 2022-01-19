@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
@@ -146,6 +146,29 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 				constants.LabelUnderlayNetworkAttachment: constants.Attached,
 			})
 		}
+		// quota label selector to make sure pod will be scheduled on nodes
+		// where capacity of network is enough
+		if feature.DualStackEnabled() {
+			switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
+			case ipamtypes.IPv4Only:
+				pod = patchSelectorToPod(pod, map[string]string{
+					constants.LabelIPv4AddressQuota: constants.QuotaNonEmpty,
+				})
+			case ipamtypes.IPv6Only:
+				pod = patchSelectorToPod(pod, map[string]string{
+					constants.LabelIPv6AddressQuota: constants.QuotaNonEmpty,
+				})
+			case ipamtypes.DualStack:
+				pod = patchSelectorToPod(pod, map[string]string{
+					constants.LabelDualStackAddressQuota: constants.QuotaNonEmpty,
+				})
+			}
+		} else {
+			pod = patchSelectorToPod(pod, map[string]string{
+				constants.LabelAddressQuota: constants.QuotaNonEmpty,
+			})
+		}
+
 	case ipamtypes.Overlay:
 		klog.Infof("[mutating] patch pod %s/%s with overlay attachment selector", req.Namespace, req.Name)
 		pod = patchSelectorToPod(pod, map[string]string{
@@ -153,26 +176,6 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		})
 	default:
 		return admission.Errored(http.StatusBadRequest, fmt.Errorf("unknown network type %s", networkType))
-	}
-
-	// Patch extra node selectors for pod when dual stack mode,
-	// capacity check of overlay network is in validation process, so extra
-	// label selectors is not required
-	if feature.DualStackEnabled() && networkType == ipamtypes.Underlay {
-		switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
-		case ipamtypes.IPv4Only:
-			pod = patchSelectorToPod(pod, map[string]string{
-				constants.LabelIPv4AddressQuota: constants.QuotaNonEmpty,
-			})
-		case ipamtypes.IPv6Only:
-			pod = patchSelectorToPod(pod, map[string]string{
-				constants.LabelIPv6AddressQuota: constants.QuotaNonEmpty,
-			})
-		case ipamtypes.DualStack:
-			pod = patchSelectorToPod(pod, map[string]string{
-				constants.LabelDualStackAddressQuota: constants.QuotaNonEmpty,
-			})
-		}
 	}
 
 	return generatePatchResponseFromPod(req.Object.Raw, pod)

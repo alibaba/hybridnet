@@ -24,13 +24,14 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 var (
 	rsLock          = sync.Mutex{}
-	remoteSubnetGVK = gvkConverter(networkingv1.SchemeGroupVersion.WithKind("RemoteSubnet"))
+	remoteSubnetGVK = gvkConverter(multiclusterv1.GroupVersion.WithKind("RemoteSubnet"))
 )
 
 func init() {
@@ -44,7 +45,7 @@ func RemoteSubnetCreateValidation(ctx context.Context, req *admission.Request, h
 	defer rsLock.Unlock()
 
 	var err error
-	var remoteSubnet = &networkingv1.RemoteSubnet{}
+	var remoteSubnet = &multiclusterv1.RemoteSubnet{}
 	if err = handler.Decoder.Decode(*req, remoteSubnet); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
@@ -60,7 +61,7 @@ func RemoteSubnetCreateValidation(ctx context.Context, req *admission.Request, h
 		}
 	}
 
-	var remoteSubnetList = &networkingv1.RemoteSubnetList{}
+	var remoteSubnetList = &multiclusterv1.RemoteSubnetList{}
 	if err = handler.Client.List(ctx, remoteSubnetList); err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}

@@ -18,29 +18,55 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
-
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // RemoteClusterSpec defines the desired state of RemoteCluster
 type RemoteClusterSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of RemoteCluster. Edit remotecluster_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// APIEndpoint is the API endpoint of the member cluster. This can be a hostname,
+	// hostname:port, IP or IP:port.
+	// +kubuilder:validation:Required
+	APIEndpoint string `json:"apiEndpoint"`
+	// CAData holds PEM-encoded bytes (typically read from a root certificates bundle).
+	// CAData takes precedence over CAFile
+	// +kubuilder:validation:Optional
+	CAData []byte `json:"caData,omitempty"`
+	// CertData holds PEM-encoded bytes (typically read from a client certificate file).
+	// CertData takes precedence over CertFile
+	// +kubuilder:validation:Optional
+	CertData []byte `json:"certData,omitempty"`
+	// KeyData holds PEM-encoded bytes (typically read from a client certificate key file).
+	// KeyData takes precedence over KeyFile
+	// +kubuilder:validation:Optional
+	KeyData []byte `json:"keyData,omitempty"`
+	// Timeout is the maximum length of time to wait before giving up on a server request.
+	// A value of zero means no timeout.
+	Timeout int32 `json:"timeout,omitempty"`
 }
 
 // RemoteClusterStatus defines the observed state of RemoteCluster
 type RemoteClusterStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// UUID is the unique in time and space value for this object.
+	// +kubebuilder:validation:Optional
+	UUID types.UID `json:"uuid,omitempty"`
+	// State is the current state of cluster.
+	// +kubebuilder:validation:Optional
+	State ClusterState `json:"state,omitempty"`
+	// Conditions represents the observations of a cluster's current state.
+	// +kubebuilder:validation:Optional
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:scope=Cluster
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="APIEndpoint",type=string,JSONPath=`.spec.apiEndpoint`
+// +kubebuilder:printcolumn:name="UUID",type=string,JSONPath=`.status.uuid`
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 
 // RemoteCluster is the Schema for the remoteclusters API
 type RemoteCluster struct {
