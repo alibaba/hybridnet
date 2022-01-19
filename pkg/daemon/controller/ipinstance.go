@@ -33,13 +33,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
-	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 )
 
 type ipInstanceReconciler struct {

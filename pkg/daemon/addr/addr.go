@@ -20,13 +20,14 @@ import (
 	"fmt"
 	"net"
 
-	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 
-	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
+
+	"github.com/alibaba/hybridnet/pkg/constants"
 )
 
 type subnetToPodMap map[string]net.IP

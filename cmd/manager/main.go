@@ -28,8 +28,8 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
-	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/controllers/multicluster"
 	"github.com/alibaba/hybridnet/pkg/controllers/networking"
 	"github.com/alibaba/hybridnet/pkg/feature"

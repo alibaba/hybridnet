@@ -23,8 +23,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
-	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 )
 
 // IgnoreDeletePredicate will ignore the delete event, if finalizer is used,

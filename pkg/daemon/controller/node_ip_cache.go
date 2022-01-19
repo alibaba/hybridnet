@@ -19,9 +19,10 @@ import (
 	"strings"
 	"sync"
 
-	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
-	"github.com/alibaba/hybridnet/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
+
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
 )
 
 type NodeIPCache struct {

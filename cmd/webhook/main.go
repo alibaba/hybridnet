@@ -30,8 +30,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
-	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/webhook/mutating"
 	"github.com/alibaba/hybridnet/pkg/webhook/validating"

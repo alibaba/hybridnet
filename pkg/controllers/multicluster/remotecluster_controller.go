@@ -32,7 +32,7 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/managerruntime"

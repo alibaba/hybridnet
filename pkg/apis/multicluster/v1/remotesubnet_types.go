@@ -19,7 +19,7 @@ package v1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 )
 
 // RemoteSubnetSpec defines the desired state of RemoteSubnet

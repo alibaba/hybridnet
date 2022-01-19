@@ -22,7 +22,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 )
 
 func NewRestConfigFromRemoteCluster(remoteCluster *multiclusterv1.RemoteCluster) (*rest.Config, error) {

@@ -17,11 +17,12 @@
 package controller
 
 import (
-	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
-	"github.com/alibaba/hybridnet/pkg/constants"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
 )
 
 // add handler for RemoteVtep and RemoteSubnet
