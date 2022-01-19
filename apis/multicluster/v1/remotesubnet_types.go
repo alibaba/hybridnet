@@ -18,29 +18,42 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
+)
 
 // RemoteSubnetSpec defines the desired state of RemoteSubnet
 type RemoteSubnetSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of RemoteSubnet. Edit remotesubnet_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Range is the IP collection of this remote subnet.
+	// +kubebuilder:validation:Required
+	Range networkingv1.AddressRange `json:"range"`
+	// Type is the network type of this remote subnet.
+	// Now there are two known types, Overlay and Underlay.
+	// +kubebuilder:validation:Required
+	Type networkingv1.NetworkType `json:"networkType,omitempty"`
+	// ClusterName is the name of parent cluster who owns this remote subnet.
+	// +kubebuilder:validation:Required
+	ClusterName string `json:"clusterName,omitempty"`
 }
 
 // RemoteSubnetStatus defines the observed state of RemoteSubnet
 type RemoteSubnetStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// LastModifyTime shows the last timestamp when the remote subnet was updated.
+	// +kubebuilder:validation:Optional
+	LastModifyTime metav1.Time `json:"lastModifyTime,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:scope=Cluster
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.range.version`
+// +kubebuilder:printcolumn:name="CIDR",type=string,JSONPath=`.spec.range.cidr`
+// +kubebuilder:printcolumn:name="Start",type=string,JSONPath=`.spec.range.start`
+// +kubebuilder:printcolumn:name="End",type=string,JSONPath=`.spec.range.end`
+// +kubebuilder:printcolumn:name="Gateway",type=string,JSONPath=`.spec.range.gateway`
+// +kubebuilder:printcolumn:name="NetworkType",type=string,JSONPath=`.spec.range.networkType`
+// +kubebuilder:printcolumn:name="ClusterName",type=string,JSONPath=`.spec.clusterName`
+// +kubebuilder:printcolumn:name="LastModifyTime",type=date,JSONPath=`.status.lastModifyTime`
 
 // RemoteSubnet is the Schema for the remotesubnets API
 type RemoteSubnet struct {

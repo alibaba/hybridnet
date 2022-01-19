@@ -23,7 +23,8 @@ import (
 	"reflect"
 	"strings"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/utils"
@@ -39,7 +40,7 @@ const (
 	MaxSubnetCapacity = 1 << 16
 )
 
-var subnetGVK = gvkConverter(networkingv1.SchemeGroupVersion.WithKind("Subnet"))
+var subnetGVK = gvkConverter(networkingv1.GroupVersion.WithKind("Subnet"))
 
 func init() {
 	createHandlers[subnetGVK] = SubnetCreateValidation
@@ -119,7 +120,7 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 	}
 
 	if feature.MultiClusterEnabled() {
-		rcSubnetList := &networkingv1.RemoteSubnetList{}
+		rcSubnetList := &multiclusterv1.RemoteSubnetList{}
 		if err = handler.Client.List(ctx, rcSubnetList); err != nil {
 			return admission.Errored(http.StatusInternalServerError, err)
 		}

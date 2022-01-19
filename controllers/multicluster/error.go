@@ -14,13 +14,13 @@
  limitations under the License.
 */
 
-package utils
+package multicluster
 
-func PickFirstNonEmptyString(ss ...string) string {
-	for _, s := range ss {
-		if len(s) > 0 {
-			return s
-		}
+import "fmt"
+
+func wrapError(wrapMessage string, err error) error {
+	if err == nil {
+		return nil
 	}
-	return ""
+	return fmt.Errorf("%s: %v", wrapMessage, err)
 }

@@ -22,14 +22,15 @@ import (
 	"net/http"
 	"reflect"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/feature"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-var networkGVK = gvkConverter(networkingv1.SchemeGroupVersion.WithKind("Network"))
+var networkGVK = gvkConverter(networkingv1.GroupVersion.WithKind("Network"))
 
 func init() {
 	createHandlers[networkGVK] = NetworkCreateValidation
@@ -127,7 +128,7 @@ func NetworkDeleteValidation(ctx context.Context, req *admission.Request, handle
 	}
 
 	if network.Spec.Type == networkingv1.NetworkTypeOverlay && feature.MultiClusterEnabled() {
-		remoteClusterList := &networkingv1.RemoteClusterList{}
+		remoteClusterList := &multiclusterv1.RemoteClusterList{}
 		if err = handler.Client.List(ctx, remoteClusterList); err != nil {
 			return admission.Errored(http.StatusInternalServerError, err)
 		}

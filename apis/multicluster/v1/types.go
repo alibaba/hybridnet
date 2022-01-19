@@ -14,13 +14,20 @@
  limitations under the License.
 */
 
-package utils
+package v1
 
-func PickFirstNonEmptyString(ss ...string) string {
-	for _, s := range ss {
-		if len(s) > 0 {
-			return s
-		}
-	}
-	return ""
+type ClusterState string
+
+const (
+	ClusterReady    = ClusterState("Ready")
+	ClusterNotReady = ClusterState("NotReady")
+	ClusterOffline  = ClusterState("Offline")
+	ClusterUnknown  = ClusterState("Unknown")
+)
+
+type VTEPInfo struct {
+	// +kubebuilder:validation:Required
+	IP string `json:"ip,omitempty"`
+	// +kubebuilder:validation:Required
+	MAC string `json:"mac,omitempty"`
 }

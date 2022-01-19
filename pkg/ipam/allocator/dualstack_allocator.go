@@ -74,6 +74,23 @@ func (d *DualStackAllocator) Usage(networkName string) ([3]*types.Usage, map[str
 	return network.DualStackUsage()
 }
 
+func (d *DualStackAllocator) SubnetUsage(networkName, subnetName string) (*types.Usage, error) {
+	d.RLock()
+	defer d.RUnlock()
+
+	network, err := d.Networks.GetNetwork(networkName)
+	if err != nil {
+		return nil, fmt.Errorf("fail to get network %s: %v", networkName, err)
+	}
+
+	subnet, err := network.GetSubnet(subnetName)
+	if err != nil {
+		return nil, fmt.Errorf("fail to get subnet %s: %v", subnetName, err)
+	}
+
+	return subnet.Usage(), nil
+}
+
 func (d *DualStackAllocator) Allocate(ipFamilyMode types.IPFamilyMode, network string, subnets []string, podName, podNamespace string) (IPs []*types.IP, err error) {
 	d.Lock()
 	defer d.Unlock()

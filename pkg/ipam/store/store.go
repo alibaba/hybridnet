@@ -22,16 +22,15 @@ import (
 	"fmt"
 	"strings"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
@@ -39,18 +38,16 @@ import (
 )
 
 type Worker struct {
-	kubeClient      kubernetes.Interface
-	hybridnetClient versioned.Interface
+	client.Client
 }
 
-func NewWorker(kubeClient kubernetes.Interface, hybridnetClient versioned.Interface) *Worker {
+func NewWorker(client client.Client) *Worker {
 	return &Worker{
-		kubeClient:      kubeClient,
-		hybridnetClient: hybridnetClient,
+		Client: client,
 	}
 }
 
-func (w *Worker) Couple(pod *v1.Pod, ip *ipamtypes.IP) (err error) {
+func (w *Worker) Couple(pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
 	var ipInstance *networkingv1.IPInstance
 
 	ipInstance, err = w.createIP(pod, ip)
@@ -77,7 +74,7 @@ func (w *Worker) Couple(pod *v1.Pod, ip *ipamtypes.IP) (err error) {
 	return w.patchIPtoPod(pod, ip)
 }
 
-func (w *Worker) ReCouple(pod *v1.Pod, ip *ipamtypes.IP) (err error) {
+func (w *Worker) ReCouple(pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
 	var ipInstance *networkingv1.IPInstance
 
 	ipInstance, err = w.getIP(pod.Namespace, ip)
@@ -99,16 +96,14 @@ func (w *Worker) ReCouple(pod *v1.Pod, ip *ipamtypes.IP) (err error) {
 	return w.patchIPtoPod(pod, ip)
 }
 
-func (w *Worker) DeCouple(pod *v1.Pod) (err error) {
+func (w *Worker) DeCouple(pod *corev1.Pod) (err error) {
 	if len(pod.Annotations[constants.AnnotationIP]) == 0 {
 		return
 	}
 
-	var ipInstanceList *networkingv1.IPInstanceList
-	if ipInstanceList, err = w.hybridnetClient.NetworkingV1().IPInstances(pod.Namespace).List(context.TODO(), metav1.ListOptions{
-		LabelSelector: metav1.SetAsLabelSelector(map[string]string{
-			constants.LabelPod: pod.Name,
-		}).String(),
+	var ipInstanceList = &networkingv1.IPInstanceList{}
+	if err = w.List(context.TODO(), ipInstanceList, client.MatchingLabels{
+		constants.LabelPod: pod.Name,
 	}); err != nil {
 		return err
 	}
@@ -129,8 +124,18 @@ func (w *Worker) IPRecycle(namespace string, ip *ipamtypes.IP) (err error) {
 func (w *Worker) IPUnBind(namespace, ip string) (err error) {
 	patchBody := `{"metadata":{"finalizers":null}}`
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err = w.hybridnetClient.NetworkingV1().IPInstances(namespace).Patch(context.TODO(), ip, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{})
-		return err
+		return w.Patch(context.TODO(),
+			&networkingv1.IPInstance{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace,
+					Name:      ip,
+				},
+			},
+			client.RawPatch(
+				types.MergePatchType,
+				[]byte(patchBody),
+			),
+		)
 	})
 }
 
@@ -142,8 +147,17 @@ func (w *Worker) SyncNetworkStatus(name, nodeList, subnetList string) (err error
 	)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err = w.hybridnetClient.NetworkingV1().Networks().Patch(context.TODO(), name, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
-		return err
+		return w.Status().Patch(context.TODO(),
+			&networkingv1.Network{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: name,
+				},
+			},
+			client.RawPatch(
+				types.MergePatchType,
+				[]byte(patchBody),
+			),
+		)
 	})
 }
 
@@ -157,8 +171,17 @@ func (w *Worker) SyncNetworkUsage(name string, usage *ipamtypes.Usage) (err erro
 	)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err = w.hybridnetClient.NetworkingV1().Networks().Patch(context.TODO(), name, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
-		return err
+		return w.Status().Patch(context.TODO(),
+			&networkingv1.Network{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: name,
+				},
+			},
+			client.RawPatch(
+				types.MergePatchType,
+				[]byte(patchBody),
+			),
+		)
 	})
 }
 
@@ -172,38 +195,46 @@ func (w *Worker) SyncSubnetUsage(name string, usage *ipamtypes.Usage) (err error
 	)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err = w.hybridnetClient.NetworkingV1().Subnets().Patch(context.TODO(), name, types.MergePatchType, []byte(patchBody), metav1.PatchOptions{}, "status")
-		return err
+		return w.Status().Patch(context.TODO(),
+			&networkingv1.Subnet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: name,
+				},
+			},
+			client.RawPatch(
+				types.MergePatchType,
+				[]byte(patchBody),
+			),
+		)
 	})
 }
 
 func (w *Worker) updateIPStatus(ip *networkingv1.IPInstance, nodeName, podName, podNamespace, phase string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := w.hybridnetClient.NetworkingV1().IPInstances(ip.Namespace).Patch(context.TODO(),
-			ip.Name,
-			types.MergePatchType,
-			[]byte(fmt.Sprintf(
-				`{"status":{"podName":%q,"podNamespace":%q,"nodeName":%q,"phase":%q}}`,
-				podName,
-				podNamespace,
-				nodeName,
-				phase,
-			)),
-			metav1.PatchOptions{},
-			"status",
+		return w.Status().Patch(context.TODO(),
+			ip,
+			client.RawPatch(
+				types.MergePatchType,
+				[]byte(fmt.Sprintf(
+					`{"status":{"podName":%q,"podNamespace":%q,"nodeName":%q,"phase":%q}}`,
+					podName,
+					podNamespace,
+					nodeName,
+					phase,
+				)),
+			),
 		)
-		return err
 	})
 }
 
-func (w *Worker) createIP(pod *v1.Pod, ip *ipamtypes.IP) (ipIns *networkingv1.IPInstance, err error) {
+func (w *Worker) createIP(pod *corev1.Pod, ip *ipamtypes.IP) (ipIns *networkingv1.IPInstance, err error) {
 	return w.createIPWithMAC(pod, ip, mac.GenerateMAC().String())
 }
 
-func (w *Worker) createIPWithMAC(pod *v1.Pod, ip *ipamtypes.IP, macAddr string) (ipIns *networkingv1.IPInstance, err error) {
+func (w *Worker) createIPWithMAC(pod *corev1.Pod, ip *ipamtypes.IP, macAddr string) (ipIns *networkingv1.IPInstance, err error) {
 	owner := strategy.GetKnownOwnReference(pod)
 	if owner == nil {
-		owner = newControllerRef(pod, v1.SchemeGroupVersion.WithKind("Pod"))
+		owner = newControllerRef(pod, corev1.SchemeGroupVersion.WithKind("Pod"))
 	}
 
 	ipInstance := &networkingv1.IPInstance{
@@ -226,71 +257,83 @@ func (w *Worker) createIPWithMAC(pod *v1.Pod, ip *ipamtypes.IP, macAddr string) 
 				Version: extractIPVersion(ip),
 				IP:      ip.Address.String(),
 				Gateway: ip.Gateway.String(),
-				NetID:   ip.NetID,
-				MAC:     macAddr,
+				NetID: func() *int32 {
+					netID := int32(*ip.NetID)
+					return &netID
+				}(),
+				MAC: macAddr,
 			},
 		},
 	}
 
-	return w.hybridnetClient.NetworkingV1().IPInstances(pod.Namespace).Create(context.TODO(), ipInstance, metav1.CreateOptions{})
+	return ipInstance, w.Create(context.TODO(), ipInstance)
 }
 
 func (w *Worker) deleteIP(namespace, name string) error {
-	return w.hybridnetClient.NetworkingV1().IPInstances(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	return w.Delete(context.TODO(), &networkingv1.IPInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+	})
 }
 
 func (w *Worker) getIP(namespace string, ip *ipamtypes.IP) (*networkingv1.IPInstance, error) {
-	return w.hybridnetClient.NetworkingV1().IPInstances(namespace).Get(context.TODO(), toDNSLabelFormat(ip), metav1.GetOptions{})
+	var ipInstance = &networkingv1.IPInstance{}
+	if err := w.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: toDNSLabelFormat(ip)}, ipInstance); err != nil {
+		return nil, err
+	}
+	return ipInstance, nil
 }
 
 // patchIPtoPod will patch a specified IP annotation into pod
-func (w *Worker) patchIPtoPod(pod *v1.Pod, ip *ipamtypes.IP) error {
+func (w *Worker) patchIPtoPod(pod *corev1.Pod, ip *ipamtypes.IP) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := w.kubeClient.CoreV1().Pods(pod.Namespace).Patch(context.TODO(),
-			pod.Name,
-			types.MergePatchType,
-			[]byte(fmt.Sprintf(
-				`{"metadata":{"annotations":{%q:%q}}}`,
-				constants.AnnotationIP,
-				marshal(ip),
-			)),
-			metav1.PatchOptions{},
+		return w.Patch(context.TODO(),
+			pod,
+			client.RawPatch(
+				types.MergePatchType,
+				[]byte(fmt.Sprintf(
+					`{"metadata":{"annotations":{%q:%q}}}`,
+					constants.AnnotationIP,
+					marshal(ip),
+				)),
+			),
 		)
-		return err
 	})
 }
 
 // releaseIPFromPod will remove the specified IP annotation from pod
-func (w *Worker) releaseIPFromPod(pod *v1.Pod) error {
+func (w *Worker) releaseIPFromPod(pod *corev1.Pod) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := w.kubeClient.CoreV1().Pods(pod.Namespace).Patch(context.TODO(),
-			pod.Name,
-			types.MergePatchType,
-			[]byte(fmt.Sprintf(
-				`{"metadata":{"annotations":{%q:null}}}`,
-				constants.AnnotationIP,
-			)),
-			metav1.PatchOptions{},
+		return w.Patch(context.TODO(),
+			pod,
+			client.RawPatch(
+				types.MergePatchType,
+				[]byte(fmt.Sprintf(
+					`{"metadata":{"annotations":{%q:null}}}`,
+					constants.AnnotationIP,
+				)),
+			),
 		)
-		return err
 	})
 }
 
 func (w *Worker) patchIPLabels(ip *networkingv1.IPInstance, podName, nodeName string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := w.hybridnetClient.NetworkingV1().IPInstances(ip.Namespace).Patch(context.TODO(),
-			ip.Name,
-			types.MergePatchType,
-			[]byte(fmt.Sprintf(
-				`{"metadata":{"labels":{"%s":%q,"%s":%q}}}`,
-				constants.LabelNode,
-				nodeName,
-				constants.LabelPod,
-				podName,
-			)),
-			metav1.PatchOptions{},
+		return w.Patch(context.TODO(),
+			ip,
+			client.RawPatch(
+				types.MergePatchType,
+				[]byte(fmt.Sprintf(
+					`{"metadata":{"labels":{"%s":%q,"%s":%q}}}`,
+					constants.LabelNode,
+					nodeName,
+					constants.LabelPod,
+					podName,
+				)),
+			),
 		)
-		return err
 	})
 }
 
