@@ -23,9 +23,13 @@ import (
 	"net/http"
 	"time"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	clientset "github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
-	networkinglister "github.com/alibaba/hybridnet/pkg/client/listers/networking/v1"
+	corev1 "k8s.io/api/core/v1"
+
+	"k8s.io/apimachinery/pkg/types"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
@@ -33,35 +37,23 @@ import (
 	"github.com/alibaba/hybridnet/pkg/request"
 
 	"github.com/emicklei/go-restful"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 )
 
 type cniDaemonHandler struct {
-	config          *daemonconfig.Configuration
-	KubeClient      kubernetes.Interface
-	HybridnetClient clientset.Interface
-
-	ipInstanceLister networkinglister.IPInstanceLister
-	ipInstanceSynced cache.InformerSynced
-
-	networkLister networkinglister.NetworkLister
+	config       *daemonconfig.Configuration
+	mgrClient    client.Client
+	mgrAPIReader client.Reader
 }
 
-func createCniDaemonHandler(stopCh <-chan struct{}, config *daemonconfig.Configuration, ctrlRef *controller.Controller) (*cniDaemonHandler, error) {
+func createCniDaemonHandler(ctx context.Context, config *daemonconfig.Configuration, ctrlRef *controller.CtrlHub) (*cniDaemonHandler, error) {
 	cdh := &cniDaemonHandler{
-		KubeClient:       config.KubeClient,
-		HybridnetClient:  config.HybridnetClient,
-		config:           config,
-		ipInstanceLister: ctrlRef.GetIPInstanceLister(),
-		networkLister:    ctrlRef.GetNetworkLister(),
-		ipInstanceSynced: ctrlRef.GetIPInstanceSynced(),
+		config:       config,
+		mgrClient:    ctrlRef.GetMgrClient(),
+		mgrAPIReader: ctrlRef.GetMgrAPIReader(),
 	}
 
-	if ok := cache.WaitForCacheSync(stopCh, cdh.ipInstanceSynced); !ok {
+	if ok := ctrlRef.CacheSynced(ctx); !ok {
 		return nil, fmt.Errorf("failed to wait for ip instance & pod caches to sync")
 	}
 
@@ -72,7 +64,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 	podRequest := request.PodRequest{}
 	err := req.ReadEntity(&podRequest)
 	if err != nil {
-		errMsg := fmt.Errorf("parse add request failed: %v", err)
+		errMsg := fmt.Errorf("failed to parse add request: %v", err)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})
 		return
@@ -80,7 +72,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 	klog.Infof("Add port request %v", podRequest)
 
 	var macAddr string
-	var netID *uint32
+	var netID *int32
 	var affectedIPInstances []*networkingv1.IPInstance
 
 	allocatedIPs := map[networkingv1.IPVersion]*containernetwork.IPInfo{
@@ -97,9 +89,9 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		time.Sleep(backOffBase)
 		backOffBase = backOffBase * 2
 
-		pod, err := cdh.KubeClient.CoreV1().Pods(podRequest.PodNamespace).Get(context.TODO(), podRequest.PodName, metav1.GetOptions{})
-		if err != nil {
-			errMsg := fmt.Errorf("get pod %v/%v failed: %v", podRequest.PodName, podRequest.PodNamespace, err)
+		pod := &corev1.Pod{}
+		if err := cdh.mgrAPIReader.Get(context.TODO(), types.NamespacedName{Name: podRequest.PodName}, pod); err != nil {
+			errMsg := fmt.Errorf("failed to get pod %v/%v: %v", podRequest.PodName, podRequest.PodNamespace, err)
 			klog.Error(errMsg)
 			_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})
 			return
@@ -111,28 +103,26 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		if exist {
 			break
 		} else if i == retries-1 {
-			errMsg := fmt.Errorf("wait for pod %v/%v be coupled with ip failed: %v", podRequest.PodName, podRequest.PodNamespace, err)
+			errMsg := fmt.Errorf("failed to wait for pod %v/%v be coupled with ip: %v", podRequest.PodName, podRequest.PodNamespace, err)
 			klog.Error(errMsg)
 			_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})
 			return
 		}
 	}
 
-	ipSelector := labels.SelectorFromSet(labels.Set{
+	ipInstanceList := &networkingv1.IPInstanceList{}
+	if err := cdh.mgrClient.List(context.TODO(), ipInstanceList, client.MatchingLabels{
 		constants.LabelNode: cdh.config.NodeName,
 		constants.LabelPod:  podRequest.PodName,
-	})
-
-	ipInstanceList, err := cdh.ipInstanceLister.IPInstances(podRequest.PodNamespace).List(ipSelector)
-	if err != nil {
-		errMsg := fmt.Errorf("list ip instance for pod %v failed: %v", cdh.config.NodeName, err)
+	}); err != nil {
+		errMsg := fmt.Errorf("failed to list ip instance for pod %v: %v", cdh.config.NodeName, err)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})
 		return
 	}
 
 	var networkName string
-	for _, ipInstance := range ipInstanceList {
+	for _, ipInstance := range ipInstanceList.Items {
 		// IPv4 and IPv6 ip will exist at the same time
 		if ipInstance.Status.PodName == podRequest.PodName && ipInstance.Status.PodNamespace == podRequest.PodNamespace {
 
@@ -151,7 +141,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 
 			containerIP, cidrNet, err := net.ParseCIDR(ipInstance.Spec.Address.IP)
 			if err != nil {
-				errMsg := fmt.Errorf("parse ip address %v to cidr failed: %v", ipInstance.Spec.Address.IP, err)
+				errMsg := fmt.Errorf("failed to parse ip address %v to cidr: %v", ipInstance.Spec.Address.IP, err)
 				klog.Error(errMsg)
 				_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
 				return
@@ -159,7 +149,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 
 			gatewayIP := net.ParseIP(ipInstance.Spec.Address.Gateway)
 			if gatewayIP == nil {
-				errMsg := fmt.Errorf("parse gateway %v for ip %v failed: %v", ipInstance.Spec.Address.Gateway, ipInstance.Spec.Address.IP, err)
+				errMsg := fmt.Errorf("failed to parse gateway %v for ip %v: %v", ipInstance.Spec.Address.Gateway, ipInstance.Spec.Address.IP, err)
 				klog.Error(errMsg)
 				_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
 				return
@@ -221,7 +211,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 				Protocol: ipVersion,
 			})
 
-			affectedIPInstances = append(affectedIPInstances, ipInstance)
+			affectedIPInstances = append(affectedIPInstances, &ipInstance)
 		}
 	}
 
@@ -233,8 +223,8 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		return
 	}
 
-	network, err := cdh.networkLister.Get(networkName)
-	if err != nil {
+	network := &networkingv1.Network{}
+	if err := cdh.mgrClient.Get(context.TODO(), types.NamespacedName{Name: networkName}, network); err != nil {
 		errMsg := fmt.Errorf("cannot get network %v", networkName)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
@@ -245,7 +235,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 	hostInterface, err := cdh.configureNic(podRequest.PodName, podRequest.PodNamespace, podRequest.NetNs, podRequest.ContainerID,
 		macAddr, netID, allocatedIPs, networkingv1.GetNetworkType(network))
 	if err != nil {
-		errMsg := fmt.Errorf("configure nic failed: %v", err)
+		errMsg := fmt.Errorf("failed to configure nic: %v", err)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
 		return
@@ -262,8 +252,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 		}
 
 		newIPInstance.Status.SandboxID = podRequest.ContainerID
-		_, err = cdh.HybridnetClient.NetworkingV1().IPInstances(newIPInstance.Namespace).UpdateStatus(context.TODO(), newIPInstance, metav1.UpdateOptions{})
-		if err != nil {
+		if err = cdh.mgrClient.Status().Update(context.TODO(), newIPInstance); err != nil {
 			errMsg := fmt.Errorf("failed to update IPInstance crd for %s, %v", newIPInstance.Name, err)
 			klog.Error(errMsg)
 			_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
@@ -281,7 +270,7 @@ func (cdh cniDaemonHandler) handleDel(req *restful.Request, resp *restful.Respon
 	podRequest := request.PodRequest{}
 	err := req.ReadEntity(&podRequest)
 	if err != nil {
-		errMsg := fmt.Errorf("parse del request failed: %v", err)
+		errMsg := fmt.Errorf("failed to parse del request: %v", err)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusBadRequest, request.PodResponse{Err: errMsg.Error()})
 		return
@@ -290,7 +279,7 @@ func (cdh cniDaemonHandler) handleDel(req *restful.Request, resp *restful.Respon
 	klog.Infof("delete port request %v", podRequest)
 	err = cdh.deleteNic(podRequest.NetNs)
 	if err != nil {
-		errMsg := fmt.Errorf("del container nic for %s failed: %v", fmt.Sprintf("%s.%s", podRequest.PodName, podRequest.PodNamespace), err)
+		errMsg := fmt.Errorf("failed to del container nic for %s: %v", fmt.Sprintf("%s.%s", podRequest.PodName, podRequest.PodNamespace), err)
 		klog.Error(errMsg)
 		_ = resp.WriteHeaderAndEntity(http.StatusInternalServerError, request.PodResponse{Err: errMsg.Error()})
 		return

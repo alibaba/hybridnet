@@ -17,48 +17,75 @@
 package main
 
 import (
-	hybridnetinformer "github.com/alibaba/hybridnet/pkg/client/informers/externalversions"
+	"os"
+
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+
+	"github.com/alibaba/hybridnet/pkg/feature"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/controller"
 	"github.com/alibaba/hybridnet/pkg/daemon/server"
-	"github.com/alibaba/hybridnet/pkg/feature"
-
-	"k8s.io/client-go/informers"
-	"k8s.io/klog"
 )
 
 var gitCommit string
 
 func main() {
-	klog.InitFlags(nil)
-	defer klog.Flush()
+	log.SetLogger(zap.New(zap.UseDevMode(true)))
 
-	klog.Infof("Starting hybridnet daemon with git commit: %v", gitCommit)
-	klog.Infof("known features: %v", feature.KnownFeatures())
+	var entryLog = log.Log.WithName("entry")
+	entryLog.Info("starting hybridnet daemon",
+		"known-features", feature.KnownFeatures(), "commit-id", gitCommit)
 
 	config, err := daemonconfig.ParseFlags()
 	if err != nil {
-		klog.Fatalf("parse config failed: %v", err)
+		entryLog.Error(err, "failed to parse config")
+		os.Exit(1)
 	}
 
-	// TODO: remove the stop channel
-	stopCh := make(chan struct{})
-	hybridnetInformerFactory := hybridnetinformer.NewSharedInformerFactory(config.HybridnetClient, 0)
-	kubeInformerFactory := informers.NewSharedInformerFactory(config.KubeClient, 0)
-
-	ctl, err := controller.NewController(config, hybridnetInformerFactory, kubeInformerFactory)
+	// setup manager
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{})
 	if err != nil {
-		klog.Fatalf("create controller failed %v", err)
+		entryLog.Error(err, "unable to start daemon manager")
+		os.Exit(1)
 	}
 
-	go hybridnetInformerFactory.Start(stopCh)
-	go kubeInformerFactory.Start(stopCh)
+	if err := clientgoscheme.AddToScheme(mgr.GetScheme()); err != nil {
+		entryLog.Error(err, "failed to add client-go to manager scheme")
+		os.Exit(1)
+	}
+
+	if err := networkingv1.AddToScheme(mgr.GetScheme()); err != nil {
+		entryLog.Error(err, "failed to add networking v1 to manager scheme")
+		os.Exit(1)
+	}
+
+	if err := multiclusterv1.AddToScheme(mgr.GetScheme()); err != nil {
+		entryLog.Error(err, "failed to add multicluster v1 to manager scheme")
+		os.Exit(1)
+	}
+
+	ctx := ctrl.SetupSignalHandler()
+
+	ctl, err := controller.NewCtrlHub(config, mgr, log.Log.WithName("CtrlHub"))
+	if err != nil {
+		entryLog.Error(err, "failed to create controller")
+		os.Exit(1)
+	}
+
+	mgr.GetAPIReader()
 
 	go func() {
-		if err = ctl.Run(stopCh); err != nil {
-			klog.Fatalf("controller exit unusually %v", err)
+		if err = ctl.Run(ctx); err != nil {
+			entryLog.Error(err, "CtrlHub exit unusually")
+			os.Exit(1)
 		}
 	}()
 
-	server.RunServer(stopCh, config, ctl)
+	server.RunServer(ctx, config, ctl)
 }

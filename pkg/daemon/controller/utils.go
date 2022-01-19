@@ -17,63 +17,103 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"net"
 
+	"sigs.k8s.io/controller-runtime/pkg/event"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"k8s.io/client-go/util/workqueue"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/utils"
-	"k8s.io/apimachinery/pkg/labels"
-
 	"github.com/gogf/gf/container/gset"
 	"github.com/vishvananda/netlink"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/daemon/iptables"
 	"github.com/alibaba/hybridnet/pkg/daemon/neigh"
 	"github.com/alibaba/hybridnet/pkg/daemon/route"
 )
 
-func (c *Controller) getRouterManager(ipVersion networkingv1.IPVersion) *route.Manager {
+// simpleTriggerSource is a trigger to add a simple event to queue of controller
+type simpleTriggerSource struct {
+	queue workqueue.RateLimitingInterface
+	key   string
+}
+
+func (t *simpleTriggerSource) Start(ctx context.Context, handler handler.EventHandler, queue workqueue.RateLimitingInterface,
+	prct ...predicate.Predicate) error {
+	t.queue = queue
+	return nil
+}
+
+func (t *simpleTriggerSource) Trigger() {
+	t.queue.Add(t.key)
+}
+
+// fixedKeyHandler always add the key string into work queue
+type fixedKeyHandler struct {
+	handler.Funcs
+	key string
+}
+
+func (h *fixedKeyHandler) Create(e event.CreateEvent, q workqueue.RateLimitingInterface) {
+	q.Add(h.key)
+}
+
+// Delete implements EventHandler
+func (h *fixedKeyHandler) Delete(e event.DeleteEvent, q workqueue.RateLimitingInterface) {
+	q.Add(h.key)
+}
+
+// Update implements EventHandler
+func (h *fixedKeyHandler) Update(e event.UpdateEvent, q workqueue.RateLimitingInterface) {
+	q.Add(h.key)
+}
+
+func (c *CtrlHub) getRouterManager(ipVersion networkingv1.IPVersion) *route.Manager {
 	if ipVersion == networkingv1.IPv6 {
 		return c.routeV6Manager
 	}
 	return c.routeV4Manager
 }
 
-func (c *Controller) getNeighManager(ipVersion networkingv1.IPVersion) *neigh.Manager {
+func (c *CtrlHub) getNeighManager(ipVersion networkingv1.IPVersion) *neigh.Manager {
 	if ipVersion == networkingv1.IPv6 {
 		return c.neighV6Manager
 	}
 	return c.neighV4Manager
 }
 
-func (c *Controller) getIPtablesManager(ipVersion networkingv1.IPVersion) *iptables.Manager {
+func (c *CtrlHub) getIPtablesManager(ipVersion networkingv1.IPVersion) *iptables.Manager {
 	if ipVersion == networkingv1.IPv6 {
 		return c.iptablesV6Manager
 	}
 	return c.iptablesV4Manager
 }
 
-func (c *Controller) getIPInstanceByAddress(address net.IP) (*networkingv1.IPInstance, error) {
-	ipInstanceList, err := c.ipInstanceIndexer.ByIndex(ByInstanceIPIndexer, address.String())
-	if err != nil {
+func (c *CtrlHub) getIPInstanceByAddress(address net.IP) (*networkingv1.IPInstance, error) {
+	ctx := context.Background()
+	ipInstanceList := &networkingv1.IPInstanceList{}
+	if err := c.mgr.GetClient().List(ctx, ipInstanceList, client.MatchingFields{InstanceIPIndex: address.String()}); err != nil {
 		return nil, fmt.Errorf("get ip instance by ip %v indexer failed: %v", address.String(), err)
 	}
 
-	if len(ipInstanceList) > 1 {
+	if len(ipInstanceList.Items) > 1 {
 		return nil, fmt.Errorf("get more than one ip instance for ip %v", address.String())
 	}
 
-	if len(ipInstanceList) == 1 {
-		instance, ok := ipInstanceList[0].(*networkingv1.IPInstance)
-		if !ok {
-			return nil, fmt.Errorf("transform obj to ipinstance failed")
-		}
-
-		return instance, nil
+	if len(ipInstanceList.Items) == 1 {
+		return &ipInstanceList.Items[0], nil
 	}
 
-	if len(ipInstanceList) == 0 {
+	if len(ipInstanceList.Items) == 0 {
 		// not found
 		return nil, nil
 	}
@@ -81,31 +121,24 @@ func (c *Controller) getIPInstanceByAddress(address net.IP) (*networkingv1.IPIns
 	return nil, fmt.Errorf("ip instance for address %v not found", address.String())
 }
 
-func (c *Controller) getRemoteVtepByEndpointAddress(address net.IP) (*networkingv1.RemoteVtep, error) {
+func (c *CtrlHub) getRemoteVtepByEndpointAddress(address net.IP) (*multiclusterv1.RemoteVtep, error) {
 	// try to find remote pod ip
-	remoteVtepList, err := c.remoteVtepIndexer.ByIndex(ByEndpointIPIndexer, address.String())
-	if err != nil {
+	ctx := context.Background()
+	remoteVtepList := &multiclusterv1.RemoteVtepList{}
+	if err := c.mgr.GetClient().List(ctx, remoteVtepList, client.MatchingFields{EndpointIPIndex: address.String()}); err != nil {
 		return nil, fmt.Errorf("get remote vtep by ip %v indexer failed: %v", address.String(), err)
 	}
 
-	if len(remoteVtepList) > 1 {
+	if len(remoteVtepList.Items) > 1 {
 		// pick up valid remoteVtep
-		for _, remoteVtep := range remoteVtepList {
-			vtep, ok := remoteVtep.(*networkingv1.RemoteVtep)
-			if !ok {
-				return nil, fmt.Errorf("transform obj to remote vtep failed")
-			}
-
-			clusterSelector := labels.SelectorFromSet(labels.Set{
-				constants.LabelCluster: vtep.Spec.ClusterName,
-			})
-
-			remoteSubnetList, err := c.remoteSubnetLister.List(clusterSelector)
-			if err != nil {
+		for _, remoteVtep := range remoteVtepList.Items {
+			remoteSubnetList := &multiclusterv1.RemoteSubnetList{}
+			if err := c.mgr.GetClient().List(ctx, remoteSubnetList,
+				client.MatchingLabels{constants.LabelCluster: remoteVtep.Spec.ClusterName}); err != nil {
 				return nil, fmt.Errorf("failed to list remoteSubnet %v", err)
 			}
 
-			for _, remoteSubnet := range remoteSubnetList {
+			for _, remoteSubnet := range remoteSubnetList.Items {
 				_, cidr, _ := net.ParseCIDR(remoteSubnet.Spec.Range.CIDR)
 
 				if !cidr.Contains(address) {
@@ -117,7 +150,7 @@ func (c *Controller) getRemoteVtepByEndpointAddress(address net.IP) (*networking
 					Start: address.String(),
 					End:   address.String(),
 				}) {
-					return vtep, nil
+					return &remoteVtep, nil
 				}
 			}
 		}
@@ -125,13 +158,8 @@ func (c *Controller) getRemoteVtepByEndpointAddress(address net.IP) (*networking
 		return nil, fmt.Errorf("get more than one remote vtep for ip %v and cannot find valid one", address.String())
 	}
 
-	if len(remoteVtepList) == 1 {
-		vtep, ok := remoteVtepList[0].(*networkingv1.RemoteVtep)
-		if !ok {
-			return nil, fmt.Errorf("transform obj to remote vtep failed")
-		}
-
-		return vtep, nil
+	if len(remoteVtepList.Items) == 1 {
+		return &remoteVtepList.Items[0], nil
 	}
 
 	return nil, nil

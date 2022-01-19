@@ -16,38 +16,61 @@
 
 package controller
 
-import networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+import (
+	networkingv1 "github.com/alibaba/hybridnet/apis/networking/v1"
+	"k8s.io/client-go/util/workqueue"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+)
 
-// reconcile subnet and node info on node if network info changed
-func (c *Controller) enqueueAddOrDeleteNetwork(obj interface{}) {
-	network := obj.(*networkingv1.Network)
-	if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
-		c.nodeQueue.Add(ActionReconcileNode)
-	}
-	c.subnetQueue.Add(ActionReconcileSubnet)
+type enqueueRequestForNetwork struct {
+	handler.Funcs
 }
 
-func (c *Controller) enqueueUpdateNetwork(oldObj, newObj interface{}) {
-	oldNetwork := oldObj.(*networkingv1.Network)
-	newNetwork := newObj.(*networkingv1.Network)
+func (e enqueueRequestForNetwork) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
+	q.Add(ActionReconcileSubnet)
+}
+
+func (e enqueueRequestForNetwork) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
+	if evt.ObjectOld == nil || evt.ObjectNew == nil {
+		return
+	}
+
+	oldNetwork := evt.ObjectOld.(*networkingv1.Network)
+	newNetwork := evt.ObjectNew.(*networkingv1.Network)
 
 	if len(oldNetwork.Status.SubnetList) != len(newNetwork.Status.SubnetList) ||
 		len(oldNetwork.Status.NodeList) != len(newNetwork.Status.NodeList) {
-		c.subnetQueue.Add(ActionReconcileSubnet)
+		q.Add(ActionReconcileSubnet)
 		return
 	}
 
 	for index, subnet := range oldNetwork.Status.SubnetList {
 		if subnet != newNetwork.Status.SubnetList[index] {
-			c.subnetQueue.Add(ActionReconcileSubnet)
+			q.Add(ActionReconcileSubnet)
 			return
 		}
 	}
 
 	for index, node := range oldNetwork.Status.NodeList {
 		if node != newNetwork.Status.NodeList[index] {
-			c.subnetQueue.Add(ActionReconcileSubnet)
+			q.Add(ActionReconcileSubnet)
 			return
+		}
+	}
+}
+
+func (e enqueueRequestForNetwork) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
+	q.Add(ActionReconcileSubnet)
+}
+
+// reconcile subnet and node info on node if network info changed
+func enqueueAddOrDeleteNetworkForNode(obj client.Object, q workqueue.RateLimitingInterface) {
+	if obj != nil {
+		network := obj.(*networkingv1.Network)
+		if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
+			q.Add(ActionReconcileNode)
 		}
 	}
 }

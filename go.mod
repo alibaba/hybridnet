@@ -7,12 +7,13 @@ require (
 	github.com/containernetworking/plugins v0.0.0-00010101000000-000000000000
 	github.com/coreos/go-iptables v0.6.0
 	github.com/emicklei/go-restful v2.15.0+incompatible
+	github.com/go-logr/logr v0.3.0
 	github.com/gogf/gf v1.16.6
 	github.com/heptiolabs/healthcheck v0.0.0-20211123025425-613501dd5deb
 	github.com/json-iterator/go v1.1.12
 	github.com/mdlayher/ethernet v0.0.0-20190606142754-0394541c37b7
 	github.com/mdlayher/ndp v0.0.0-20200602162440-17ab9e3e5567
-   	github.com/mdlayher/raw v0.0.0-20190606142536-fef19f00fc18
+	github.com/mdlayher/raw v0.0.0-20190606142536-fef19f00fc18
 	github.com/mikioh/ipaddr v0.0.0-20190404000644-d465c8ab6721
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0

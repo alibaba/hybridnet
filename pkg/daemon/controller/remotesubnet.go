@@ -19,20 +19,37 @@ package controller
 import (
 	"reflect"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+
+	"k8s.io/client-go/util/workqueue"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+
+	multiclusterv1 "github.com/alibaba/hybridnet/apis/multicluster/v1"
 )
 
-func (c *Controller) enqueueAddOrDeleteRemoteSubnet(obj interface{}) {
-	c.subnetQueue.Add(ActionReconcileSubnet)
+type enqueueRequestForRemoteSubnet struct {
+	handler.Funcs
 }
 
-func (c *Controller) enqueueUpdateRemoteSubnet(oldObj, newObj interface{}) {
-	oldRs := oldObj.(*networkingv1.RemoteSubnet)
-	newRs := newObj.(*networkingv1.RemoteSubnet)
+func (e enqueueRequestForRemoteSubnet) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
+	q.Add(ActionReconcileSubnet)
+}
+
+func (e enqueueRequestForRemoteSubnet) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
+	if evt.ObjectOld == nil || evt.ObjectNew == nil {
+		return
+	}
+
+	oldRs := evt.ObjectOld.(*multiclusterv1.RemoteSubnet)
+	newRs := evt.ObjectNew.(*multiclusterv1.RemoteSubnet)
 
 	if oldRs.Spec.ClusterName != newRs.Spec.ClusterName ||
 		!reflect.DeepEqual(oldRs.Spec.Range, newRs.Spec.Range) ||
-		networkingv1.GetRemoteSubnetType(oldRs) != networkingv1.GetRemoteSubnetType(newRs) {
-		c.subnetQueue.Add(ActionReconcileSubnet)
+		multiclusterv1.GetRemoteSubnetType(oldRs) != multiclusterv1.GetRemoteSubnetType(newRs) {
+		q.Add(ActionReconcileSubnet)
 	}
+}
+
+func (e enqueueRequestForRemoteSubnet) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
+	q.Add(ActionReconcileSubnet)
 }

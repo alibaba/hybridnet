@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	clientset "github.com/alibaba/hybridnet/pkg/client/clientset/versioned"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 	"github.com/alibaba/hybridnet/pkg/utils"
@@ -33,14 +32,10 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/vishvananda/netlink"
 
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 )
 
 const (
-	UserAgent           = "hybridnet-daemon"
 	DefaultBindPort     = 11021
 	DefaultVxlanUDPPort = 8472
 
@@ -60,9 +55,8 @@ const (
 
 // Configuration is the daemon conf
 type Configuration struct {
-	BindSocket     string
-	KubeConfigFile string
-	NodeName       string
+	BindSocket string
+	NodeName   string
 
 	VlanMTU  int
 	VxlanMTU int
@@ -88,9 +82,6 @@ type Configuration struct {
 	// Use fixed table num to mark "overlay-mark-table rule"
 	OverlayMarkTableNum int
 
-	KubeClient      kubernetes.Interface
-	HybridnetClient clientset.Interface
-
 	NeighGCThresh1 int
 	NeighGCThresh2 int
 	NeighGCThresh3 int
@@ -103,7 +94,6 @@ func ParseFlags() (*Configuration, error) {
 		argPreferVlanInterfaces                 = pflag.String("prefer-vlan-interfaces", "", "The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
 		argPreferVxlanInterfaces                = pflag.String("prefer-vxlan-interfaces", "", "The preferred vxlan interfaces used to inter-host pod communication, default: the default route interface")
 		argBindSocket                           = pflag.String("bind-socket", "/var/run/hybridnet.sock", "The socket daemon bind to.")
-		argKubeConfigFile                       = pflag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information. If not set use the inCluster token.")
 		argBindPort                             = pflag.Int("healthy-server-port", DefaultBindPort, "The port which daemon server bind")
 		argLocalDirectTableNum                  = pflag.Int("local-direct-table", DefaultLocalDirectTableNum, "The number of local-pod-direct route table")
 		argIptableCheckDuration                 = pflag.Duration("iptables-check-duration", DefaultIptablesCheckDuration, "The time period for iptables manager to check iptables rules")
@@ -147,7 +137,6 @@ func ParseFlags() (*Configuration, error) {
 
 	config := &Configuration{
 		BindSocket:                           *argBindSocket,
-		KubeConfigFile:                       *argKubeConfigFile,
 		NodeName:                             nodeName,
 		NodeVlanIfName:                       *argPreferVlanInterfaces,
 		NodeVxlanIfName:                      *argPreferVxlanInterfaces,
@@ -173,16 +162,12 @@ func ParseFlags() (*Configuration, error) {
 		var err error
 		config.ExtraNodeLocalVxlanIPCidrs, err = parseCidrString(*argExtraNodeLocalVxlanIPCidrs)
 		if err != nil {
-			klog.Errorf("parse extra node local vxlan ip cidrs failed: %v", err)
-			return nil, fmt.Errorf("parse extra node local vxlan ip cidrs failed: %v", err)
+			klog.Errorf("failed to parse extra node local vxlan ip cidrs: %v", err)
+			return nil, fmt.Errorf("failed to parse extra node local vxlan ip cidrs: %v", err)
 		}
 	}
 
 	if err := config.initNicConfig(); err != nil {
-		return nil, err
-	}
-
-	if err := config.initKubeClient(); err != nil {
 		return nil, err
 	}
 
@@ -193,12 +178,12 @@ func ParseFlags() (*Configuration, error) {
 func (config *Configuration) initNicConfig() error {
 	defaultGatewayIf, err := containernetwork.GetDefaultInterface(netlink.FAMILY_V4)
 	if err != nil && err != daemonutils.NotExist {
-		return fmt.Errorf("get ipv4 default gateway interface failed: %v", err)
+		return fmt.Errorf("failed to get ipv4 default gateway interface: %v", err)
 	} else if err == daemonutils.NotExist {
 		// IPv4 default gateway interface not found, check IPv6.
 		defaultGatewayIf, err = containernetwork.GetDefaultInterface(netlink.FAMILY_V6)
 		if err != nil && err != daemonutils.NotExist {
-			return fmt.Errorf("get ipv6 default gateway interface failed: %v", err)
+			return fmt.Errorf("failed to get ipv6 default gateway interface: %v", err)
 		}
 	}
 
@@ -212,14 +197,14 @@ func (config *Configuration) initNicConfig() error {
 
 	vlanNodeInterface, err := containernetwork.GetInterfaceByPreferString(config.NodeVlanIfName)
 	if err != nil {
-		return fmt.Errorf("get vlan node interface failed: %v", err)
+		return fmt.Errorf("failed to get vlan node interface: %v", err)
 	}
 	// To update prefer result interface.
 	config.NodeVlanIfName = vlanNodeInterface.Name
 
 	vxlanNodeInterface, err := containernetwork.GetInterfaceByPreferString(config.NodeVxlanIfName)
 	if err != nil {
-		return fmt.Errorf("get vxlan node interface failed: %v", err)
+		return fmt.Errorf("failed to get vxlan node interface: %v", err)
 	}
 	// To update prefer result interface.
 	config.NodeVxlanIfName = vxlanNodeInterface.Name
@@ -239,42 +224,13 @@ func (config *Configuration) initNicConfig() error {
 	return nil
 }
 
-func (config *Configuration) initKubeClient() error {
-	var cfg *rest.Config
-	var err error
-	if cfg, err = clientcmd.BuildConfigFromFlags("", config.KubeConfigFile); err != nil {
-		klog.Errorf("build config failed %v", err)
-		return err
-	}
-
-	// NOTE: be careful to avoid request pressure to api-server
-	cfg.QPS = 10
-	cfg.Burst = 20
-
-	config.HybridnetClient, err = clientset.NewForConfig(rest.AddUserAgent(cfg, UserAgent))
-	if err != nil {
-		klog.Errorf("init hybridnet client failed %v", err)
-		return err
-	}
-
-	cfg.ContentType = "application/vnd.kubernetes.protobuf"
-	cfg.AcceptContentTypes = "application/vnd.kubernetes.protobuf,application/json"
-	config.KubeClient, err = kubernetes.NewForConfig(rest.AddUserAgent(cfg, UserAgent))
-	if err != nil {
-		klog.Errorf("init kubernetes client failed %v", err)
-		return err
-	}
-
-	return nil
-}
-
 func parseCidrString(cidrListString string) ([]*net.IPNet, error) {
 	var cidrList []*net.IPNet
 	cidrStringList := strings.Split(cidrListString, ",")
 	for _, cidrString := range cidrStringList {
 		_, cidr, err := net.ParseCIDR(cidrString)
 		if err != nil {
-			return nil, fmt.Errorf("parse cidr %v failed: %v", cidrString, err)
+			return nil, fmt.Errorf("failed to parse cidr %v: %v", cidrString, err)
 		}
 
 		cidrList = append(cidrList, cidr)

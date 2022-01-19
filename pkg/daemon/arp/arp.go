@@ -29,7 +29,7 @@ import (
 func CheckWithTimeout(ifi *net.Interface, srcPod, gateway net.IP, timeout time.Duration) error {
 	// Resolve gateway ip for vlan check.
 	if _, err := pingOverInterface(srcPod, gateway, ifi, timeout); err != nil {
-		return fmt.Errorf("arp resolve from pod %v to gateway %v failed: %v"+
+		return fmt.Errorf("failed to resolve arp from pod %v to gateway %v: %v"+
 			", vlan network seems not working, please check the setting of %v's upper physical switch port first",
 			srcPod.String(), gateway.String(), err, ifi.Name)
 	}
@@ -44,7 +44,7 @@ func CheckWithTimeout(ifi *net.Interface, srcPod, gateway net.IP, timeout time.D
 
 	// Send gratuitous arp to ensure remote neigh cache flushed.
 	if err := gratuitousOverInterface(srcPod, ifi); err != nil {
-		return fmt.Errorf("send gratuitous arp for pod %v failed %v", srcPod.String(), err)
+		return fmt.Errorf("failed to send gratuitous arp for pod %v: %v", srcPod.String(), err)
 	}
 
 	return nil
@@ -53,7 +53,7 @@ func CheckWithTimeout(ifi *net.Interface, srcPod, gateway net.IP, timeout time.D
 func pingOverInterface(srcIP, dstIP net.IP, iif *net.Interface, timeout time.Duration) (net.HardwareAddr, error) {
 	client, err := Dial(iif, srcIP)
 	if err != nil {
-		return nil, fmt.Errorf("init client with ip %v interface %v failed: %v", srcIP.String(), iif.Name, err)
+		return nil, fmt.Errorf("failed to init client with ip %v interface %v: %v", srcIP.String(), iif.Name, err)
 	}
 
 	defer func() {
@@ -66,7 +66,7 @@ func pingOverInterface(srcIP, dstIP net.IP, iif *net.Interface, timeout time.Dur
 
 	hw, err := client.Resolve(dstIP)
 	if err != nil {
-		return nil, fmt.Errorf("resolve dst ip %v failed: %v", dstIP.String(), err)
+		return nil, fmt.Errorf("failed to resolve dst ip %v: %v", dstIP.String(), err)
 	}
 
 	return hw, nil
@@ -75,7 +75,7 @@ func pingOverInterface(srcIP, dstIP net.IP, iif *net.Interface, timeout time.Dur
 func gratuitousOverInterface(ip net.IP, iif *net.Interface) error {
 	client, err := Dial(iif, ip)
 	if err != nil {
-		return fmt.Errorf("init client with ip %v interface %v failed: %v", ip.String(), iif.Name, err)
+		return fmt.Errorf("failed to init client with ip %v interface %v: %v", ip.String(), iif.Name, err)
 	}
 
 	defer func() {
@@ -85,11 +85,11 @@ func gratuitousOverInterface(ip net.IP, iif *net.Interface) error {
 	for _, op := range []Operation{OperationRequest, OperationReply} {
 		arp, err := NewPacket(op, client.ifi.HardwareAddr, client.ip, ethernet.Broadcast, ip)
 		if err != nil {
-			return fmt.Errorf("create arp packet failed: %v", err)
+			return fmt.Errorf("failed create arp packet: %v", err)
 		}
 
 		if err := client.WriteTo(arp, ethernet.Broadcast); err != nil {
-			return fmt.Errorf("send gratuitous packet failed: %v", err)
+			return fmt.Errorf("failed to send gratuitous packet: %v", err)
 		}
 	}
 

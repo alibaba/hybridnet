@@ -35,7 +35,7 @@ type IPInfo struct {
 	Cidr *net.IPNet
 }
 
-func GenerateVlanNetIfName(parentName string, vlanID *uint32) (string, error) {
+func GenerateVlanNetIfName(parentName string, vlanID *int32) (string, error) {
 	if vlanID == nil {
 		return "", fmt.Errorf("vlan id should not be nil")
 	}
@@ -51,12 +51,12 @@ func GenerateVlanNetIfName(parentName string, vlanID *uint32) (string, error) {
 	return fmt.Sprintf("%s.%v", parentName, *vlanID), nil
 }
 
-func GenerateVxlanNetIfName(parentName string, vlanID *uint32) (string, error) {
+func GenerateVxlanNetIfName(parentName string, vlanID *int32) (string, error) {
 	if vlanID == nil || *vlanID == 0 {
 		return "", fmt.Errorf("vxlan id should not be nil or zero")
 	}
 
-	maxVxlanID := uint32(1<<24 - 1)
+	maxVxlanID := int32(1<<24 - 1)
 	if *vlanID > maxVxlanID {
 		return "", fmt.Errorf("vxlan id's value range is from 1 to %d", maxVxlanID)
 	}
@@ -64,7 +64,7 @@ func GenerateVxlanNetIfName(parentName string, vlanID *uint32) (string, error) {
 	return fmt.Sprintf("%s%s%v", parentName, VxlanLinkInfix, *vlanID), nil
 }
 
-func EnsureVlanIf(nodeIfName string, vlanID *uint32) (string, error) {
+func EnsureVlanIf(nodeIfName string, vlanID *int32) (string, error) {
 	nodeIf, err := netlink.LinkByName(nodeIfName)
 	if err != nil {
 		return "", err
@@ -184,12 +184,12 @@ func ListAllAddress(link netlink.Link) ([]netlink.Addr, error) {
 
 	ipv4AddrList, err := netlink.AddrList(link, netlink.FAMILY_V4)
 	if err != nil {
-		return nil, fmt.Errorf("list ipv4 address for link %v failed %v", link.Attrs().Name, err)
+		return nil, fmt.Errorf("failed to list ipv4 address for link %v: %v", link.Attrs().Name, err)
 	}
 
 	ipv6AddrList, err := netlink.AddrList(link, netlink.FAMILY_V6)
 	if err != nil {
-		return nil, fmt.Errorf("list ipv6 address for link %v failed %v", link.Attrs().Name, err)
+		return nil, fmt.Errorf("failed to list ipv6 address for link %v: %v", link.Attrs().Name, err)
 	}
 
 	for _, addr := range ipv4AddrList {
@@ -212,7 +212,7 @@ func ListLocalAddressExceptLink(exceptLinkName string) ([]netlink.Addr, error) {
 
 	linkList, err := netlink.LinkList()
 	if err != nil {
-		return nil, fmt.Errorf("list link failed: %v", err)
+		return nil, fmt.Errorf("failed to list link: %v", err)
 	}
 
 	for _, link := range linkList {
@@ -221,7 +221,7 @@ func ListLocalAddressExceptLink(exceptLinkName string) ([]netlink.Addr, error) {
 
 			linkAddrList, err := ListAllAddress(link)
 			if err != nil {
-				return nil, fmt.Errorf("link addr for link %v failed: %v", link.Attrs().Name, err)
+				return nil, fmt.Errorf("failed to link addr for link %v: %v", link.Attrs().Name, err)
 			}
 
 			addrList = append(addrList, linkAddrList...)
@@ -238,7 +238,7 @@ func CheckIPIsGlobalUnicast(ip net.IP) bool {
 func checkPodRuleExist(podCidr *net.IPNet, family int) (bool, error) {
 	ruleList, err := netlink.RuleList(family)
 	if err != nil {
-		return false, fmt.Errorf("list rule failed: %v", err)
+		return false, fmt.Errorf("failed to list rule: %v", err)
 	}
 
 	for _, rule := range ruleList {
@@ -253,7 +253,7 @@ func checkPodRuleExist(podCidr *net.IPNet, family int) (bool, error) {
 func checkPodNeighExist(podIP net.IP, forwardNodeIfIndex int, family int) (bool, error) {
 	neighList, err := netlink.NeighProxyList(forwardNodeIfIndex, family)
 	if err != nil {
-		return false, fmt.Errorf("list neighs for forward node if index %v failed: %v", forwardNodeIfIndex, err)
+		return false, fmt.Errorf("failed to list neighs for forward node if index %v: %v", forwardNodeIfIndex, err)
 	}
 
 	for _, neigh := range neighList {
@@ -275,12 +275,12 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 
 		neighExist, err := checkPodNeighExist(podIP, forwardNodeIfIndex, family)
 		if err != nil {
-			return fmt.Errorf("check pod ip %v neigh exist failed: %v", podIP, err)
+			return fmt.Errorf("failed to check pod ip %v neigh exist: %v", podIP, err)
 		}
 
 		ruleExist, err := checkPodRuleExist(podCidr, family)
 		if err != nil {
-			return fmt.Errorf("check cidr %v rule exist failed: %v", podCidr, err)
+			return fmt.Errorf("failed to check cidr %v rule exist: %v", podCidr, err)
 		}
 
 		if neighExist && ruleExist {
