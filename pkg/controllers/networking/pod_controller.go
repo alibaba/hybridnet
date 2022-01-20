@@ -28,9 +28,11 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
@@ -440,7 +442,19 @@ func squashIPSliceToSubnets(ips []*types.IP) (ret []string) {
 // SetupWithManager sets up the controller with the Manager.
 func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Pod{}).
+		For(&corev1.Pod{},
+			builder.WithPredicates(
+				&utils.IgnoreDeletePredicate{},
+				&predicate.ResourceVersionChangedPredicate{},
+				predicate.NewPredicateFuncs(func(obj client.Object) bool {
+					pod, ok := obj.(*corev1.Pod)
+					if !ok {
+						return false
+					}
+					return !pod.Spec.HostNetwork
+				}),
+			),
+		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
 			Log:                     mgr.GetLogger().WithName("PodController"),
