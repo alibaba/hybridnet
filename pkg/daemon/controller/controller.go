@@ -795,10 +795,10 @@ func (c *CtrlHub) runHealthyServer() {
 	health := healthcheck.NewHandler()
 
 	go func() {
-		_ = http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", c.config.BindPort), health)
+		_ = http.ListenAndServe(c.config.HealthyServerAddress, health)
 	}()
 
-	c.logger.Info("Listen on port", "port", c.config.BindPort)
+	c.logger.Info("start healthy server", "bind-address", c.config.HealthyServerAddress)
 }
 
 func isNeighResolving(state int) bool {

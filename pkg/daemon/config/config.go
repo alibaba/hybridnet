@@ -34,7 +34,9 @@ import (
 )
 
 const (
-	DefaultBindPort     = 11021
+	DefaultHealthyServerBindAddress = ":11021"
+	DefaultMetricsServerBindAddress = ":8091"
+
 	DefaultVxlanUDPPort = 8472
 
 	DefaultVlanCheckTimeout                     = 3 * time.Second
@@ -63,7 +65,9 @@ type Configuration struct {
 	NodeVxlanIfName            string
 	ExtraNodeLocalVxlanIPCidrs []*net.IPNet
 
-	BindPort     int
+	HealthyServerAddress string
+	MetricsServerAddress string
+
 	VxlanUDPPort int
 
 	VlanCheckTimeout                     time.Duration
@@ -92,7 +96,8 @@ func ParseFlags() (*Configuration, error) {
 		argPreferVlanInterfaces                 = pflag.String("prefer-vlan-interfaces", "", "The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
 		argPreferVxlanInterfaces                = pflag.String("prefer-vxlan-interfaces", "", "The preferred vxlan interfaces used to inter-host pod communication, default: the default route interface")
 		argBindSocket                           = pflag.String("bind-socket", "/var/run/hybridnet.sock", "The socket daemon bind to.")
-		argBindPort                             = pflag.Int("healthy-server-port", DefaultBindPort, "The port which daemon server bind")
+		argHealthyServerBindPort                = pflag.String("health-probe-addr", DefaultHealthyServerBindAddress, "The address which daemon healthy server bind")
+		argMetricsBindAddress                   = pflag.String("metrics-addr", DefaultMetricsServerBindAddress, "The address which daemon metrics server bind")
 		argLocalDirectTableNum                  = pflag.Int("local-direct-table", DefaultLocalDirectTableNum, "The number of local-pod-direct route table")
 		argIptableCheckDuration                 = pflag.Duration("iptables-check-duration", DefaultIptablesCheckDuration, "The time period for iptables manager to check iptables rules")
 		argToOverlaySubnetTableNum              = pflag.Int("to-overlay-table", DefaultToOverlaySubnetTableNum, "The number of to-overlay-pod-subnet route table")
@@ -123,7 +128,8 @@ func ParseFlags() (*Configuration, error) {
 		NodeName:                             nodeName,
 		NodeVlanIfName:                       *argPreferVlanInterfaces,
 		NodeVxlanIfName:                      *argPreferVxlanInterfaces,
-		BindPort:                             *argBindPort,
+		HealthyServerAddress:                 *argHealthyServerBindPort,
+		MetricsServerAddress:                 *argMetricsBindAddress,
 		LocalDirectTableNum:                  *argLocalDirectTableNum,
 		ToOverlaySubnetTableNum:              *argToOverlaySubnetTableNum,
 		OverlayMarkTableNum:                  *argOverlayMarkTableNum,
