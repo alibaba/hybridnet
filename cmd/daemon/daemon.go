@@ -51,7 +51,9 @@ func main() {
 	entryLog.Info("generate daemon config", "config", *config)
 
 	// setup manager
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{})
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		MetricsBindAddress: config.MetricsServerAddress,
+	})
 	if err != nil {
 		entryLog.Error(err, "unable to start daemon manager")
 		os.Exit(1)
