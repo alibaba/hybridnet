@@ -99,13 +99,15 @@ func NewUUIDMutex() UUIDMutex {
 	}
 }
 
-func NewUUIDMutexFromClient(c client.Client) (UUIDMutex, error) {
+func NewUUIDMutexFromClient(c client.Reader) (UUIDMutex, error) {
 	mutex := NewUUIDMutex()
 	localUUID, err := utils.GetClusterUUID(c)
 	if err != nil {
 		return nil, err
 	}
-	mutex.Lock(localUUID, "LocalCluster")
+	if _, err = mutex.Lock(localUUID, "LocalCluster"); err != nil {
+		return nil, err
+	}
 
 	remoteClusterList, err := utils.ListRemoteClusters(c)
 	if err != nil {
@@ -114,7 +116,9 @@ func NewUUIDMutexFromClient(c client.Client) (UUIDMutex, error) {
 	for i := range remoteClusterList.Items {
 		var remoteCluster = &remoteClusterList.Items[i]
 		if len(remoteCluster.Status.UUID) > 0 {
-			mutex.Lock(remoteCluster.Status.UUID, remoteCluster.Name)
+			if _, err = mutex.Lock(remoteCluster.Status.UUID, remoteCluster.Name); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return mutex, nil

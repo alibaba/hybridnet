@@ -68,7 +68,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ipamManager, err := networking.NewIPAMManager(mgr.GetClient())
+	ipamManager, err := networking.NewIPAMManager(mgr.GetAPIReader())
 	if err != nil {
 		entryLog.Error(err, "unable to create IPAM manager")
 		os.Exit(1)
@@ -136,7 +136,7 @@ func main() {
 	}
 
 	if feature.MultiClusterEnabled() {
-		uuidMutex, err := multicluster.NewUUIDMutexFromClient(mgr.GetClient())
+		uuidMutex, err := multicluster.NewUUIDMutexFromClient(mgr.GetAPIReader())
 		if err != nil {
 			entryLog.Error(err, "unable to create cluster UUID mutex")
 			os.Exit(1)
