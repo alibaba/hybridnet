@@ -18,29 +18,24 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
-	"time"
+
+	"github.com/go-logr/logr"
 
 	"github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/controller"
 	"github.com/alibaba/hybridnet/pkg/request"
 
 	"github.com/emicklei/go-restful"
-
-	"k8s.io/klog"
 )
 
-var requestLogString = "[%s] Incoming %s %s %s request"
-var responseLogString = "[%s] Outcoming response %s %s with %d status code in %vms"
-
 // RunServer runs the cniDaemon http restful server
-func RunServer(ctx context.Context, config *config.Configuration, ctrlRef *controller.CtrlHub) {
-	cdh, err := createCniDaemonHandler(ctx, config, ctrlRef)
+func RunServer(ctx context.Context, config *config.Configuration, ctrlRef *controller.CtrlHub, logger logr.Logger) {
+	cdh, err := createCniDaemonHandler(ctx, config, ctrlRef, logger.WithName("daemon-cni-server"))
 	if err != nil {
-		klog.Errorf("create cni daemon handler with socket %v failed: %v", config.BindSocket, err)
+		logger.Error(err, "failed to create cni daemon handler", "socket path", config.BindSocket)
 		return
 	}
 	server := http.Server{
@@ -48,12 +43,14 @@ func RunServer(ctx context.Context, config *config.Configuration, ctrlRef *contr
 	}
 	unixListener, err := net.Listen("unix", config.BindSocket)
 	if err != nil {
-		klog.Errorf("bind socket to %s failed %v", config.BindSocket, err)
+		logger.Error(err, "failed to bind socket", "socket path", config.BindSocket)
 		return
 	}
 	defer os.Remove(config.BindSocket)
-	klog.Infof("start listen on %s", config.BindSocket)
-	klog.Fatal(server.Serve(unixListener))
+	logger.Info("server started", "socket path", config.BindSocket)
+
+	err = server.Serve(unixListener)
+	logger.Error(err, "server exist unexpected")
 }
 
 func createHandler(cdh *cniDaemonHandler) http.Handler {
@@ -75,38 +72,5 @@ func createHandler(cdh *cniDaemonHandler) http.Handler {
 			To(cdh.handleDel).
 			Reads(request.PodRequest{}))
 
-	ws.Filter(requestAndResponseLogger)
-
 	return wsContainer
-}
-
-// web-service filter function used for request and response logging.
-func requestAndResponseLogger(request *restful.Request, response *restful.Response,
-	chain *restful.FilterChain) {
-	klog.Infof(formatRequestLog(request))
-	start := time.Now()
-	chain.ProcessFilter(request, response)
-	elapsed := float64((time.Since(start)) / time.Millisecond)
-	klog.Infof(formatResponseLog(response, request, elapsed))
-}
-
-// formatRequestLog formats request log string.
-func formatRequestLog(request *restful.Request) string {
-	uri := ""
-	if request.Request.URL != nil {
-		uri = request.Request.URL.RequestURI()
-	}
-
-	return fmt.Sprintf(requestLogString, time.Now().Format(time.RFC3339), request.Request.Proto,
-		request.Request.Method, uri)
-}
-
-// formatResponseLog formats response log string.
-func formatResponseLog(response *restful.Response, request *restful.Request, reqTime float64) string {
-	uri := ""
-	if request.Request.URL != nil {
-		uri = request.Request.URL.RequestURI()
-	}
-	return fmt.Sprintf(responseLogString, time.Now().Format(time.RFC3339),
-		request.Request.Method, uri, response.StatusCode(), reqTime)
 }

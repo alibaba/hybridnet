@@ -30,7 +30,7 @@ type enqueueRequestForNetwork struct {
 }
 
 func (e enqueueRequestForNetwork) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
-	q.Add(ActionReconcileSubnet)
+	q.Add(reconcileSubnetRequest)
 }
 
 func (e enqueueRequestForNetwork) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
@@ -43,27 +43,27 @@ func (e enqueueRequestForNetwork) Update(evt event.UpdateEvent, q workqueue.Rate
 
 	if len(oldNetwork.Status.SubnetList) != len(newNetwork.Status.SubnetList) ||
 		len(oldNetwork.Status.NodeList) != len(newNetwork.Status.NodeList) {
-		q.Add(ActionReconcileSubnet)
+		q.Add(reconcileSubnetRequest)
 		return
 	}
 
 	for index, subnet := range oldNetwork.Status.SubnetList {
 		if subnet != newNetwork.Status.SubnetList[index] {
-			q.Add(ActionReconcileSubnet)
+			q.Add(reconcileSubnetRequest)
 			return
 		}
 	}
 
 	for index, node := range oldNetwork.Status.NodeList {
 		if node != newNetwork.Status.NodeList[index] {
-			q.Add(ActionReconcileSubnet)
+			q.Add(reconcileSubnetRequest)
 			return
 		}
 	}
 }
 
 func (e enqueueRequestForNetwork) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
-	q.Add(ActionReconcileSubnet)
+	q.Add(reconcileSubnetRequest)
 }
 
 // reconcile subnet and node info on node if network info changed
@@ -71,7 +71,7 @@ func enqueueAddOrDeleteNetworkForNode(obj client.Object, q workqueue.RateLimitin
 	if obj != nil {
 		network := obj.(*networkingv1.Network)
 		if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
-			q.Add(ActionReconcileNode)
+			q.Add(reconcileNodeRequest)
 		}
 	}
 }

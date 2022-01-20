@@ -31,8 +31,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/vishvananda/netlink"
-
-	"k8s.io/klog"
 )
 
 const (
@@ -112,26 +110,11 @@ func ParseFlags() (*Configuration, error) {
 	// mute info log for ipset lib
 	logrus.SetLevel(logrus.WarnLevel)
 
-	_ = flag.Set("alsologtostderr", "true")
-	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
-	klog.InitFlags(klogFlags)
-
-	// Sync the glog and klog flags.
-	flag.CommandLine.VisitAll(func(f1 *flag.Flag) {
-		f2 := klogFlags.Lookup(f1.Name)
-		if f2 != nil {
-			value := f1.Value.String()
-			_ = f2.Value.Set(value)
-		}
-	})
-
-	pflag.CommandLine.AddGoFlagSet(klogFlags)
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
 	nodeName := os.Getenv("KUBE_NODE_NAME")
 	if nodeName == "" {
-		klog.Errorf("env KUBE_NODE_NAME not exists")
 		return nil, fmt.Errorf("env KUBE_NODE_NAME not exists")
 	}
 
@@ -162,7 +145,6 @@ func ParseFlags() (*Configuration, error) {
 		var err error
 		config.ExtraNodeLocalVxlanIPCidrs, err = parseCidrString(*argExtraNodeLocalVxlanIPCidrs)
 		if err != nil {
-			klog.Errorf("failed to parse extra node local vxlan ip cidrs: %v", err)
 			return nil, fmt.Errorf("failed to parse extra node local vxlan ip cidrs: %v", err)
 		}
 	}
@@ -171,7 +153,6 @@ func ParseFlags() (*Configuration, error) {
 		return nil, err
 	}
 
-	klog.Infof("daemon config: %v", config)
 	return config, nil
 }
 
@@ -208,9 +189,6 @@ func (config *Configuration) initNicConfig() error {
 	}
 	// To update prefer result interface.
 	config.NodeVxlanIfName = vxlanNodeInterface.Name
-
-	klog.Infof("use %v as node vlan interface, and use %v as node vxlan interface",
-		config.NodeVlanIfName, config.NodeVxlanIfName)
 
 	if config.VlanMTU == 0 || config.VlanMTU > vlanNodeInterface.MTU {
 		config.VlanMTU = vlanNodeInterface.MTU

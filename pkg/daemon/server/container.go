@@ -25,13 +25,12 @@ import (
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
-
-	"k8s.io/klog"
 )
 
 // ipAddr is a CIDR notation IP address and prefix length
 func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, containerID, mac string,
-	netID *int32, allocatedIPs map[networkingv1.IPVersion]*containernetwork.IPInfo, networkType networkingv1.NetworkType) (string, error) {
+	netID *int32, allocatedIPs map[networkingv1.IPVersion]*containernetwork.IPInfo,
+	networkType networkingv1.NetworkType) (string, error) {
 
 	var err error
 	var nodeIfName string
@@ -60,14 +59,11 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 		return "", err
 	}
 
-	klog.Infof("Configure container nic for %v.%v", podName, podNamespace)
 	if err = containernetwork.ConfigureContainerNic(containerNicName, hostNicName, nodeIfName,
 		allocatedIPs, macAddr, netID, podNS, mtu, cdh.config.VlanCheckTimeout, networkType,
 		cdh.config.NeighGCThresh1, cdh.config.NeighGCThresh2, cdh.config.NeighGCThresh3); err != nil {
 		return "", fmt.Errorf("failed to configure container nic for %v.%v: %v", podName, podNamespace, err)
 	}
-
-	klog.Infof("Finish configuring container nic for %v.%v", podName, podNamespace)
 
 	return hostNicName, nil
 }

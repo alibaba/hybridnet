@@ -36,7 +36,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -60,9 +59,9 @@ import (
 )
 
 const (
-	ActionReconcileSubnet     = "ReconcileSubnet"
-	ActionReconcileIPInstance = "ReconcileIPInstance"
-	ActionReconcileNode       = "ReconcileNode"
+	ActionReconcileSubnet     = "AllSubnetsRelatedToThisNode"
+	ActionReconcileIPInstance = "AllIPInstancesRelatedToThisNode"
+	ActionReconcileNode       = "AllNodes"
 
 	InstanceIPIndex = "instanceIP"
 	EndpointIPIndex = "endpointIP"
@@ -140,9 +139,9 @@ func NewCtrlHub(config *daemonconfig.Configuration, mgr ctrl.Manager, logger log
 		config: config,
 		mgr:    mgr,
 
-		subnetControllerTriggerSource:     &simpleTriggerSource{},
-		ipInstanceControllerTriggerSource: &simpleTriggerSource{},
-		nodeControllerTriggerSource:       &simpleTriggerSource{},
+		subnetControllerTriggerSource:     &simpleTriggerSource{key: ActionReconcileSubnet},
+		ipInstanceControllerTriggerSource: &simpleTriggerSource{key: ActionReconcileIPInstance},
+		nodeControllerTriggerSource:       &simpleTriggerSource{key: ActionReconcileNode},
 
 		routeV4Manager: routeV4Manager,
 		routeV6Manager: routeV6Manager,
@@ -173,8 +172,28 @@ func NewCtrlHub(config *daemonconfig.Configuration, mgr ctrl.Manager, logger log
 func (c *CtrlHub) Run(ctx context.Context) error {
 	c.runHealthyServer()
 
-	if err := c.setupControllers(); err != nil {
-		return fmt.Errorf("failed to start controllers: %v", err)
+	if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.IPInstance{},
+		InstanceIPIndex, instanceIPIndexer); err != nil {
+		return fmt.Errorf("failed to add instance ip indexer to manager: %v", err)
+	}
+
+	if feature.MultiClusterEnabled() {
+		if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &multiclusterv1.RemoteVtep{},
+			EndpointIPIndex, endpointIPIndexer); err != nil {
+			return fmt.Errorf("failed to add endpoint ip indexer to manager: %v", err)
+		}
+	}
+
+	if err := c.setupSubnetController(); err != nil {
+		return fmt.Errorf("failed to setup subnet controller: %v", err)
+	}
+
+	if err := c.setupIPInstanceController(); err != nil {
+		return fmt.Errorf("failed to setup ip instance controller: %v", err)
+	}
+
+	if err := c.setupNodeController(); err != nil {
+		return fmt.Errorf("failed to setup node controller: %v", err)
 	}
 
 	if err := c.handleLocalNetworkDeviceEvent(); err != nil {
@@ -193,146 +212,6 @@ func (c *CtrlHub) Run(ctx context.Context) error {
 	return nil
 }
 
-// StartControllers sets up the controllers.
-func (c *CtrlHub) setupControllers() error {
-	if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.IPInstance{}, InstanceIPIndex, instanceIPIndexer); err != nil {
-		return fmt.Errorf("failed to add instance ip indexer to manager: %v", err)
-	}
-
-	// create subnet controller
-	subnetControllerBuilder := ctrl.NewControllerManagedBy(c.mgr).
-		Named("subnet-controller").
-		Watches(&source.Kind{Type: &networkingv1.Subnet{}}, &fixedKeyHandler{key: ActionReconcileSubnet},
-			builder.WithPredicates(
-				&predicate.ResourceVersionChangedPredicate{},
-				&predicate.Funcs{
-					UpdateFunc: func(updateEvent event.UpdateEvent) bool {
-						oldSubnet := updateEvent.ObjectOld.(*networkingv1.Subnet)
-						newSubnet := updateEvent.ObjectNew.(*networkingv1.Subnet)
-
-						oldSubnetNetID := oldSubnet.Spec.NetID
-						newSubnetNetID := newSubnet.Spec.NetID
-
-						if (oldSubnetNetID == nil && newSubnetNetID != nil) ||
-							(oldSubnetNetID != nil && newSubnetNetID == nil) ||
-							(oldSubnetNetID != nil && newSubnetNetID != nil && *oldSubnetNetID != *newSubnetNetID) ||
-							oldSubnet.Spec.Network != newSubnet.Spec.Network ||
-							!reflect.DeepEqual(oldSubnet.Spec.Range, newSubnet.Spec.Range) ||
-							networkingv1.IsSubnetAutoNatOutgoing(&oldSubnet.Spec) != networkingv1.IsSubnetAutoNatOutgoing(&newSubnet.Spec) {
-							return true
-						}
-						return false
-					},
-				})).
-		Watches(&source.Kind{Type: &networkingv1.Network{}}, enqueueRequestForNetwork{}).
-		Watches(&source.Kind{Type: &corev1.Node{}}, &handler.Funcs{
-			UpdateFunc: func(updateEvent event.UpdateEvent, q workqueue.RateLimitingInterface) {
-				if checkNodeUpdate(updateEvent) {
-					q.Add(ActionReconcileSubnet)
-				}
-			},
-		}).
-		Watches(c.subnetControllerTriggerSource, &handler.Funcs{}).
-		WithOptions(controller.Options{Log: c.mgr.GetLogger().WithName("SubnetController")})
-
-	// create ip instance controller
-	ipInstanceControllerBuilder := ctrl.NewControllerManagedBy(c.mgr).
-		Named("ipInstance-controller").
-		Watches(&source.Kind{Type: &networkingv1.IPInstance{}}, &fixedKeyHandler{key: ActionReconcileIPInstance},
-			builder.WithPredicates(
-				&predicate.ResourceVersionChangedPredicate{},
-				&predicate.LabelChangedPredicate{},
-				&predicate.Funcs{
-					CreateFunc: func(createEvent event.CreateEvent) bool {
-						ipInstance := createEvent.Object.(*networkingv1.IPInstance)
-						return ipInstance.GetLabels()[constants.LabelNode] == c.config.NodeName
-					},
-					DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
-						ipInstance := deleteEvent.Object.(*networkingv1.IPInstance)
-						return ipInstance.GetLabels()[constants.LabelNode] == c.config.NodeName
-					},
-					UpdateFunc: func(updateEvent event.UpdateEvent) bool {
-						oldIPInstance := updateEvent.ObjectOld.(*networkingv1.IPInstance)
-						newIPInstance := updateEvent.ObjectNew.(*networkingv1.IPInstance)
-
-						if newIPInstance.GetLabels()[constants.LabelNode] != c.config.NodeName ||
-							oldIPInstance.GetLabels()[constants.LabelNode] != c.config.NodeName {
-							return false
-						}
-
-						if oldIPInstance.Labels[constants.LabelNode] != newIPInstance.Labels[constants.LabelNode] {
-							return true
-						}
-						return false
-					},
-					GenericFunc: func(genericEvent event.GenericEvent) bool {
-						ipInstance := genericEvent.Object.(*networkingv1.IPInstance)
-						return ipInstance.GetLabels()[constants.LabelNode] == c.config.NodeName
-					},
-				})).
-		Watches(c.ipInstanceControllerTriggerSource, &handler.Funcs{}).
-		WithOptions(controller.Options{Log: c.mgr.GetLogger().WithName("IPInstanceController")})
-
-	// create node controller
-	nodeControllerBuilder := ctrl.NewControllerManagedBy(c.mgr).
-		Named("node-controller").
-		Watches(&source.Kind{Type: &corev1.Node{}}, &fixedKeyHandler{key: ActionReconcileNode},
-			builder.WithPredicates(
-				&predicate.ResourceVersionChangedPredicate{},
-				&predicate.LabelChangedPredicate{},
-				&predicate.Funcs{
-					UpdateFunc: checkNodeUpdate,
-				},
-			)).
-		Watches(&source.Kind{Type: &networkingv1.Network{}}, &handler.Funcs{
-			CreateFunc: func(createEvent event.CreateEvent, limitingInterface workqueue.RateLimitingInterface) {
-				enqueueAddOrDeleteNetworkForNode(createEvent.Object, limitingInterface)
-			},
-			DeleteFunc: func(deleteEvent event.DeleteEvent, limitingInterface workqueue.RateLimitingInterface) {
-				enqueueAddOrDeleteNetworkForNode(deleteEvent.Object, limitingInterface)
-			},
-		}).
-		Watches(c.nodeControllerTriggerSource, &handler.Funcs{}).
-		WithOptions(controller.Options{Log: c.mgr.GetLogger().WithName("NodeController")})
-
-	// enable multicluster feature
-	if feature.MultiClusterEnabled() {
-		subnetControllerBuilder.Watches(&source.Kind{Type: &multiclusterv1.RemoteSubnet{}}, &enqueueRequestForRemoteSubnet{})
-		nodeControllerBuilder.Watches(&source.Kind{Type: &multiclusterv1.RemoteVtep{}}, &enqueueRequestForRemoteVtep{})
-
-		if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &multiclusterv1.RemoteVtep{}, EndpointIPIndex, endpointIPIndexer); err != nil {
-			return fmt.Errorf("failed to add endpoint ip indexer to manager: %v", err)
-		}
-	}
-
-	// run subnet controller
-	if err := subnetControllerBuilder.
-		Complete(&subnetReconciler{
-			Client:     c.mgr.GetClient(),
-			ctrlHubRef: c,
-		}); err != nil {
-		return fmt.Errorf("failed to start subnet controller: %v", err)
-	}
-
-	if err := ipInstanceControllerBuilder.
-		Complete(&ipInstanceReconciler{
-			Client:     c.mgr.GetClient(),
-			ctrlHubRef: c,
-		}); err != nil {
-		return fmt.Errorf("failed to start network controller: %v", err)
-	}
-
-	if err := nodeControllerBuilder.
-		Complete(&nodeReconciler{
-			Client:     c.mgr.GetClient(),
-			ctrlHubRef: c,
-		}); err != nil {
-		return fmt.Errorf("failed to start node controller: %v", err)
-	}
-
-	return nil
-}
-
 func (c *CtrlHub) CacheSynced(ctx context.Context) bool {
 	return c.mgr.GetCache().WaitForCacheSync(ctx)
 }
@@ -343,6 +222,171 @@ func (c *CtrlHub) GetMgrClient() client.Client {
 
 func (c *CtrlHub) GetMgrAPIReader() client.Reader {
 	return c.mgr.GetAPIReader()
+}
+
+func (c *CtrlHub) setupSubnetController() error {
+	subnetController, err := controller.New("subnet", c.mgr, controller.Options{
+		Reconciler: &subnetReconciler{
+			Client:     c.mgr.GetClient(),
+			ctrlHubRef: c,
+		}})
+	if err != nil {
+		return fmt.Errorf("failed to create subnet controller: %v", err)
+	}
+
+	if err := subnetController.Watch(&source.Kind{Type: &networkingv1.Subnet{}},
+		&fixedKeyHandler{key: ActionReconcileSubnet},
+		&predicate.ResourceVersionChangedPredicate{},
+		&predicate.Funcs{
+			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+				oldSubnet := updateEvent.ObjectOld.(*networkingv1.Subnet)
+				newSubnet := updateEvent.ObjectNew.(*networkingv1.Subnet)
+
+				oldSubnetNetID := oldSubnet.Spec.NetID
+				newSubnetNetID := newSubnet.Spec.NetID
+
+				if (oldSubnetNetID == nil && newSubnetNetID != nil) ||
+					(oldSubnetNetID != nil && newSubnetNetID == nil) ||
+					(oldSubnetNetID != nil && newSubnetNetID != nil && *oldSubnetNetID != *newSubnetNetID) ||
+					oldSubnet.Spec.Network != newSubnet.Spec.Network ||
+					!reflect.DeepEqual(oldSubnet.Spec.Range, newSubnet.Spec.Range) ||
+					networkingv1.IsSubnetAutoNatOutgoing(&oldSubnet.Spec) != networkingv1.IsSubnetAutoNatOutgoing(&newSubnet.Spec) {
+					return true
+				}
+				return false
+			},
+		}); err != nil {
+		return fmt.Errorf("failed to watch networkingv1.Subnet for subnet controller: %v", err)
+	}
+
+	if err := subnetController.Watch(&source.Kind{Type: &networkingv1.Network{}}, enqueueRequestForNetwork{}); err != nil {
+		return fmt.Errorf("failed to watch networkingv1.Network for subnet controller: %v", err)
+	}
+
+	if err := subnetController.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.Funcs{
+		UpdateFunc: func(updateEvent event.UpdateEvent, q workqueue.RateLimitingInterface) {
+			if checkNodeUpdate(updateEvent) {
+				q.Add(reconcileSubnetRequest)
+			}
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to watch corev1.Node for subnet controller: %v", err)
+	}
+
+	if err := subnetController.Watch(c.subnetControllerTriggerSource, &handler.Funcs{}); err != nil {
+		return fmt.Errorf("failed to watch subnetControllerTriggerSource for subnet controller: %v", err)
+	}
+
+	// enable multicluster feature
+	if feature.MultiClusterEnabled() {
+		if err := subnetController.Watch(&source.Kind{
+			Type: &multiclusterv1.RemoteSubnet{}},
+			&enqueueRequestForRemoteSubnet{},
+		); err != nil {
+			return fmt.Errorf("failed to watch multiclusterv1.RemoteSubnet for subnet controller: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func (c *CtrlHub) setupIPInstanceController() error {
+	ipInstanceController, err := controller.New("ip-instance", c.mgr, controller.Options{
+		Reconciler: &ipInstanceReconciler{
+			Client:     c.mgr.GetClient(),
+			ctrlHubRef: c,
+		}})
+	if err != nil {
+		return fmt.Errorf("failed to create ip instance controller: %v", err)
+	}
+
+	if err := ipInstanceController.Watch(&source.Kind{Type: &networkingv1.IPInstance{}},
+		&fixedKeyHandler{key: ActionReconcileIPInstance},
+		&predicate.ResourceVersionChangedPredicate{},
+		&predicate.LabelChangedPredicate{},
+		&predicate.Funcs{
+			CreateFunc: func(createEvent event.CreateEvent) bool {
+				ipInstance := createEvent.Object.(*networkingv1.IPInstance)
+				return ipInstance.GetLabels()[constants.LabelNode] == c.config.NodeName
+			},
+			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
+				ipInstance := deleteEvent.Object.(*networkingv1.IPInstance)
+				return ipInstance.GetLabels()[constants.LabelNode] == c.config.NodeName
+			},
+			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+				oldIPInstance := updateEvent.ObjectOld.(*networkingv1.IPInstance)
+				newIPInstance := updateEvent.ObjectNew.(*networkingv1.IPInstance)
+
+				if newIPInstance.GetLabels()[constants.LabelNode] != c.config.NodeName ||
+					oldIPInstance.GetLabels()[constants.LabelNode] != c.config.NodeName {
+					return false
+				}
+
+				if oldIPInstance.Labels[constants.LabelNode] != newIPInstance.Labels[constants.LabelNode] {
+					return true
+				}
+				return false
+			},
+			GenericFunc: func(genericEvent event.GenericEvent) bool {
+				ipInstance := genericEvent.Object.(*networkingv1.IPInstance)
+				return ipInstance.GetLabels()[constants.LabelNode] == c.config.NodeName
+			},
+		}); err != nil {
+		return fmt.Errorf("failed to watch networkingv1.IPInstance for ip instance controller: %v", err)
+	}
+
+	if err := ipInstanceController.Watch(c.ipInstanceControllerTriggerSource, &handler.Funcs{}); err != nil {
+		return fmt.Errorf("failed to watch ipInstanceControllerTriggerSource for ip instance controller: %v", err)
+	}
+
+	return nil
+}
+
+func (c *CtrlHub) setupNodeController() error {
+	nodeController, err := controller.New("node", c.mgr, controller.Options{
+		Reconciler: &nodeReconciler{
+			Client:     c.mgr.GetClient(),
+			ctrlHubRef: c,
+		}})
+	if err != nil {
+		return fmt.Errorf("failed to create node controller: %v", err)
+	}
+
+	if err := nodeController.Watch(&source.Kind{Type: &corev1.Node{}},
+		&fixedKeyHandler{key: ActionReconcileNode},
+		&predicate.ResourceVersionChangedPredicate{},
+		&predicate.LabelChangedPredicate{},
+		&predicate.Funcs{
+			UpdateFunc: checkNodeUpdate,
+		},
+	); err != nil {
+		return fmt.Errorf("failed to watch corev1.Node for node controller: %v", err)
+	}
+
+	if err := nodeController.Watch(&source.Kind{Type: &networkingv1.Network{}}, &handler.Funcs{
+		CreateFunc: func(createEvent event.CreateEvent, limitingInterface workqueue.RateLimitingInterface) {
+			enqueueAddOrDeleteNetworkForNode(createEvent.Object, limitingInterface)
+		},
+		DeleteFunc: func(deleteEvent event.DeleteEvent, limitingInterface workqueue.RateLimitingInterface) {
+			enqueueAddOrDeleteNetworkForNode(deleteEvent.Object, limitingInterface)
+		},
+	},
+	); err != nil {
+		return fmt.Errorf("failed to watch networkingv1.Network for node controller: %v", err)
+	}
+
+	if err := nodeController.Watch(c.nodeControllerTriggerSource, &handler.Funcs{}); err != nil {
+		return fmt.Errorf("failed to watch nodeControllerTriggerSource for node controller: %v", err)
+	}
+
+	if feature.MultiClusterEnabled() {
+		if err := nodeController.Watch(&source.Kind{Type: &multiclusterv1.RemoteVtep{}},
+			&enqueueRequestForRemoteVtep{}); err != nil {
+			return fmt.Errorf("failed to watch multiclusterv1.RemoteVtep for node controller: %v", err)
+		}
+	}
+
+	return nil
 }
 
 // Once node network interface is set from down to up for some reasons, the routes and neigh caches for this interface
@@ -501,7 +545,8 @@ func (c *CtrlHub) handleVxlanInterfaceNeighEvent() error {
 
 	ipSearchExecWrapper := func(ip net.IP, link netlink.Link) {
 		if err := ipSearch(ip, link); err != nil {
-			c.logger.Error(err, "failed to proxy resolve overlay neigh")
+			// print as info
+			c.logger.Info("failed to proxy resolve overlay neigh", "message", err)
 		}
 	}
 

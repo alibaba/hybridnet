@@ -21,6 +21,9 @@ import (
 	"fmt"
 	"net"
 
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,6 +45,15 @@ import (
 	"github.com/alibaba/hybridnet/pkg/daemon/route"
 )
 
+var (
+	reconcileSubnetRequest = reconcile.Request{NamespacedName: types.NamespacedName{
+		Name: ActionReconcileSubnet,
+	}}
+	reconcileNodeRequest = reconcile.Request{NamespacedName: types.NamespacedName{
+		Name: ActionReconcileNode,
+	}}
+)
+
 // simpleTriggerSource is a trigger to add a simple event to queue of controller
 type simpleTriggerSource struct {
 	queue workqueue.RateLimitingInterface
@@ -55,7 +67,9 @@ func (t *simpleTriggerSource) Start(ctx context.Context, handler handler.EventHa
 }
 
 func (t *simpleTriggerSource) Trigger() {
-	t.queue.Add(t.key)
+	t.queue.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+		Name: t.key,
+	}})
 }
 
 // fixedKeyHandler always add the key string into work queue
@@ -65,17 +79,23 @@ type fixedKeyHandler struct {
 }
 
 func (h *fixedKeyHandler) Create(e event.CreateEvent, q workqueue.RateLimitingInterface) {
-	q.Add(h.key)
+	q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+		Name: h.key,
+	}})
 }
 
 // Delete implements EventHandler
 func (h *fixedKeyHandler) Delete(e event.DeleteEvent, q workqueue.RateLimitingInterface) {
-	q.Add(h.key)
+	q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+		Name: h.key,
+	}})
 }
 
 // Update implements EventHandler
 func (h *fixedKeyHandler) Update(e event.UpdateEvent, q workqueue.RateLimitingInterface) {
-	q.Add(h.key)
+	q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+		Name: h.key,
+	}})
 }
 
 func (c *CtrlHub) getRouterManager(ipVersion networkingv1.IPVersion) *route.Manager {
