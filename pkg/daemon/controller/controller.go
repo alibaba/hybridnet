@@ -26,8 +26,6 @@ import (
 	"syscall"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	"github.com/go-logr/logr"
 
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -61,9 +59,9 @@ import (
 )
 
 const (
-	ActionReconcileSubnet     = "ReconcileSubnet"
-	ActionReconcileIPInstance = "ReconcileIPInstance"
-	ActionReconcileNode       = "ReconcileNode"
+	ActionReconcileSubnet     = "AllSubnetsRelatedToThisNode"
+	ActionReconcileIPInstance = "AllIPInstancesRelatedToThisNode"
+	ActionReconcileNode       = "AllNodes"
 
 	InstanceIPIndex = "instanceIP"
 	EndpointIPIndex = "endpointIP"
@@ -73,15 +71,6 @@ const (
 	AddrUpdateChainSize = 200
 
 	NetlinkSubscribeRetryInterval = 10 * time.Second
-)
-
-var (
-	reconcileSubnetRequest = reconcile.Request{NamespacedName: types.NamespacedName{
-		Name: ActionReconcileSubnet,
-	}}
-	reconcileNodeRequest = reconcile.Request{NamespacedName: types.NamespacedName{
-		Name: ActionReconcileNode,
-	}}
 )
 
 type CtrlHub struct {
@@ -150,9 +139,9 @@ func NewCtrlHub(config *daemonconfig.Configuration, mgr ctrl.Manager, logger log
 		config: config,
 		mgr:    mgr,
 
-		subnetControllerTriggerSource:     &simpleTriggerSource{},
-		ipInstanceControllerTriggerSource: &simpleTriggerSource{},
-		nodeControllerTriggerSource:       &simpleTriggerSource{},
+		subnetControllerTriggerSource:     &simpleTriggerSource{key: ActionReconcileSubnet},
+		ipInstanceControllerTriggerSource: &simpleTriggerSource{key: ActionReconcileIPInstance},
+		nodeControllerTriggerSource:       &simpleTriggerSource{key: ActionReconcileNode},
 
 		routeV4Manager: routeV4Manager,
 		routeV6Manager: routeV6Manager,
@@ -236,12 +225,11 @@ func (c *CtrlHub) GetMgrAPIReader() client.Reader {
 }
 
 func (c *CtrlHub) setupSubnetController() error {
-	subnetController, err := controller.New("subnet-controller", c.mgr, controller.Options{
+	subnetController, err := controller.New("subnet", c.mgr, controller.Options{
 		Reconciler: &subnetReconciler{
 			Client:     c.mgr.GetClient(),
 			ctrlHubRef: c,
-		},
-		Log: c.mgr.GetLogger().WithName("SubnetController")})
+		}})
 	if err != nil {
 		return fmt.Errorf("failed to create subnet controller: %v", err)
 	}
@@ -303,12 +291,11 @@ func (c *CtrlHub) setupSubnetController() error {
 }
 
 func (c *CtrlHub) setupIPInstanceController() error {
-	ipInstanceController, err := controller.New("ipInstance-controller", c.mgr, controller.Options{
+	ipInstanceController, err := controller.New("ip-instance", c.mgr, controller.Options{
 		Reconciler: &ipInstanceReconciler{
 			Client:     c.mgr.GetClient(),
 			ctrlHubRef: c,
-		},
-		Log: c.mgr.GetLogger().WithName("IPInstanceController")})
+		}})
 	if err != nil {
 		return fmt.Errorf("failed to create ip instance controller: %v", err)
 	}
@@ -356,12 +343,11 @@ func (c *CtrlHub) setupIPInstanceController() error {
 }
 
 func (c *CtrlHub) setupNodeController() error {
-	nodeController, err := controller.New("node-controller", c.mgr, controller.Options{
+	nodeController, err := controller.New("node", c.mgr, controller.Options{
 		Reconciler: &nodeReconciler{
 			Client:     c.mgr.GetClient(),
 			ctrlHubRef: c,
-		},
-		Log: c.mgr.GetLogger().WithName("NodeController")})
+		}})
 	if err != nil {
 		return fmt.Errorf("failed to create node controller: %v", err)
 	}

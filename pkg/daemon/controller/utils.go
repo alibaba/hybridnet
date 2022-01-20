@@ -45,9 +45,19 @@ import (
 	"github.com/alibaba/hybridnet/pkg/daemon/route"
 )
 
+var (
+	reconcileSubnetRequest = reconcile.Request{NamespacedName: types.NamespacedName{
+		Name: ActionReconcileSubnet,
+	}}
+	reconcileNodeRequest = reconcile.Request{NamespacedName: types.NamespacedName{
+		Name: ActionReconcileNode,
+	}}
+)
+
 // simpleTriggerSource is a trigger to add a simple event to queue of controller
 type simpleTriggerSource struct {
 	queue workqueue.RateLimitingInterface
+	key   string
 }
 
 func (t *simpleTriggerSource) Start(ctx context.Context, handler handler.EventHandler, queue workqueue.RateLimitingInterface,
@@ -57,7 +67,9 @@ func (t *simpleTriggerSource) Start(ctx context.Context, handler handler.EventHa
 }
 
 func (t *simpleTriggerSource) Trigger() {
-	t.queue.Add(reconcile.Request{NamespacedName: types.NamespacedName{}})
+	t.queue.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+		Name: t.key,
+	}})
 }
 
 // fixedKeyHandler always add the key string into work queue

@@ -24,7 +24,6 @@ import (
 	"syscall"
 
 	"github.com/containernetworking/plugins/pkg/ns"
-	"k8s.io/klog"
 )
 
 type HybridnetDaemonError string
@@ -40,9 +39,6 @@ const (
 func ValidDockerNetnsDir(path string) bool {
 	defaultNS := path + "/" + "default"
 	if _, err := os.Stat(defaultNS); err != nil {
-		if !os.IsNotExist(err) {
-			klog.Infof("stat %v error: %v", defaultNS, err)
-		}
 		return false
 	}
 	return true

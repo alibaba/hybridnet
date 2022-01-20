@@ -48,6 +48,7 @@ func main() {
 		entryLog.Error(err, "failed to parse config")
 		os.Exit(1)
 	}
+	entryLog.Info("generate daemon config", "config", *config)
 
 	// setup manager
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{})
@@ -73,7 +74,7 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 
-	ctl, err := controller.NewCtrlHub(config, mgr, log.Log.WithName("CtrlHub"))
+	ctl, err := controller.NewCtrlHub(config, mgr, log.Log.WithName("ctrl-hub"))
 	if err != nil {
 		entryLog.Error(err, "failed to create controller")
 		os.Exit(1)
@@ -88,5 +89,5 @@ func main() {
 		}
 	}()
 
-	server.RunServer(ctx, config, ctl)
+	server.RunServer(ctx, config, ctl, log.Log.WithName("cni-server"))
 }

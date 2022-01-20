@@ -26,7 +26,6 @@ import (
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 
 	"github.com/vishvananda/netlink"
-	"k8s.io/klog"
 )
 
 type IPInfo struct {
@@ -147,7 +146,7 @@ func GetDefaultRoute(family int) (*netlink.Route, error) {
 	return nil, daemonutils.NotExist
 }
 
-// Get first valid interface by prefer string.
+// GetInterfaceByPreferString return first valid interface by prefer string.
 func GetInterfaceByPreferString(preferString string) (*net.Interface, error) {
 	ifList := strings.Split(preferString, ",")
 	for _, iF := range ifList {
@@ -159,8 +158,6 @@ func GetInterfaceByPreferString(preferString string) (*net.Interface, error) {
 		if err == nil {
 			return iif, nil
 		}
-
-		klog.Warningf("failed to get interface %v: %v", iF, err)
 	}
 
 	return nil, fmt.Errorf("no valid interface found by prefer string %v", preferString)
