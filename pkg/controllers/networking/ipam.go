@@ -48,12 +48,12 @@ func NewIPAMManager(c client.Reader) (IPAMManager, error) {
 
 	manager := &ipamManager{}
 	if feature.DualStackEnabled() {
-		manager.Interface, err = allocator.NewAllocator(networkNames, NetworkGetter(c), SubnetGetter(c), IPSetGetter(c))
+		manager.dualStack, err = allocator.NewDualStackAllocator(networkNames, NetworkGetter(c), SubnetGetter(c), IPSetGetter(c))
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		manager.dualStack, err = allocator.NewDualStackAllocator(networkNames, NetworkGetter(c), SubnetGetter(c), IPSetGetter(c))
+		manager.Interface, err = allocator.NewAllocator(networkNames, NetworkGetter(c), SubnetGetter(c), IPSetGetter(c))
 		if err != nil {
 			return nil, err
 		}
@@ -117,6 +117,14 @@ type ipamManager struct {
 
 func (i *ipamManager) DualStack() ipam.DualStackInterface {
 	return i.dualStack
+}
+
+func (i *ipamManager) Refresh(networks []string) error {
+	if feature.DualStackEnabled() {
+		return i.DualStack().Refresh(networks)
+	} else {
+		return i.Interface.Refresh(networks)
+	}
 }
 
 type IPAMStore interface {
