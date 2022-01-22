@@ -26,10 +26,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
 	"github.com/go-logr/logr"
-
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-
+	"github.com/heptiolabs/healthcheck"
+	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
 
 	corev1 "k8s.io/api/core/v1"
@@ -37,14 +38,11 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"github.com/heptiolabs/healthcheck"
-	"github.com/vishvananda/netlink"
-	"github.com/vishvananda/netns"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
@@ -89,6 +87,8 @@ type CtrlHub struct {
 
 	addrV4Manager *addr.Manager
 
+	bgpManager *bgp.Manager
+
 	iptablesV4Manager  *iptables.Manager
 	iptablesV6Manager  *iptables.Manager
 	iptablesSyncCh     chan struct{}
@@ -108,7 +108,7 @@ func NewCtrlHub(config *daemonconfig.Configuration, mgr ctrl.Manager, logger log
 		netlink.FAMILY_V4,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create ipv4 route manager error: %v", err)
+		return nil, fmt.Errorf("failed to create ipv4 route manager: %v", err)
 	}
 
 	routeV6Manager, err := route.CreateRouteManager(config.LocalDirectTableNum,
@@ -117,7 +117,7 @@ func NewCtrlHub(config *daemonconfig.Configuration, mgr ctrl.Manager, logger log
 		netlink.FAMILY_V6,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create ipv6 route manager error: %v", err)
+		return nil, fmt.Errorf("failed to create ipv6 route manager: %v", err)
 	}
 
 	neighV4Manager := neigh.CreateNeighManager(netlink.FAMILY_V4)
@@ -125,17 +125,22 @@ func NewCtrlHub(config *daemonconfig.Configuration, mgr ctrl.Manager, logger log
 
 	iptablesV4Manager, err := iptables.CreateIPtablesManager(iptables.ProtocolIpv4)
 	if err != nil {
-		return nil, fmt.Errorf("create ipv4 iptables manager error: %v", err)
+		return nil, fmt.Errorf("failed to create ipv4 iptables manager: %v", err)
 	}
 
 	iptablesV6Manager, err := iptables.CreateIPtablesManager(iptables.ProtocolIpv6)
 	if err != nil {
-		return nil, fmt.Errorf("create ipv6 iptables manager error: %v", err)
+		return nil, fmt.Errorf("failed to create ipv6 iptables manager: %v", err)
 	}
 
 	addrV4Manager := addr.CreateAddrManager(netlink.FAMILY_V4, config.NodeName)
 
-	controller := &CtrlHub{
+	bgpManager, err := bgp.NewManager(config.NodeBGPIfName, config.BGPgRPCServerAddress, logger.WithName("bgp-server"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bgp manager: %v", err)
+	}
+
+	ctrlHub := &CtrlHub{
 		config: config,
 		mgr:    mgr,
 
@@ -150,6 +155,8 @@ func NewCtrlHub(config *daemonconfig.Configuration, mgr ctrl.Manager, logger log
 		neighV6Manager: neighV6Manager,
 
 		addrV4Manager: addrV4Manager,
+
+		bgpManager: bgpManager,
 
 		iptablesV4Manager:  iptablesV4Manager,
 		iptablesV6Manager:  iptablesV6Manager,
@@ -166,7 +173,7 @@ func NewCtrlHub(config *daemonconfig.Configuration, mgr ctrl.Manager, logger log
 		return nil, fmt.Errorf("failed to get node %s info %v", config.NodeName, err)
 	}
 
-	return controller, nil
+	return ctrlHub, nil
 }
 
 func (c *CtrlHub) Run(ctx context.Context) error {

@@ -36,6 +36,7 @@ import (
 const (
 	DefaultHealthyServerBindAddress = ":11021"
 	DefaultMetricsServerBindAddress = ":8091"
+	DefaultBGPgRPCServerBindAddress = ":50051"
 
 	DefaultVxlanUDPPort = 8472
 
@@ -61,12 +62,15 @@ type Configuration struct {
 	VlanMTU  int
 	VxlanMTU int
 
-	NodeVlanIfName             string
-	NodeVxlanIfName            string
+	NodeVlanIfName  string
+	NodeVxlanIfName string
+	NodeBGPIfName   string
+
 	ExtraNodeLocalVxlanIPCidrs []*net.IPNet
 
 	HealthyServerAddress string
 	MetricsServerAddress string
+	BGPgRPCServerAddress string
 
 	VxlanUDPPort int
 
@@ -95,9 +99,11 @@ func ParseFlags() (*Configuration, error) {
 		argPreferInterfaces                     = pflag.String("prefer-interfaces", "", "[deprecated]The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
 		argPreferVlanInterfaces                 = pflag.String("prefer-vlan-interfaces", "", "The preferred vlan interfaces used to inter-host pod communication, default: the default route interface")
 		argPreferVxlanInterfaces                = pflag.String("prefer-vxlan-interfaces", "", "The preferred vxlan interfaces used to inter-host pod communication, default: the default route interface")
+		argPreferBGPInterfaces                  = pflag.String("prefer-bgp-interfaces", "", "The preferred bgp interfaces used to inter-host pod communication, default: the default route interface")
 		argBindSocket                           = pflag.String("bind-socket", "/var/run/hybridnet.sock", "The socket daemon bind to.")
-		argHealthyServerBindPort                = pflag.String("health-probe-addr", DefaultHealthyServerBindAddress, "The address which daemon healthy server bind")
-		argMetricsBindAddress                   = pflag.String("metrics-addr", DefaultMetricsServerBindAddress, "The address which daemon metrics server bind")
+		argHealthyServerAddress                 = pflag.String("health-probe-addr", DefaultHealthyServerBindAddress, "The address which daemon healthy server bind")
+		argMetricsServerAddress                 = pflag.String("metrics-addr", DefaultMetricsServerBindAddress, "The address which daemon metrics server bind")
+		argBGPgRPCServerAddress                 = pflag.String("bgp-grpc-server-addr", DefaultBGPgRPCServerBindAddress, "The address which daemon bgp grpc server bind, for using gobgp command to debug")
 		argLocalDirectTableNum                  = pflag.Int("local-direct-table", DefaultLocalDirectTableNum, "The number of local-pod-direct route table")
 		argIptableCheckDuration                 = pflag.Duration("iptables-check-duration", DefaultIptablesCheckDuration, "The time period for iptables manager to check iptables rules")
 		argToOverlaySubnetTableNum              = pflag.Int("to-overlay-table", DefaultToOverlaySubnetTableNum, "The number of to-overlay-pod-subnet route table")
@@ -128,8 +134,10 @@ func ParseFlags() (*Configuration, error) {
 		NodeName:                             nodeName,
 		NodeVlanIfName:                       *argPreferVlanInterfaces,
 		NodeVxlanIfName:                      *argPreferVxlanInterfaces,
-		HealthyServerAddress:                 *argHealthyServerBindPort,
-		MetricsServerAddress:                 *argMetricsBindAddress,
+		NodeBGPIfName:                        *argPreferBGPInterfaces,
+		HealthyServerAddress:                 *argHealthyServerAddress,
+		MetricsServerAddress:                 *argMetricsServerAddress,
+		BGPgRPCServerAddress:                 *argBGPgRPCServerAddress,
 		LocalDirectTableNum:                  *argLocalDirectTableNum,
 		ToOverlaySubnetTableNum:              *argToOverlaySubnetTableNum,
 		OverlayMarkTableNum:                  *argOverlayMarkTableNum,
@@ -181,6 +189,7 @@ func (config *Configuration) initNicConfig() error {
 	// if vlan/vxlan interface name is not provided, get the ipv4 default gateway interface
 	config.NodeVlanIfName = utils.PickFirstNonEmptyString(config.NodeVlanIfName, defaultGatewayIf.Name)
 	config.NodeVxlanIfName = utils.PickFirstNonEmptyString(config.NodeVxlanIfName, defaultGatewayIf.Name)
+	config.NodeBGPIfName = utils.PickFirstNonEmptyString(config.NodeBGPIfName, defaultGatewayIf.Name)
 
 	vlanNodeInterface, err := containernetwork.GetInterfaceByPreferString(config.NodeVlanIfName)
 	if err != nil {
@@ -195,6 +204,13 @@ func (config *Configuration) initNicConfig() error {
 	}
 	// To update prefer result interface.
 	config.NodeVxlanIfName = vxlanNodeInterface.Name
+
+	bgpNodeInterface, err := containernetwork.GetInterfaceByPreferString(config.NodeBGPIfName)
+	if err != nil {
+		return fmt.Errorf("failed to get vxlan node interface: %v", err)
+	}
+	// To update prefer result interface.
+	config.NodeBGPIfName = bgpNodeInterface.Name
 
 	if config.VlanMTU == 0 || config.VlanMTU > vlanNodeInterface.MTU {
 		config.VlanMTU = vlanNodeInterface.MTU
