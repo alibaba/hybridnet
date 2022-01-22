@@ -45,15 +45,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/daemon/route"
 )
 
-var (
-	reconcileSubnetRequest = reconcile.Request{NamespacedName: types.NamespacedName{
-		Name: ActionReconcileSubnet,
-	}}
-	reconcileNodeRequest = reconcile.Request{NamespacedName: types.NamespacedName{
-		Name: ActionReconcileNode,
-	}}
-)
-
 // simpleTriggerSource is a trigger to add a simple event to queue of controller
 type simpleTriggerSource struct {
 	queue workqueue.RateLimitingInterface

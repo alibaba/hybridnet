@@ -35,7 +35,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -266,17 +265,55 @@ func (c *CtrlHub) setupSubnetController() error {
 		return fmt.Errorf("failed to watch networkingv1.Subnet for subnet controller: %v", err)
 	}
 
-	if err := subnetController.Watch(&source.Kind{Type: &networkingv1.Network{}}, enqueueRequestForNetwork{}); err != nil {
+	if err := subnetController.Watch(&source.Kind{Type: &networkingv1.Network{}},
+		&fixedKeyHandler{key: ActionReconcileSubnet},
+		&predicate.Funcs{
+			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+				oldNetwork := updateEvent.ObjectOld.(*networkingv1.Network)
+				newNetwork := updateEvent.ObjectNew.(*networkingv1.Network)
+
+				if len(oldNetwork.Status.SubnetList) != len(newNetwork.Status.SubnetList) ||
+					len(oldNetwork.Status.NodeList) != len(newNetwork.Status.NodeList) {
+					return true
+				}
+
+				for index, subnet := range oldNetwork.Status.SubnetList {
+					if subnet != newNetwork.Status.SubnetList[index] {
+						return true
+					}
+				}
+
+				for index, node := range oldNetwork.Status.NodeList {
+					if node != newNetwork.Status.NodeList[index] {
+						return true
+					}
+				}
+				return false
+			},
+		},
+	); err != nil {
 		return fmt.Errorf("failed to watch networkingv1.Network for subnet controller: %v", err)
 	}
 
-	if err := subnetController.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.Funcs{
-		UpdateFunc: func(updateEvent event.UpdateEvent, q workqueue.RateLimitingInterface) {
-			if checkNodeUpdate(updateEvent) {
-				q.Add(reconcileSubnetRequest)
-			}
-		},
-	}); err != nil {
+	if err := subnetController.Watch(&source.Kind{Type: &corev1.Node{}},
+		&fixedKeyHandler{key: ActionReconcileSubnet},
+		predicate.Funcs{
+			CreateFunc: func(createEvent event.CreateEvent) bool {
+				return false
+			},
+			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+				if checkNodeUpdate(updateEvent) {
+					return true
+				}
+				return false
+			},
+			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
+				return false
+			},
+			GenericFunc: func(genericEvent event.GenericEvent) bool {
+				return false
+			},
+		}); err != nil {
 		return fmt.Errorf("failed to watch corev1.Node for subnet controller: %v", err)
 	}
 
@@ -288,7 +325,20 @@ func (c *CtrlHub) setupSubnetController() error {
 	if feature.MultiClusterEnabled() {
 		if err := subnetController.Watch(&source.Kind{
 			Type: &multiclusterv1.RemoteSubnet{}},
-			&enqueueRequestForRemoteSubnet{},
+			&fixedKeyHandler{key: ActionReconcileSubnet},
+			predicate.Funcs{
+				UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+					oldRs := updateEvent.ObjectOld.(*multiclusterv1.RemoteSubnet)
+					newRs := updateEvent.ObjectNew.(*multiclusterv1.RemoteSubnet)
+
+					if oldRs.Spec.ClusterName != newRs.Spec.ClusterName ||
+						!reflect.DeepEqual(oldRs.Spec.Range, newRs.Spec.Range) ||
+						multiclusterv1.GetRemoteSubnetType(oldRs) != multiclusterv1.GetRemoteSubnetType(newRs) {
+						return true
+					}
+					return false
+				},
+			},
 		); err != nil {
 			return fmt.Errorf("failed to watch multiclusterv1.RemoteSubnet for subnet controller: %v", err)
 		}
@@ -370,14 +420,30 @@ func (c *CtrlHub) setupNodeController() error {
 		return fmt.Errorf("failed to watch corev1.Node for node controller: %v", err)
 	}
 
-	if err := nodeController.Watch(&source.Kind{Type: &networkingv1.Network{}}, &handler.Funcs{
-		CreateFunc: func(createEvent event.CreateEvent, limitingInterface workqueue.RateLimitingInterface) {
-			enqueueAddOrDeleteNetworkForNode(createEvent.Object, limitingInterface)
+	if err := nodeController.Watch(&source.Kind{Type: &networkingv1.Network{}},
+		&fixedKeyHandler{key: ActionReconcileNode},
+		predicate.Funcs{
+			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+				return false
+			},
+			CreateFunc: func(createEvent event.CreateEvent) bool {
+				network := createEvent.Object.(*networkingv1.Network)
+				if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
+					return true
+				}
+				return false
+			},
+			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
+				network := deleteEvent.Object.(*networkingv1.Network)
+				if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
+					return true
+				}
+				return false
+			},
+			GenericFunc: func(genericEvent event.GenericEvent) bool {
+				return false
+			},
 		},
-		DeleteFunc: func(deleteEvent event.DeleteEvent, limitingInterface workqueue.RateLimitingInterface) {
-			enqueueAddOrDeleteNetworkForNode(deleteEvent.Object, limitingInterface)
-		},
-	},
 	); err != nil {
 		return fmt.Errorf("failed to watch networkingv1.Network for node controller: %v", err)
 	}
@@ -388,7 +454,22 @@ func (c *CtrlHub) setupNodeController() error {
 
 	if feature.MultiClusterEnabled() {
 		if err := nodeController.Watch(&source.Kind{Type: &multiclusterv1.RemoteVtep{}},
-			&enqueueRequestForRemoteVtep{}); err != nil {
+			&fixedKeyHandler{key: ActionReconcileNode},
+			predicate.Funcs{
+				UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+					oldRemoteVtep := updateEvent.ObjectOld.(*multiclusterv1.RemoteVtep)
+					newRemoteVtep := updateEvent.ObjectNew.(*multiclusterv1.RemoteVtep)
+
+					if oldRemoteVtep.Spec.VTEPInfo.IP != newRemoteVtep.Spec.VTEPInfo.IP ||
+						oldRemoteVtep.Spec.VTEPInfo.MAC != newRemoteVtep.Spec.VTEPInfo.MAC ||
+						oldRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] != newRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] ||
+						!isIPListEqual(oldRemoteVtep.Spec.EndpointIPList, newRemoteVtep.Spec.EndpointIPList) {
+						return true
+					}
+					return false
+				},
+			},
+		); err != nil {
 			return fmt.Errorf("failed to watch multiclusterv1.RemoteVtep for node controller: %v", err)
 		}
 	}
