@@ -53,6 +53,7 @@ const (
 
 // PodReconciler reconciles a Pod object
 type PodReconciler struct {
+	APIReader client.Reader
 	client.Client
 
 	Recorder record.EventRecorder
@@ -91,7 +92,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		}
 	}()
 
-	if err = r.Get(ctx, req.NamespacedName, pod); err != nil {
+	if err = r.APIReader.Get(ctx, req.NamespacedName, pod); err != nil {
 		if err = client.IgnoreNotFound(err); err != nil {
 			return ctrl.Result{}, fmt.Errorf("unable to fetch Pod: %v", err)
 		}
@@ -451,7 +452,13 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					if !ok {
 						return false
 					}
-					return !pod.Spec.HostNetwork
+					// ignore host networking pod
+					if pod.Spec.HostNetwork {
+						return false
+					}
+
+					// only pod after scheduling and before IP-allocation should be processed
+					return len(pod.Spec.NodeName) > 0 && !metav1.HasAnnotation(pod.ObjectMeta, constants.AnnotationIP)
 				}),
 			),
 		).
