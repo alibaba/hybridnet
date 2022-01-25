@@ -229,8 +229,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	cdh.logger.Info("Create container",
 		"podName", podRequest.PodName,
 		"podNamespace", podRequest.PodNamespace,
-		"v4IPAddr", allocatedIPs[networkingv1.IPv4].Addr.String(),
-		"v6IPAddr", allocatedIPs[networkingv1.IPv6].Addr.String(),
+		"ipAddr", printAllocatedIPs(allocatedIPs),
 		"macAddr", macAddr,
 		"netID", *netID)
 	hostInterface, err := cdh.configureNic(podRequest.PodName, podRequest.PodNamespace, podRequest.NetNs, podRequest.ContainerID,
@@ -243,8 +242,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	cdh.logger.Info("Container network created",
 		"podName", podRequest.PodName,
 		"podNamespace", podRequest.PodNamespace,
-		"v4IPAddr", allocatedIPs[networkingv1.IPv4].Addr.String(),
-		"v6IPAddr", allocatedIPs[networkingv1.IPv6].Addr.String(),
+		"ipAddr", printAllocatedIPs(allocatedIPs),
 		"macAddr", macAddr,
 		"netID", *netID)
 
@@ -296,4 +294,20 @@ func (cdh *cniDaemonHandler) errorWrapper(err error, status int, resp *restful.R
 	_ = resp.WriteHeaderAndEntity(status, request.PodResponse{
 		Err: err.Error(),
 	})
+}
+
+func printAllocatedIPs(allocatedIPs map[networkingv1.IPVersion]*containernetwork.IPInfo) string {
+	ipAddresseString := ""
+	if allocatedIPs[networkingv1.IPv4] != nil && allocatedIPs[networkingv1.IPv4].Addr != nil {
+		ipAddresseString = ipAddresseString + allocatedIPs[networkingv1.IPv4].Addr.String()
+	}
+
+	if allocatedIPs[networkingv1.IPv6] != nil && allocatedIPs[networkingv1.IPv6].Addr != nil {
+		if ipAddresseString != "" {
+			ipAddresseString = ipAddresseString + "/"
+		}
+		ipAddresseString = ipAddresseString + allocatedIPs[networkingv1.IPv6].Addr.String()
+	}
+
+	return ipAddresseString
 }
