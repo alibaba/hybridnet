@@ -61,6 +61,7 @@ type Configuration struct {
 
 	VlanMTU  int
 	VxlanMTU int
+	BGPMTU   int
 
 	NodeVlanIfName  string
 	NodeVxlanIfName string
@@ -214,6 +215,10 @@ func (config *Configuration) initNicConfig() error {
 
 	if config.VlanMTU == 0 || config.VlanMTU > vlanNodeInterface.MTU {
 		config.VlanMTU = vlanNodeInterface.MTU
+	}
+
+	if config.BGPMTU == 0 || config.BGPMTU > bgpNodeInterface.MTU {
+		config.BGPMTU = bgpNodeInterface.MTU
 	}
 
 	// VXLAN uses a 50-byte header

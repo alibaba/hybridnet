@@ -82,8 +82,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	mgr.GetAPIReader()
-
 	go func() {
 		if err = ctl.Run(ctx); err != nil {
 			entryLog.Error(err, "CtrlHub exit unusually")

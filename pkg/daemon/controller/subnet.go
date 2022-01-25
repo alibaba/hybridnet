@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -57,16 +58,7 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to get network for subnet %v", subnet.Name)
 		}
 
-		isUnderlayOnHost := false
-		if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeUnderlay {
-			// check if this node belongs to the subnet
-			for _, n := range network.Status.NodeList {
-				if n == r.ctrlHubRef.config.NodeName {
-					isUnderlayOnHost = true
-					break
-				}
-			}
-		}
+		isUnderlayOnHost := nodeBelongsToNetwork(r.ctrlHubRef.config.NodeName, network)
 
 		// if this node belongs to the subnet
 		// ensure bridge interface here
@@ -84,28 +76,48 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 
 		var forwardNodeIfName string
 		var autoNatOutgoing, isOverlay bool
+		networkMode := networkingv1.GetNetworkMode(network)
 
-		switch networkingv1.GetNetworkType(network) {
-		case networkingv1.NetworkTypeUnderlay:
+		switch networkMode {
+		case networkingv1.NetworkModeVlan:
 			if isUnderlayOnHost {
 				forwardNodeIfName, err = containernetwork.EnsureVlanIf(r.ctrlHubRef.config.NodeVlanIfName, netID)
 				if err != nil {
 					return reconcile.Result{Requeue: true}, fmt.Errorf("failed to ensure vlan forward node interface: %v", err)
 				}
 			}
-		case networkingv1.NetworkTypeOverlay:
+		case networkingv1.NetworkModeVxlan:
 			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
 			if err != nil {
 				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan forward node if name: %v", err)
 			}
 			isOverlay = true
 			autoNatOutgoing = networkingv1.IsSubnetAutoNatOutgoing(&subnet.Spec)
+		case networkingv1.NetworkModeBGP:
+			forwardNodeIfName = r.ctrlHubRef.config.NodeBGPIfName
+
+			if len(network.Spec.Config.BGPPeers) != 1 {
+				return reconcile.Result{Requeue: true},
+					fmt.Errorf("no bgp peer or multiple bgp peers are not supported for network %v", network.Name)
+			}
+
+			peerAddr := net.ParseIP(network.Spec.Config.BGPPeers[0].Address)
+			if peerAddr == nil {
+				return reconcile.Result{Requeue: true},
+					fmt.Errorf("get invalid bgp peer address %v for network %v",
+						network.Spec.Config.BGPPeers[0].Address, network.Name)
+			}
+
+			// use peer ip as gateway
+			gatewayIP = peerAddr
+		default:
+			return reconcile.Result{Requeue: true}, fmt.Errorf("invalic network mode %v for %v", networkMode, network.Name)
 		}
 
 		// create policy route
 		routeManager := r.ctrlHubRef.getRouterManager(subnet.Spec.Range.Version)
 		routeManager.AddSubnetInfo(subnetCidr, gatewayIP, startIP, endIP, excludeIPs,
-			forwardNodeIfName, autoNatOutgoing, isOverlay, isUnderlayOnHost)
+			forwardNodeIfName, autoNatOutgoing, isOverlay, isUnderlayOnHost, networkMode)
 	}
 
 	if feature.MultiClusterEnabled() {

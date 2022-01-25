@@ -60,8 +60,9 @@ const (
 	ActionReconcileIPInstance = "AllIPInstancesRelatedToThisNode"
 	ActionReconcileNode       = "AllNodes"
 
-	InstanceIPIndex = "instanceIP"
-	EndpointIPIndex = "endpointIP"
+	InstanceIPIndex  = "instanceIP"
+	EndpointIPIndex  = "endpointIP"
+	NetworkNameIndex = "networkName"
 
 	NeighUpdateChanSize = 2000
 	LinkUpdateChainSize = 200
@@ -180,6 +181,11 @@ func (c *CtrlHub) Run(ctx context.Context) error {
 
 	if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.IPInstance{},
 		InstanceIPIndex, instanceIPIndexer); err != nil {
+		return fmt.Errorf("failed to add instance ip indexer to manager: %v", err)
+	}
+
+	if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Subnet{},
+		NetworkNameIndex, networkNameIndexer); err != nil {
 		return fmt.Errorf("failed to add instance ip indexer to manager: %v", err)
 	}
 
@@ -390,6 +396,40 @@ func (c *CtrlHub) setupIPInstanceController() error {
 			},
 		}); err != nil {
 		return fmt.Errorf("failed to watch networkingv1.IPInstance for ip instance controller: %v", err)
+	}
+
+	if err := ipInstanceController.Watch(&source.Kind{Type: &networkingv1.Subnet{}},
+		&fixedKeyHandler{key: ActionReconcileIPInstance},
+		&predicate.ResourceVersionChangedPredicate{},
+		&predicate.Funcs{
+			CreateFunc: func(createEvent event.CreateEvent) bool {
+				subnet := createEvent.Object.(*networkingv1.Subnet)
+				network := &networkingv1.Network{}
+				if err := c.mgr.GetClient().Get(context.Background(), types.NamespacedName{
+					Name: subnet.Spec.Network,
+				}, network); err != nil {
+					return false
+				}
+				return network.Spec.Mode == networkingv1.NetworkModeBGP
+			},
+			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
+				subnet := deleteEvent.Object.(*networkingv1.Subnet)
+				network := &networkingv1.Network{}
+				if err := c.mgr.GetClient().Get(context.Background(), types.NamespacedName{
+					Name: subnet.Spec.Network,
+				}, network); err != nil {
+					return false
+				}
+				return network.Spec.Mode == networkingv1.NetworkModeBGP
+			},
+			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+				return false
+			},
+			GenericFunc: func(genericEvent event.GenericEvent) bool {
+				return false
+			},
+		}); err != nil {
+		return fmt.Errorf("failed to watch networkingv1.Subnet for ip instance controller: %v", err)
 	}
 
 	if err := ipInstanceController.Watch(c.ipInstanceControllerTriggerSource, &handler.Funcs{}); err != nil {
@@ -715,9 +755,9 @@ func (c *CtrlHub) iptablesSyncLoop() {
 			return fmt.Errorf("failed to list network: %v", err)
 		}
 
-		var overlayExist bool
 		for _, network := range networkList.Items {
-			if networkingv1.GetNetworkType(&network) == networkingv1.NetworkTypeOverlay {
+			switch networkingv1.GetNetworkMode(&network) {
+			case networkingv1.NetworkModeVxlan:
 				netID := network.Spec.NetID
 
 				overlayIfName, err := containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
@@ -727,115 +767,141 @@ func (c *CtrlHub) iptablesSyncLoop() {
 
 				c.iptablesV4Manager.SetOverlayIfName(overlayIfName)
 				c.iptablesV6Manager.SetOverlayIfName(overlayIfName)
-
-				overlayExist = true
-				break
+			case networkingv1.NetworkModeBGP:
+				if nodeBelongsToNetwork(c.config.NodeName, &network) {
+					c.iptablesV4Manager.SetBgpIfName(c.config.NodeBGPIfName)
+					c.iptablesV6Manager.SetBgpIfName(c.config.NodeBGPIfName)
+				}
 			}
 		}
 
-		// add local subnets
-		if overlayExist {
-			// Record node ips.
-			nodeList := &corev1.NodeList{}
-			if err := c.mgr.GetClient().List(context.TODO(), nodeList); err != nil {
-				return fmt.Errorf("failed to list node: %v", err)
+		// Record node ips.
+		nodeList := &corev1.NodeList{}
+		if err := c.mgr.GetClient().List(context.TODO(), nodeList); err != nil {
+			return fmt.Errorf("failed to list node: %v", err)
+		}
+
+		for _, node := range nodeList.Items {
+			// Underlay only environment should not print output
+			if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
+				node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
+				node.Annotations[constants.AnnotationNodeLocalVxlanIPList] == "" {
+				c.logger.Info("node's vtep information has not been updated", "node", node.Name)
+				continue
 			}
 
-			for _, node := range nodeList.Items {
-				// Underlay only environment should node print output
+			nodeLocalVxlanIPStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
+			for _, ipString := range nodeLocalVxlanIPStringList {
+				ip := net.ParseIP(ipString)
+				if ip.To4() != nil {
+					// v4 address
+					c.iptablesV4Manager.RecordNodeIP(ip)
+				} else {
+					// v6 address
+					c.iptablesV6Manager.RecordNodeIP(ip)
+				}
+			}
+		}
 
-				if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
-					node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
-					node.Annotations[constants.AnnotationNodeLocalVxlanIPList] == "" {
-					c.logger.Info("node's vtep information has not been updated", "node", node.Name)
+		// Record local pod ip.
+		ipInstanceList := &networkingv1.IPInstanceList{}
+		if err := c.mgr.GetClient().List(context.TODO(), ipInstanceList,
+			client.MatchingLabels{constants.LabelNode: c.config.NodeName}); err != nil {
+			return fmt.Errorf("failed to list pod ip instances of node %v: %v", c.config.NodeName, err)
+		}
+
+		for _, ipInstance := range ipInstanceList.Items {
+			// if this ip instance is not actually being using, ignore
+			if ipInstance.Status.Phase != networkingv1.IPPhaseUsing {
+				continue
+			}
+
+			podIP, _, err := net.ParseCIDR(ipInstance.Spec.Address.IP)
+			if err != nil {
+				return fmt.Errorf("parse pod ip %v error: %v", ipInstance.Spec.Address.IP, err)
+			}
+
+			if podIP.To4() == nil {
+				c.iptablesV6Manager.RecordLocalPodIP(podIP)
+			} else {
+				c.iptablesV4Manager.RecordLocalPodIP(podIP)
+			}
+		}
+
+		// Record local subnet cidr.
+		subnetList := &networkingv1.SubnetList{}
+		if err := c.mgr.GetClient().List(context.TODO(), subnetList); err != nil {
+			return fmt.Errorf("failed to list subnet: %v", err)
+		}
+
+		for _, subnet := range subnetList.Items {
+			_, cidr, err := net.ParseCIDR(subnet.Spec.Range.CIDR)
+			if err != nil {
+				return fmt.Errorf("failed to parse subnet cidr %v: %v", subnet.Spec.Range.CIDR, err)
+			}
+
+			network := &networkingv1.Network{}
+			if err := c.mgr.GetClient().Get(context.TODO(), types.NamespacedName{Name: subnet.Spec.Network}, network); err != nil {
+				return fmt.Errorf("failed to get network for subnet %v", subnet.Name)
+			}
+
+			iptablesManager := c.getIPtablesManager(subnet.Spec.Range.Version)
+			iptablesManager.RecordSubnet(cidr,
+				networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay,
+				networkingv1.GetNetworkMode(network) == networkingv1.NetworkModeBGP &&
+					nodeBelongsToNetwork(c.config.NodeName, network))
+		}
+
+		if feature.MultiClusterEnabled() {
+			// If remote overlay network des not exist, the rcmanager will not fetch
+			// RemoteSubnet and RemoteVtep. Thus, existence check is redundant here.
+
+			remoteSubnetList := &multiclusterv1.RemoteSubnetList{}
+			if err := c.mgr.GetClient().List(context.TODO(), remoteSubnetList); err != nil {
+				return fmt.Errorf("failed to list remote network: %v", err)
+			}
+
+			// Record remote vtep ip.
+			vtepList := &multiclusterv1.RemoteVtepList{}
+			if err := c.mgr.GetClient().List(context.TODO(), vtepList); err != nil {
+				return fmt.Errorf("failed to list remote vtep: %v", err)
+			}
+
+			for _, vtep := range vtepList.Items {
+				if _, exist := vtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
+					ip := net.ParseIP(vtep.Spec.VTEPInfo.IP)
+					if ip.To4() != nil {
+						// v4 address
+						c.iptablesV4Manager.RecordRemoteNodeIP(ip)
+					} else {
+						// v6 address
+						c.iptablesV6Manager.RecordRemoteNodeIP(ip)
+					}
 					continue
 				}
 
-				nodeLocalVxlanIPStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
+				nodeLocalVxlanIPStringList := strings.Split(vtep.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
 				for _, ipString := range nodeLocalVxlanIPStringList {
 					ip := net.ParseIP(ipString)
 					if ip.To4() != nil {
 						// v4 address
-						c.iptablesV4Manager.RecordNodeIP(ip)
+						c.iptablesV4Manager.RecordRemoteNodeIP(ip)
 					} else {
 						// v6 address
-						c.iptablesV6Manager.RecordNodeIP(ip)
+						c.iptablesV6Manager.RecordRemoteNodeIP(ip)
 					}
 				}
 			}
 
-			// Record subnet cidr.
-			subnetList := &networkingv1.SubnetList{}
-			if err := c.mgr.GetClient().List(context.TODO(), subnetList); err != nil {
-				return fmt.Errorf("failed to list subnet: %v", err)
-			}
-
-			for _, subnet := range subnetList.Items {
-				_, cidr, err := net.ParseCIDR(subnet.Spec.Range.CIDR)
+			// Record remote subnet cidr
+			for _, remoteSubnet := range remoteSubnetList.Items {
+				_, cidr, err := net.ParseCIDR(remoteSubnet.Spec.Range.CIDR)
 				if err != nil {
-					return fmt.Errorf("failed to parse subnet cidr %v: %v", subnet.Spec.Range.CIDR, err)
+					return fmt.Errorf("failed to parse remote subnet cidr %v: %v", remoteSubnet.Spec.Range.CIDR, err)
 				}
 
-				network := &networkingv1.Network{}
-				if err := c.mgr.GetClient().Get(context.TODO(), types.NamespacedName{Name: subnet.Spec.Network}, network); err != nil {
-					return fmt.Errorf("failed to get network for subnet %v", subnet.Name)
-				}
-
-				iptablesManager := c.getIPtablesManager(subnet.Spec.Range.Version)
-				iptablesManager.RecordSubnet(cidr, networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay)
-			}
-
-			if feature.MultiClusterEnabled() {
-				// If remote overlay network des not exist, the rcmanager will not fetch
-				// RemoteSubnet and RemoteVtep. Thus, existence check is redundant here.
-
-				remoteSubnetList := &multiclusterv1.RemoteSubnetList{}
-				if err := c.mgr.GetClient().List(context.TODO(), remoteSubnetList); err != nil {
-					return fmt.Errorf("failed to list remote network: %v", err)
-				}
-
-				// Record remote vtep ip.
-				vtepList := &multiclusterv1.RemoteVtepList{}
-				if err := c.mgr.GetClient().List(context.TODO(), vtepList); err != nil {
-					return fmt.Errorf("failed to list remote vtep: %v", err)
-				}
-
-				for _, vtep := range vtepList.Items {
-					if _, exist := vtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
-						ip := net.ParseIP(vtep.Spec.VTEPInfo.IP)
-						if ip.To4() != nil {
-							// v4 address
-							c.iptablesV4Manager.RecordRemoteNodeIP(ip)
-						} else {
-							// v6 address
-							c.iptablesV6Manager.RecordRemoteNodeIP(ip)
-						}
-						continue
-					}
-
-					nodeLocalVxlanIPStringList := strings.Split(vtep.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
-					for _, ipString := range nodeLocalVxlanIPStringList {
-						ip := net.ParseIP(ipString)
-						if ip.To4() != nil {
-							// v4 address
-							c.iptablesV4Manager.RecordRemoteNodeIP(ip)
-						} else {
-							// v6 address
-							c.iptablesV6Manager.RecordRemoteNodeIP(ip)
-						}
-					}
-				}
-
-				// Record remote subnet cidr
-				for _, remoteSubnet := range remoteSubnetList.Items {
-					_, cidr, err := net.ParseCIDR(remoteSubnet.Spec.Range.CIDR)
-					if err != nil {
-						return fmt.Errorf("failed to parse remote subnet cidr %v: %v", remoteSubnet.Spec.Range.CIDR, err)
-					}
-
-					c.getIPtablesManager(remoteSubnet.Spec.Range.Version).
-						RecordRemoteSubnet(cidr, multiclusterv1.GetRemoteSubnetType(&remoteSubnet) == networkingv1.NetworkTypeOverlay)
-				}
+				c.getIPtablesManager(remoteSubnet.Spec.Range.Version).
+					RecordRemoteSubnet(cidr, multiclusterv1.GetRemoteSubnetType(&remoteSubnet) == networkingv1.NetworkTypeOverlay)
 			}
 		}
 
@@ -914,6 +980,14 @@ func endpointIPIndexer(obj client.Object) []string {
 		if len(endpointIPs) > 0 {
 			return endpointIPs
 		}
+	}
+	return []string{}
+}
+
+func networkNameIndexer(obj client.Object) []string {
+	subnet, ok := obj.(*networkingv1.Subnet)
+	if ok {
+		return []string{subnet.Spec.Network}
 	}
 	return []string{}
 }
