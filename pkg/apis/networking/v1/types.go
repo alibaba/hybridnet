@@ -23,6 +23,14 @@ const (
 	NetworkTypeOverlay  = NetworkType("Overlay")
 )
 
+type NetworkMode string
+
+const (
+	NetworkModeBGP   = NetworkMode("BGP")
+	NetworkModeVlan  = NetworkMode("Vlan")
+	NetworkModeVxlan = NetworkMode("Vxlan")
+)
+
 type Count struct {
 	// +kubebuilder:validation:Optional
 	Total int32 `json:"total"`
@@ -69,6 +77,11 @@ type SubnetConfig struct {
 	AllowSubnets []string `json:"allowSubnets"`
 }
 
+type NetworkConfig struct {
+	// +kubebuilder:validation:Optional
+	BGPPeers []BGPPeer `json:"bgpPeers"`
+}
+
 type Address struct {
 	// +kubebuilder:validation:Required
 	Version IPVersion `json:"version"`
@@ -80,6 +93,17 @@ type Address struct {
 	NetID *int32 `json:"netID"`
 	// +kubebuilder:validation:Required
 	MAC string `json:"mac"`
+}
+
+type BGPPeer struct {
+	// +kubebuilder:validation:Required
+	RemoteAS int32 `json:"remoteAS"`
+	// +kubebuilder:validation:Required
+	Address string `json:"address"`
+	// +kubebuilder:validation:Optional
+	GracefulRestartSeconds int32 `json:"gracefulRestartSeconds"`
+	// +kubebuilder:validation:Optional
+	Password string `json:"password"`
 }
 
 type IPPhase string

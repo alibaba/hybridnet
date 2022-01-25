@@ -32,6 +32,11 @@ type NetworkSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Type=string
 	Type NetworkType `json:"type,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Type=string
+	Mode NetworkMode `json:"mode,omitempty"`
+	// +kubebuilder:validation:Optional
+	Config *NetworkConfig `json:"config,omitempty"`
 }
 
 // NetworkStatus defines the observed state of Network

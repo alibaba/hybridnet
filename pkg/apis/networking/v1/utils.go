@@ -56,6 +56,21 @@ func GetNetworkType(networkObj *Network) NetworkType {
 	return networkObj.Spec.Type
 }
 
+func GetNetworkMode(networkObj *Network) NetworkMode {
+	switch GetNetworkType(networkObj) {
+	case NetworkTypeUnderlay:
+		if networkObj == nil || len(networkObj.Spec.Mode) == 0 {
+			return NetworkModeVlan
+		}
+	case NetworkTypeOverlay:
+		if networkObj == nil || len(networkObj.Spec.Mode) == 0 {
+			return NetworkModeVxlan
+		}
+	}
+
+	return networkObj.Spec.Mode
+}
+
 func IsIPv6IPInstance(ip *IPInstance) bool {
 	if ip == nil {
 		return false
