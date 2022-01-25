@@ -240,8 +240,9 @@ func (m *Manager) SyncPathsAndPeers() error {
 				return
 			}
 
+			ones, bits := cidr.Mask.Size()
 			// What if the subnet is a /32 or /128 cidr? But maybe it will never happen.
-			if cidr.IP.Equal(ipAddr) {
+			if ones == bits {
 				// this path is generated from ip
 				existIPPathMap[ipAddr.String()] = ipAddr
 			} else {
@@ -268,7 +269,7 @@ func (m *Manager) SyncPathsAndPeers() error {
 	for _, subnet := range m.subnetMap {
 		nextHop, err := m.getNextHopAddressByIP(subnet.IP)
 		if err != nil {
-			m.logger.Error(err, "failed to get nexthop address to add path for subnet, it will be ignore",
+			m.logger.Error(err, "failed to get next hop address to add path for subnet, it will be ignore",
 				"subnet", subnet.String())
 			continue
 		}
@@ -285,15 +286,14 @@ func (m *Manager) SyncPathsAndPeers() error {
 	for prefix, cidr := range existSubnetPathMap {
 		nextHop, err := m.getNextHopAddressByIP(cidr.IP)
 		if err != nil {
-			m.logger.Error(err, "failed to get nexthop address to delete path for subnet, it will be ignore",
+			m.logger.Error(err, "failed to get next hop address to delete path for subnet, it will be ignore",
 				"subnet", cidr.String())
 			continue
 		}
 
 		if _, exist := m.subnetMap[prefix]; !exist {
 			if err := m.bgpServer.DeletePath(context.Background(), &api.DeletePathRequest{
-				Path:      generatePathForSubnet(cidr, nextHop),
-				TableType: api.TableType_GLOBAL,
+				Path: generatePathForSubnet(cidr, nextHop),
 			}); err != nil {
 				return fmt.Errorf("failed to delete path for subnet %v: %v", prefix, err)
 			}
@@ -304,7 +304,7 @@ func (m *Manager) SyncPathsAndPeers() error {
 	for _, ipInstance := range m.ipInstanceMap {
 		nextHop, err := m.getNextHopAddressByIP(ipInstance)
 		if err != nil {
-			m.logger.Error(err, "failed to get nexthop address to add path for ip instance, it will be ignore",
+			m.logger.Error(err, "failed to get next hop address to add path for ip instance, it will be ignore",
 				"ip", ipInstance.String())
 			continue
 		}
@@ -321,7 +321,7 @@ func (m *Manager) SyncPathsAndPeers() error {
 	for _, ipAddr := range existIPPathMap {
 		nextHop, err := m.getNextHopAddressByIP(ipAddr)
 		if err != nil {
-			m.logger.Error(err, "failed to get nexthop address to add path for ip instance, it will be ignore",
+			m.logger.Error(err, "failed to get next hop address to add path for ip instance, it will be ignore",
 				"ip", ipAddr.String())
 			continue
 		}

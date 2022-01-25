@@ -226,8 +226,13 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 		return
 	}
 
-	cdh.logger.Info("Create container", "podName", podRequest.PodName, "podNamespace", podRequest.PodNamespace,
-		"allocatedIPs", allocatedIPs, "macAddr", macAddr, "netID", *netID)
+	cdh.logger.Info("Create container",
+		"podName", podRequest.PodName,
+		"podNamespace", podRequest.PodNamespace,
+		"v4IPAddr", allocatedIPs[networkingv1.IPv4].Addr.String(),
+		"v6IPAddr", allocatedIPs[networkingv1.IPv6].Addr.String(),
+		"macAddr", macAddr,
+		"netID", *netID)
 	hostInterface, err := cdh.configureNic(podRequest.PodName, podRequest.PodNamespace, podRequest.NetNs, podRequest.ContainerID,
 		macAddr, netID, allocatedIPs, networkingv1.GetNetworkMode(network))
 	if err != nil {
@@ -235,8 +240,13 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 		cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
 		return
 	}
-	cdh.logger.Info("Container network created", "podName", podRequest.PodName, "podNamespace", podRequest.PodNamespace,
-		"allocatedIPs", allocatedIPs, "macAddr", macAddr, "netID", *netID)
+	cdh.logger.Info("Container network created",
+		"podName", podRequest.PodName,
+		"podNamespace", podRequest.PodNamespace,
+		"v4IPAddr", allocatedIPs[networkingv1.IPv4].Addr.String(),
+		"v6IPAddr", allocatedIPs[networkingv1.IPv6].Addr.String(),
+		"macAddr", macAddr,
+		"netID", *netID)
 
 	// update IPInstance crd status
 	for _, ip := range affectedIPInstances {
