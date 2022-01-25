@@ -18,7 +18,9 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,7 +33,9 @@ import (
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/controllers/multicluster"
+	"github.com/alibaba/hybridnet/pkg/controllers/multicluster/clusterchecker"
 	"github.com/alibaba/hybridnet/pkg/controllers/networking"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/managerruntime"
 )
@@ -137,9 +141,19 @@ func main() {
 	}
 
 	if feature.MultiClusterEnabled() {
+		clusterCheckEvent := make(chan multicluster.ClusterCheckEvent, 5)
+
 		uuidMutex, err := multicluster.NewUUIDMutexFromClient(mgr.GetAPIReader())
 		if err != nil {
 			entryLog.Error(err, "unable to create cluster UUID mutex")
+			os.Exit(1)
+		}
+
+		daemonHub := managerruntime.NewDaemonHub(signalContext)
+
+		clusterStatusChecker, err := initClusterStatusChecker(mgr)
+		if err != nil {
+			entryLog.Error(err, "unable to init cluster status checker")
 			os.Exit(1)
 		}
 
@@ -154,12 +168,26 @@ func main() {
 
 		if err = (&multicluster.RemoteClusterReconciler{
 			Client:       mgr.GetClient(),
-			Recorder:     mgr.GetEventRecorderFor("RemoteCluster"),
+			Recorder:     mgr.GetEventRecorderFor("RemoteClusterController"),
 			UUIDMutex:    uuidMutex,
-			DaemonHub:    managerruntime.NewDaemonHub(signalContext),
+			DaemonHub:    daemonHub,
 			LocalManager: mgr,
+			Event:        clusterCheckEvent,
 		}).SetupWithManager(mgr); err != nil {
 			entryLog.Error(err, "unable to inject controller", "controller", "RemoteCluster")
+			os.Exit(1)
+		}
+
+		if err = mgr.Add(&multicluster.RemoteClusterStatusChecker{
+			Client:      mgr.GetClient(),
+			Logger:      mgr.GetLogger().WithName("RemoteClusterStatusChecker"),
+			CheckPeriod: 2 * time.Minute,
+			DaemonHub:   daemonHub,
+			Checker:     clusterStatusChecker,
+			Event:       clusterCheckEvent,
+			Recorder:    mgr.GetEventRecorderFor("RemoteClusterStatusChecker"),
+		}); err != nil {
+			entryLog.Error(err, "unable to inject checker", "checker", "RemoteClusterStatus")
 			os.Exit(1)
 		}
 	}
@@ -171,4 +199,24 @@ func main() {
 		entryLog.Error(err, "manager exit unexpectedly")
 		os.Exit(1)
 	}
+}
+
+func initClusterStatusChecker(mgr ctrl.Manager) (clusterchecker.Checker, error) {
+	clusterUUID, err := utils.GetClusterUUID(mgr.GetAPIReader())
+	if err != nil {
+		return nil, fmt.Errorf("unable to get cluster UUID: %v", err)
+	}
+
+	checker := clusterchecker.NewChecker()
+
+	if err = checker.Register(clusterchecker.HealthzCheckName, &clusterchecker.Healthz{}); err != nil {
+		return nil, err
+	}
+	if err = checker.Register(clusterchecker.BidirectionCheckName, &clusterchecker.Bidirection{LocalUUID: clusterUUID}); err != nil {
+		return nil, err
+	}
+	if err = checker.Register(clusterchecker.OverlayNetIDCheckName, &clusterchecker.OverlayNetID{LocalClient: mgr.GetClient()}); err != nil {
+		return nil, err
+	}
+	return checker, nil
 }

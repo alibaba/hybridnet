@@ -48,6 +48,8 @@ type RemoteClusterReconciler struct {
 
 	DaemonHub managerruntime.DaemonHub
 
+	Event chan<- ClusterCheckEvent
+
 	LocalManager manager.Manager
 }
 
@@ -82,7 +84,7 @@ func (r *RemoteClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// recycle all orphan UUIDs of this remote cluster
 		for _, orphanUUID := range r.UUIDMutex.GetUUIDs(remoteCluster.Name) {
 			orphanDaemonID := managerruntime.DaemonID(orphanUUID)
-			if err = r.killDaemon(orphanDaemonID); err != nil {
+			if err = r.killDaemon(ctx, orphanDaemonID); err != nil {
 				return ctrl.Result{}, wrapError("unable to kill daemon", err)
 			}
 			_ = r.UUIDMutex.Unlock(orphanUUID)
@@ -108,7 +110,7 @@ func (r *RemoteClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	for _, orphanUUID := range r.UUIDMutex.GetUUIDs(remoteCluster.Name) {
 		if orphanUUID == latestUUID {
 			orphanDaemonID := managerruntime.DaemonID(orphanUUID)
-			if err = r.killDaemon(orphanDaemonID); err != nil {
+			if err = r.killDaemon(ctx, orphanDaemonID); err != nil {
 				return ctrl.Result{}, wrapError("unable to kill daemon", err)
 			}
 			_ = r.UUIDMutex.Unlock(orphanUUID)
@@ -131,7 +133,7 @@ func (r *RemoteClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// guard manager runtime as daemon
-	if err = r.guardDaemon(managerruntime.DaemonID(latestUUID), managerRuntime); err != nil {
+	if err = r.guardDaemon(ctx, req.Name, managerruntime.DaemonID(latestUUID), managerRuntime); err != nil {
 		return ctrl.Result{}, wrapError("unable to guard mr daemon", err)
 	}
 
@@ -157,7 +159,7 @@ func (r *RemoteClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *RemoteClusterReconciler) killDaemon(daemonID managerruntime.DaemonID) (err error) {
+func (r *RemoteClusterReconciler) killDaemon(ctx context.Context, daemonID managerruntime.DaemonID) (err error) {
 	if !r.DaemonHub.IsRegistered(daemonID) {
 		return nil
 	}
@@ -170,16 +172,20 @@ func (r *RemoteClusterReconciler) killDaemon(daemonID managerruntime.DaemonID) (
 	return nil
 }
 
-func (r *RemoteClusterReconciler) guardDaemon(daemonID managerruntime.DaemonID, daemon managerruntime.Daemon) (err error) {
+func (r *RemoteClusterReconciler) guardDaemon(ctx context.Context, name string, daemonID managerruntime.DaemonID, daemon managerruntime.Daemon) (err error) {
 	// FIXME: use cluster spec-hash to make restart reasonable
-	if err = r.killDaemon(daemonID); err != nil {
+	if err = r.killDaemon(ctx, daemonID); err != nil {
 		return err
 	}
 	if err = r.DaemonHub.Register(daemonID, daemon); err != nil {
 		return wrapError("unable to register mr daemon", err)
 	}
-	if err = r.DaemonHub.Run(daemonID); err != nil {
-		return wrapError("unable to run mr daemon", err)
+
+	// event checker to check and run this cluster
+	r.Event <- ClusterCheckEvent{
+		Context:  ctx,
+		Name:     name,
+		DaemonID: daemonID,
 	}
 	return nil
 }
