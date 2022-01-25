@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"time"
 
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 
@@ -34,8 +33,10 @@ import (
 	"github.com/osrg/gobgp/v3/pkg/server"
 )
 
+// Multiple bgp peers is not supported right now.
+
 type Manager struct {
-	locaASN              uint32
+	localASN             uint32
 	peeringInterfaceName string
 
 	routerID string
@@ -48,8 +49,6 @@ type Manager struct {
 
 	logger logr.Logger
 
-	initialized bool
-
 	peerMap       map[string]*peerInfo
 	subnetMap     map[string]*net.IPNet
 	ipInstanceMap map[string]net.IP
@@ -58,7 +57,10 @@ type Manager struct {
 func NewManager(peeringInterfaceName, grpcListenAddress string, logger logr.Logger) (*Manager, error) {
 	manager := &Manager{
 		// For using gobgp cmd to debug
-		bgpServer: server.NewBgpServer(server.GrpcListenAddress(grpcListenAddress)),
+		bgpServer: server.NewBgpServer(
+			server.GrpcListenAddress(grpcListenAddress),
+			server.LoggerOption(&bgpLogger{logger: logger.WithName("gobgpd")}),
+		),
 
 		logger:               logger,
 		peeringInterfaceName: peeringInterfaceName,
@@ -144,12 +146,16 @@ func NewManager(peeringInterfaceName, grpcListenAddress string, logger logr.Logg
 	return manager, nil
 }
 
-func (m *Manager) RecordPeer(address, password string, asn int, gracefulRestartTime time.Duration) {
+func (m *Manager) RecordPeer(address, password string, asn int, gracefulRestartTime int32) {
+	if gracefulRestartTime == 0 {
+		gracefulRestartTime = 300
+	}
+
 	m.peerMap[address] = &peerInfo{
-		address:             address,
-		asn:                 asn,
-		gracefulRestartTime: gracefulRestartTime,
-		password:            password,
+		address:                address,
+		asn:                    asn,
+		gracefulRestartSeconds: uint32(gracefulRestartTime),
+		password:               password,
 	}
 }
 
@@ -167,12 +173,22 @@ func (m *Manager) ResetInfos() {
 	m.ipInstanceMap = map[string]net.IP{}
 }
 
-func (m *Manager) InitLocalASN(asn uint32) uint32 {
-	// can only init asn once
-	if asn == 0 {
-		m.locaASN = asn
+func (m *Manager) TryStart(asn uint32) error {
+	if m.localASN == 0 {
+		m.localASN = asn
+	} else if m.localASN != asn {
+		return fmt.Errorf("can not restart bgp manager (local AS number: %v) with a different AS number %v",
+			m.localASN, asn)
+	} else {
+		return nil
 	}
-	return m.locaASN
+
+	return m.bgpServer.StartBgp(context.Background(), &api.StartBgpRequest{
+		Global: &api.Global{
+			Asn:      m.localASN,
+			RouterId: m.routerID,
+		},
+	})
 }
 
 func (m *Manager) SyncPathsAndPeers() error {
@@ -184,6 +200,11 @@ func (m *Manager) SyncPathsAndPeers() error {
 			existPeerMap[peer.Conf.NeighborAddress] = struct{}{}
 		}); err != nil {
 		return fmt.Errorf("failed to list bgp peers: %v", err)
+	}
+
+	// Don't do any thing if local AS number has not been set.
+	if m.localASN == 0 {
+		return nil
 	}
 
 	for _, peer := range m.peerMap {
@@ -207,11 +228,12 @@ func (m *Manager) SyncPathsAndPeers() error {
 	}
 
 	// Sync subnet paths.
-	existPathMap := map[string]*net.IPNet{}
+	existSubnetPathMap := map[string]*net.IPNet{}
+	existIPPathMap := map[string]net.IP{}
 
 	listPathFunc := func(p *api.Destination) {
 		// only collect the path generated from local
-		if len(p.Paths[0].NeighborIp) == 0 {
+		if p.Paths[0].NeighborIp == "<nil>" {
 			ipAddr, cidr, err := net.ParseCIDR(p.Prefix)
 			if err != nil {
 				m.logger.Error(err, "failed to parse path prefix", "path-prefix", p.Prefix)
@@ -221,13 +243,10 @@ func (m *Manager) SyncPathsAndPeers() error {
 			// What if the subnet is a /32 or /128 cidr? But maybe it will never happen.
 			if cidr.IP.Equal(ipAddr) {
 				// this path is generated from ip
-				existPathMap[ipAddr.String()] = &net.IPNet{
-					IP:   ipAddr,
-					Mask: cidr.Mask,
-				}
+				existIPPathMap[ipAddr.String()] = ipAddr
 			} else {
 				// this path is generated from subnet
-				existPathMap[p.Prefix] = &net.IPNet{
+				existSubnetPathMap[p.Prefix] = &net.IPNet{
 					IP:   ipAddr,
 					Mask: cidr.Mask,
 				}
@@ -254,7 +273,7 @@ func (m *Manager) SyncPathsAndPeers() error {
 			continue
 		}
 
-		if _, exist := existPathMap[subnet.String()]; !exist {
+		if _, exist := existSubnetPathMap[subnet.String()]; !exist {
 			if _, err := m.bgpServer.AddPath(context.Background(), &api.AddPathRequest{
 				Path: generatePathForSubnet(subnet, nextHop),
 			}); err != nil {
@@ -263,7 +282,7 @@ func (m *Manager) SyncPathsAndPeers() error {
 		}
 	}
 
-	for prefix, cidr := range existPathMap {
+	for prefix, cidr := range existSubnetPathMap {
 		nextHop, err := m.getNextHopAddressByIP(cidr.IP)
 		if err != nil {
 			m.logger.Error(err, "failed to get nexthop address to delete path for subnet, it will be ignore",
@@ -290,7 +309,7 @@ func (m *Manager) SyncPathsAndPeers() error {
 			continue
 		}
 
-		if _, exist := existPathMap[ipInstance.String()]; !exist {
+		if _, exist := existIPPathMap[ipInstance.String()]; !exist {
 			if _, err := m.bgpServer.AddPath(context.Background(), &api.AddPathRequest{
 				Path: generatePathForIP(ipInstance, nextHop),
 			}); err != nil {
@@ -299,35 +318,21 @@ func (m *Manager) SyncPathsAndPeers() error {
 		}
 	}
 
-	for _, cidr := range existPathMap {
-		nextHop, err := m.getNextHopAddressByIP(cidr.IP)
+	for _, ipAddr := range existIPPathMap {
+		nextHop, err := m.getNextHopAddressByIP(ipAddr)
 		if err != nil {
 			m.logger.Error(err, "failed to get nexthop address to add path for ip instance, it will be ignore",
-				"ip", cidr.IP.String())
+				"ip", ipAddr.String())
 			continue
 		}
 
-		if _, exist := m.ipInstanceMap[cidr.IP.String()]; !exist {
+		if _, exist := m.ipInstanceMap[ipAddr.String()]; !exist {
 			if err := m.bgpServer.DeletePath(context.Background(), &api.DeletePathRequest{
-				Path: generatePathForIP(cidr.IP, nextHop),
+				Path: generatePathForIP(ipAddr, nextHop),
 			}); err != nil {
-				return fmt.Errorf("failed to delete path for ip instance %v: %v", cidr.String(), err)
+				return fmt.Errorf("failed to delete path for ip instance %v: %v", ipAddr.String(), err)
 			}
 		}
-	}
-
-	if !m.initialized {
-		if m.locaASN == 0 {
-			return fmt.Errorf("failed to start bgp server because local AS number is not set yet")
-		}
-
-		m.initialized = true
-		return m.bgpServer.StartBgp(context.Background(), &api.StartBgpRequest{
-			Global: &api.Global{
-				Asn:      m.locaASN,
-				RouterId: m.routerID,
-			},
-		})
 	}
 
 	return nil

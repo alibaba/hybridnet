@@ -18,7 +18,6 @@ package bgp
 
 import (
 	"net"
-	"time"
 
 	"github.com/osrg/gobgp/v3/pkg/packet/bgp"
 
@@ -50,10 +49,10 @@ var (
 )
 
 type peerInfo struct {
-	address             string
-	asn                 int
-	gracefulRestartTime time.Duration
-	password            string
+	address                string
+	asn                    int
+	gracefulRestartSeconds uint32
+	password               string
 }
 
 func generatePeerConfig(p *peerInfo) *api.Peer {
@@ -65,7 +64,7 @@ func generatePeerConfig(p *peerInfo) *api.Peer {
 		},
 		GracefulRestart: &api.GracefulRestart{
 			Enabled:         true,
-			RestartTime:     uint32(p.gracefulRestartTime.Seconds()),
+			RestartTime:     p.gracefulRestartSeconds,
 			DeferralTime:    1,
 			LocalRestarting: true,
 		},

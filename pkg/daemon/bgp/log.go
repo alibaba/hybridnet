@@ -17,43 +17,47 @@
 package bgp
 
 import (
+	"fmt"
+	"os"
+
+	"github.com/go-logr/logr"
 	"github.com/osrg/gobgp/v3/pkg/log"
-	"github.com/sirupsen/logrus"
 )
 
 // implement github.com/osrg/gobgp/v3/pkg/log/Logger interface
 type bgpLogger struct {
-	logger *logrus.Logger
+	logger logr.Logger
 }
 
 func (l *bgpLogger) Panic(msg string, fields log.Fields) {
-	l.logger.WithFields(logrus.Fields(fields)).Panic(msg)
+	l.logger.Error(fmt.Errorf("%v", msg), "bgp panic log")
+	os.Exit(1)
 }
 
 func (l *bgpLogger) Fatal(msg string, fields log.Fields) {
-	l.logger.WithFields(logrus.Fields(fields)).Fatal(msg)
+	l.logger.Error(fmt.Errorf("%v", msg), "bgp fatal log")
+	os.Exit(1)
 }
 
 func (l *bgpLogger) Error(msg string, fields log.Fields) {
-	l.logger.WithFields(logrus.Fields(fields)).Error(msg)
+	l.logger.Error(fmt.Errorf("%v", msg), "bgp error log")
 }
 
 func (l *bgpLogger) Warn(msg string, fields log.Fields) {
-	l.logger.WithFields(logrus.Fields(fields)).Warn(msg)
+	l.logger.Info("bgp warn log", "message", msg)
 }
 
 func (l *bgpLogger) Info(msg string, fields log.Fields) {
-	l.logger.WithFields(logrus.Fields(fields)).Info(msg)
+	l.logger.Info("bgp info log", "message", msg)
 }
 
 func (l *bgpLogger) Debug(msg string, fields log.Fields) {
-	l.logger.WithFields(logrus.Fields(fields)).Debug(msg)
+	l.logger.V(2).Info("bgp debug log", "message", msg)
 }
 
 func (l *bgpLogger) SetLevel(level log.LogLevel) {
-	l.logger.SetLevel(logrus.Level(level))
 }
 
 func (l *bgpLogger) GetLevel() log.LogLevel {
-	return log.LogLevel(l.logger.GetLevel())
+	return log.FatalLevel
 }
