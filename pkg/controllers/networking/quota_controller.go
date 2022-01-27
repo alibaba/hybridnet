@@ -59,6 +59,11 @@ func (r *QuotaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (resu
 		return ctrl.Result{}, wrapError("unable to fetch Network", client.IgnoreNotFound(err))
 	}
 
+	if networkingv1.GetNetworkType(network) != networkingv1.NetworkTypeUnderlay {
+		log.V(10).Info("only underlay network need quota labels")
+		return ctrl.Result{}, nil
+	}
+
 	var quotaLabels map[string]string
 	if feature.DualStackEnabled() {
 		quotaLabels = map[string]string{
