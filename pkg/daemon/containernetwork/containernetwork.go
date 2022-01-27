@@ -217,6 +217,10 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 		// Vlan gw ipv4 ip should be resolved here.
 		// Only underlay network need to do this.
 		if networkMode == networkingv1.NetworkModeVlan {
+			if allocatedIPs[networkingv1.IPv4].Gw == nil {
+				return fmt.Errorf("get a nil gateway for ip %v", allocatedIPs[networkingv1.IPv4].Addr)
+			}
+
 			if err := arp.CheckWithTimeout(forwardNodeIf, podIP,
 				allocatedIPs[networkingv1.IPv4].Gw, vlanCheckTimeout); err != nil {
 				return fmt.Errorf("failed to check ipv4 vlan environment: %v", err)
@@ -258,6 +262,10 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 		}
 
 		if networkMode == networkingv1.NetworkModeVlan {
+			if allocatedIPs[networkingv1.IPv6].Gw == nil {
+				return fmt.Errorf("get a nil gateway for ip %v", allocatedIPs[networkingv1.IPv6].Addr)
+			}
+
 			if err := ndp.CheckWithTimeout(forwardNodeIf, podIP,
 				allocatedIPs[networkingv1.IPv6].Gw, vlanCheckTimeout); err != nil {
 				return fmt.Errorf("failed to check ipv6 vlan environment: %v", err)

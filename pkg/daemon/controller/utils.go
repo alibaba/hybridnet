@@ -197,10 +197,12 @@ func parseSubnetSpecRangeMeta(addressRange *networkingv1.AddressRange) (cidr *ne
 			fmt.Errorf("failed to parse subnet cidr %v error: %v", addressRange.CIDR, err)
 	}
 
-	gateway = net.ParseIP(addressRange.Gateway)
-	if gateway == nil {
-		return nil, nil, nil, nil, nil, nil,
-			fmt.Errorf("invalid gateway ip %v", addressRange.Gateway)
+	if addressRange.Gateway != "" {
+		gateway = net.ParseIP(addressRange.Gateway)
+		if gateway == nil {
+			return nil, nil, nil, nil, nil, nil,
+				fmt.Errorf("invalid gateway ip %v", addressRange.Gateway)
+		}
 	}
 
 	if addressRange.Start != "" {

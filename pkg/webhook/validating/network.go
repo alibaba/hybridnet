@@ -19,6 +19,7 @@ package validating
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"reflect"
 
@@ -75,6 +76,24 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 		return admission.Denied(fmt.Sprintf("unknown network type %s", networkingv1.GetNetworkType(network)))
 	}
 
+	switch networkingv1.GetNetworkMode(network) {
+	case networkingv1.NetworkModeBGP:
+		// check net id
+		if network.Spec.NetID == nil {
+			return admission.Denied("must assign net ID for bgp network")
+		}
+
+		for _, peer := range network.Spec.Config.BGPPeers {
+			if net.ParseIP(peer.Address) == nil {
+				return admission.Denied(fmt.Sprintf("invalid bgp peer ip address %v", peer.Address))
+			}
+		}
+	case networkingv1.NetworkModeVlan:
+	case networkingv1.NetworkModeVxlan:
+	default:
+		return admission.Denied(fmt.Sprintf("unknown network mode %s", networkingv1.GetNetworkMode(network)))
+	}
+
 	return admission.Allowed("validation pass")
 }
 
@@ -100,6 +119,10 @@ func NetworkUpdateValidation(ctx context.Context, req *admission.Request, handle
 		}
 	default:
 		return admission.Denied(fmt.Sprintf("unknown network type %s", networkingv1.GetNetworkType(newN)))
+	}
+
+	if !reflect.DeepEqual(oldN.Spec.Mode, newN.Spec.Mode) {
+		return admission.Denied("network mode must not be changed")
 	}
 
 	if !reflect.DeepEqual(oldN.Spec.NetID, newN.Spec.NetID) {

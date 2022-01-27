@@ -28,6 +28,7 @@ type NetworkSpec struct {
 	NetID *int32 `json:"netID"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Type=string
+	// Deprecated, will be removed in v0.5.0
 	SwitchID string `json:"switchID"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Type=string
@@ -63,7 +64,6 @@ type NetworkStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="NetID",type=integer,JSONPath=`.spec.netID`
-// +kubebuilder:printcolumn:name="SwitchID",type=string,JSONPath=`.spec.switchID`
 
 // Network is the Schema for the networks API
 type Network struct {

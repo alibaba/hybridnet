@@ -150,11 +150,6 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 			}
 
 			gatewayIP := net.ParseIP(ipInstance.Spec.Address.Gateway)
-			if gatewayIP == nil {
-				errMsg := fmt.Errorf("failed to parse gateway %v for ip %v: %v", ipInstance.Spec.Address.Gateway, ipInstance.Spec.Address.IP, err)
-				cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
-				return
-			}
 
 			ipVersion := networkingv1.IPv4
 			switch ipInstance.Spec.Address.Version {

@@ -56,7 +56,7 @@ type AddressRange struct {
 	End string `json:"end,omitempty"`
 	// +kubebuilder:validation:Required
 	CIDR string `json:"cidr"`
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	Gateway string `json:"gateway"`
 	// +kubebuilder:validation:Optional
 	ReservedIPs []string `json:"reservedIPs,omitempty"`
@@ -87,7 +87,7 @@ type Address struct {
 	Version IPVersion `json:"version"`
 	// +kubebuilder:validation:Required
 	IP string `json:"ip"`
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	Gateway string `json:"gateway"`
 	// +kubebuilder:validation:Required
 	NetID *int32 `json:"netID"`
