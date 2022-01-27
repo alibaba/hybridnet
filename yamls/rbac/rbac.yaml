@@ -22,6 +22,11 @@ rules:
       - subnets/status
       - ipinstances
       - ipinstances/status
+    verbs:
+      - "*"
+  - apiGroups:
+      - "multicluster.alibaba.com"
+    resources:
       - remoteclusters
       - remoteclusters/status
       - remotesubnets
