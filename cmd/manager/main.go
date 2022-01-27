@@ -218,5 +218,8 @@ func initClusterStatusChecker(mgr ctrl.Manager) (clusterchecker.Checker, error) 
 	if err = checker.Register(clusterchecker.OverlayNetIDCheckName, &clusterchecker.OverlayNetID{LocalClient: mgr.GetClient()}); err != nil {
 		return nil, err
 	}
+	if err = checker.Register(clusterchecker.SubnetCheckName, &clusterchecker.Subnet{LocalClient: mgr.GetClient()}); err != nil {
+		return nil, err
+	}
 	return checker, nil
 }
