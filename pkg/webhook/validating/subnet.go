@@ -189,6 +189,9 @@ func SubnetUpdateValidation(ctx context.Context, req *admission.Request, handler
 	if oldS.Spec.Range.CIDR != newS.Spec.Range.CIDR {
 		return admission.Denied("must not change range CIDR")
 	}
+	if !utils.DeepEqualStringSlice(oldS.Spec.Range.ExcludeIPs, newS.Spec.Range.ExcludeIPs) {
+		return admission.Denied("must not change excluded IPs")
+	}
 
 	return admission.Allowed("validation pass")
 }
