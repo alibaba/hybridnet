@@ -14,32 +14,16 @@
  limitations under the License.
 */
 
-package utils
+package multicluster
 
-import "sort"
+import (
+	"context"
 
-func StringSliceToMap(in []string) (out map[string]struct{}) {
-	out = make(map[string]struct{}, len(in))
-	for _, key := range in {
-		out[key] = struct{}{}
-	}
-	return
-}
+	"github.com/alibaba/hybridnet/pkg/managerruntime"
+)
 
-func DeepEqualStringSlice(a []string, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	aCopy := append(make([]string, 0, len(a)), a...)
-	bCopy := append(make([]string, 0, len(b)), b...)
-	sort.Strings(aCopy)
-	sort.Strings(bCopy)
-
-	for i := range aCopy {
-		if aCopy[i] != bCopy[i] {
-			return false
-		}
-	}
-	return true
+type ClusterCheckEvent struct {
+	Context  context.Context
+	Name     string
+	DaemonID managerruntime.DaemonID
 }

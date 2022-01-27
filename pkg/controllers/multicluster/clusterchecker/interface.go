@@ -14,32 +14,27 @@
  limitations under the License.
 */
 
-package utils
+package clusterchecker
 
-import "sort"
+import (
+	"time"
 
-func StringSliceToMap(in []string) (out map[string]struct{}) {
-	out = make(map[string]struct{}, len(in))
-	for _, key := range in {
-		out[key] = struct{}{}
-	}
-	return
+	controllerruntime "sigs.k8s.io/controller-runtime"
+)
+
+type Checker interface {
+	Register(name string, check Check) error
+	Unregister(name string) error
+	CheckAll(clusterManager controllerruntime.Manager) (map[string]CheckResult, error)
+	Check(name string, clusterManager controllerruntime.Manager) (CheckResult, error)
 }
 
-func DeepEqualStringSlice(a []string, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
+type CheckResult interface {
+	Succeed() bool
+	Error() error
+	TimeStamp() time.Time
+}
 
-	aCopy := append(make([]string, 0, len(a)), a...)
-	bCopy := append(make([]string, 0, len(b)), b...)
-	sort.Strings(aCopy)
-	sort.Strings(bCopy)
-
-	for i := range aCopy {
-		if aCopy[i] != bCopy[i] {
-			return false
-		}
-	}
-	return true
+type Check interface {
+	Check(clusterManager controllerruntime.Manager) CheckResult
 }

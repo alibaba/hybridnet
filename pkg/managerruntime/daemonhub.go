@@ -68,6 +68,17 @@ func (d *daemonHub) Unregister(id DaemonID) error {
 	return nil
 }
 
+func (d *daemonHub) Get(id DaemonID) (daemon Daemon, registered bool) {
+	d.Lock()
+	defer d.Unlock()
+
+	daemon, exist := d.hub[id]
+	if !exist {
+		return nil, false
+	}
+	return daemon, true
+}
+
 func (d *daemonHub) Run(id DaemonID) error {
 	d.Lock()
 	defer d.Unlock()

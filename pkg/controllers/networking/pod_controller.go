@@ -26,11 +26,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
@@ -47,10 +51,12 @@ const (
 	ReasonIPAllocationSucceed = "IPAllocationSucceed"
 	ReasonIPAllocationFail    = "IPAllocationFail"
 	ReasonIPReleaseSucceed    = "IPReleaseSucceed"
+	ReasonIPReserveSucceed    = "IPReserveSucceed"
 )
 
 // PodReconciler reconciles a Pod object
 type PodReconciler struct {
+	APIReader client.Reader
 	client.Client
 
 	Recorder record.EventRecorder
@@ -89,15 +95,20 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		}
 	}()
 
-	if err = r.Get(ctx, req.NamespacedName, pod); err != nil {
+	if err = r.APIReader.Get(ctx, req.NamespacedName, pod); err != nil {
 		if err = client.IgnoreNotFound(err); err != nil {
 			return ctrl.Result{}, fmt.Errorf("unable to fetch Pod: %v", err)
 		}
 		return ctrl.Result{}, nil
 	}
 
-	// IP recycle rely on garbage collection, just ignore this
 	if pod.DeletionTimestamp != nil {
+		if strategy.OwnByStatefulWorkload(pod) {
+			if err = r.reserve(pod); err != nil {
+				return ctrl.Result{}, wrapError("unable to reserve pod", err)
+			}
+			return ctrl.Result{}, wrapError("unable to remote finalizer", r.removeFinalizer(ctx, pod))
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -119,14 +130,14 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 
 	if strategy.OwnByStatefulWorkload(pod) {
 		log.V(4).Info("strategic allocation for pod")
-		return ctrl.Result{}, wrapError("unable to stateful allocate", r.statefulAllocate(pod, networkName))
+		return ctrl.Result{}, wrapError("unable to stateful allocate", r.statefulAllocate(ctx, pod, networkName))
 	}
 
 	if strategy.OwnByStatelessWorkload(pod) {
 		klog.V(10).Info("non support strategic IP allocation for stateless workloads")
 	}
 
-	return ctrl.Result{}, wrapError("unable to allocate", r.allocate(pod, networkName))
+	return ctrl.Result{}, wrapError("unable to allocate", r.allocate(ctx, pod, networkName))
 }
 
 // dedouple will unbind IP instance with Pod
@@ -143,6 +154,23 @@ func (r *PodReconciler) decouple(pod *corev1.Pod) (err error) {
 	}
 
 	r.Recorder.Event(pod, corev1.EventTypeNormal, ReasonIPReleaseSucceed, "pre decouple all IPs successfully")
+	return nil
+}
+
+// reserve will reserve IP instances with Pod
+func (r *PodReconciler) reserve(pod *corev1.Pod) (err error) {
+	var reserveFunc func(pod *corev1.Pod) (err error)
+	if feature.DualStackEnabled() {
+		reserveFunc = r.IPAMStore.DualStack().IPReserve
+	} else {
+		reserveFunc = r.IPAMStore.IPReserve
+	}
+
+	if err = reserveFunc(pod); err != nil {
+		return fmt.Errorf("unable to reserve ips for pod: %v", err)
+	}
+
+	r.Recorder.Event(pod, corev1.EventTypeNormal, ReasonIPReserveSucceed, "reserve all IPs successfully")
 	return nil
 }
 
@@ -194,7 +222,7 @@ func (r *PodReconciler) matchNetworkTypeInManager(networkName string, networkTyp
 		(!feature.DualStackEnabled() && r.IPAMManager.MatchNetworkType(networkName, networkType))
 }
 
-func (r *PodReconciler) statefulAllocate(pod *corev1.Pod, networkName string) (err error) {
+func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, networkName string) (err error) {
 	var (
 		preAssign     = len(pod.Annotations[constants.AnnotationIPPool]) > 0
 		shouldObserve = true
@@ -214,6 +242,10 @@ func (r *PodReconciler) statefulAllocate(pod *corev1.Pod, networkName string) (e
 				Observe(float64(time.Since(startTime).Nanoseconds()))
 		}
 	}()
+
+	if err = r.addFinalizer(ctx, pod); err != nil {
+		return wrapError("unable to add finalizer for stateful pod", err)
+	}
 
 	if feature.DualStackEnabled() {
 		var ipCandidates []string
@@ -239,13 +271,13 @@ func (r *PodReconciler) statefulAllocate(pod *corev1.Pod, networkName string) (e
 
 			// reallocate means that the allocated ones should be recycled firstly
 			if len(allocatedIPs) > 0 {
-				if err = r.release(pod, transform.TransferIPInstancesForIPAM(allocatedIPs)); err != nil {
+				if err = r.release(ctx, pod, transform.TransferIPInstancesForIPAM(allocatedIPs)); err != nil {
 					return wrapError("unable to release before reallocate", err)
 				}
 			}
 
 			// reallocate
-			return wrapError("unable to reallocate", r.allocate(pod, networkName))
+			return wrapError("unable to reallocate", r.allocate(ctx, pod, networkName))
 		default:
 			if ipCandidates, err = utils.ListIPsOfPod(r, pod); err != nil {
 				return err
@@ -255,12 +287,12 @@ func (r *PodReconciler) statefulAllocate(pod *corev1.Pod, networkName string) (e
 			if len(ipCandidates) == 0 {
 				// allocate has its own observation process, so just skip
 				shouldObserve = false
-				return wrapError("unable to allocate", r.allocate(pod, networkName))
+				return wrapError("unable to allocate", r.allocate(ctx, pod, networkName))
 			}
 		}
 
 		// forced assign for using reserved ips
-		return wrapError("unable to multi-assign", r.multiAssign(pod, networkName, ipFamilyMode, ipCandidates, true))
+		return wrapError("unable to multi-assign", r.multiAssign(ctx, pod, networkName, ipFamilyMode, ipCandidates, true))
 	}
 
 	var ipCandidate string
@@ -283,13 +315,13 @@ func (r *PodReconciler) statefulAllocate(pod *corev1.Pod, networkName string) (e
 
 		// reallocate means that the allocated ones should be recycled firstly
 		if len(allocatedIPs) > 0 {
-			if err = r.release(pod, transform.TransferIPInstancesForIPAM(allocatedIPs)); err != nil {
+			if err = r.release(ctx, pod, transform.TransferIPInstancesForIPAM(allocatedIPs)); err != nil {
 				return wrapError("unable to release before reallocate", err)
 			}
 		}
 
 		// reallocate
-		return wrapError("unable to reallocate", r.allocate(pod, networkName))
+		return wrapError("unable to reallocate", r.allocate(ctx, pod, networkName))
 	default:
 		ipCandidate, err = utils.GetIPOfPod(r, pod)
 		if err != nil {
@@ -299,17 +331,17 @@ func (r *PodReconciler) statefulAllocate(pod *corev1.Pod, networkName string) (e
 		if len(ipCandidate) == 0 {
 			// allocate has its own observation process, so just skip
 			shouldObserve = false
-			return wrapError("unable to allocate", r.allocate(pod, networkName))
+			return wrapError("unable to allocate", r.allocate(ctx, pod, networkName))
 		}
 
 	}
 
 	// forced assign for using reserved ip
-	return wrapError("unable to assign", r.assign(pod, networkName, ipCandidate, true))
+	return wrapError("unable to assign", r.assign(ctx, pod, networkName, ipCandidate, true))
 }
 
 // release will release IP instances of pod
-func (r *PodReconciler) release(pod *corev1.Pod, allocatedIPs []*types.IP) (err error) {
+func (r *PodReconciler) release(ctx context.Context, pod *corev1.Pod, allocatedIPs []*types.IP) (err error) {
 	var recycleFunc func(namespace string, ip *types.IP) (err error)
 	if feature.DualStackEnabled() {
 		recycleFunc = r.IPAMStore.DualStack().IPRecycle
@@ -328,7 +360,7 @@ func (r *PodReconciler) release(pod *corev1.Pod, allocatedIPs []*types.IP) (err 
 }
 
 // allocate will allocate new IPs for pod
-func (r *PodReconciler) allocate(pod *corev1.Pod, networkName string) (err error) {
+func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkName string) (err error) {
 	var startTime = time.Now()
 	defer func() {
 		metrics.IPAllocationPeriodSummary.
@@ -384,7 +416,7 @@ func (r *PodReconciler) allocate(pod *corev1.Pod, networkName string) (err error
 }
 
 // assign will reassign allocated IP to Pod
-func (r *PodReconciler) assign(pod *corev1.Pod, networkName string, ipCandidate string, forced bool) (err error) {
+func (r *PodReconciler) assign(ctx context.Context, pod *corev1.Pod, networkName string, ipCandidate string, forced bool) (err error) {
 	ip, err := r.IPAMManager.Assign(networkName, "", pod.Name, pod.Namespace, ipCandidate, forced)
 	if err != nil {
 		return err
@@ -404,7 +436,7 @@ func (r *PodReconciler) assign(pod *corev1.Pod, networkName string, ipCandidate 
 }
 
 // multiAssign will reassign allcated IPs to Pod, usually used on dual stack mode
-func (r *PodReconciler) multiAssign(pod *corev1.Pod, networkName string, ipFamily types.IPFamilyMode, ipCandidates []string, forced bool) (err error) {
+func (r *PodReconciler) multiAssign(ctx context.Context, pod *corev1.Pod, networkName string, ipFamily types.IPFamilyMode, ipCandidates []string, forced bool) (err error) {
 	var IPs []*types.IP
 	if IPs, err = r.IPAMManager.DualStack().Assign(ipFamily, networkName, nil, ipCandidates, pod.Name, pod.Namespace, forced); err != nil {
 		return err
@@ -421,6 +453,30 @@ func (r *PodReconciler) multiAssign(pod *corev1.Pod, networkName string, ipFamil
 
 	r.Recorder.Eventf(pod, corev1.EventTypeNormal, ReasonIPAllocationSucceed, "assign IPs %v successfully", squashIPSliceToIPs(IPs))
 	return nil
+}
+
+func (r *PodReconciler) addFinalizer(ctx context.Context, pod *corev1.Pod) error {
+	if controllerutil.ContainsFinalizer(pod, constants.FinalizerIPAllocated) {
+		return nil
+	}
+
+	patch := client.StrategicMergeFrom(pod.DeepCopy())
+	controllerutil.AddFinalizer(pod, constants.FinalizerIPAllocated)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		return r.Patch(ctx, pod, patch)
+	})
+}
+
+func (r *PodReconciler) removeFinalizer(ctx context.Context, pod *corev1.Pod) error {
+	if !controllerutil.ContainsFinalizer(pod, constants.FinalizerIPAllocated) {
+		return nil
+	}
+
+	patch := client.StrategicMergeFrom(pod.DeepCopy())
+	controllerutil.RemoveFinalizer(pod, constants.FinalizerIPAllocated)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		return r.Patch(ctx, pod, patch)
+	})
 }
 
 func squashIPSliceToIPs(ips []*types.IP) (ret []string) {
@@ -440,7 +496,25 @@ func squashIPSliceToSubnets(ips []*types.IP) (ret []string) {
 // SetupWithManager sets up the controller with the Manager.
 func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Pod{}).
+		For(&corev1.Pod{},
+			builder.WithPredicates(
+				&utils.IgnoreDeletePredicate{},
+				&predicate.ResourceVersionChangedPredicate{},
+				predicate.NewPredicateFuncs(func(obj client.Object) bool {
+					pod, ok := obj.(*corev1.Pod)
+					if !ok {
+						return false
+					}
+					// ignore host networking pod
+					if pod.Spec.HostNetwork {
+						return false
+					}
+
+					// only pod after scheduling and before IP-allocation should be processed
+					return len(pod.Spec.NodeName) > 0 && !metav1.HasAnnotation(pod.ObjectMeta, constants.AnnotationIP)
+				}),
+			),
+		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
 			Log:                     mgr.GetLogger().WithName("PodController"),

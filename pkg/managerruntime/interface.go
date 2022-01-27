@@ -47,6 +47,7 @@ type DaemonHub interface {
 	Register(id DaemonID, daemon Daemon) error
 	IsRegistered(id DaemonID) bool
 	Unregister(id DaemonID) error
+	Get(id DaemonID) (daemon Daemon, registered bool)
 	Run(id DaemonID) error
 	Stop(id DaemonID) error
 }

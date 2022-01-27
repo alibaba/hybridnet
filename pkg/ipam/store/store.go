@@ -102,9 +102,13 @@ func (w *Worker) DeCouple(pod *corev1.Pod) (err error) {
 	}
 
 	var ipInstanceList = &networkingv1.IPInstanceList{}
-	if err = w.List(context.TODO(), ipInstanceList, client.MatchingLabels{
-		constants.LabelPod: pod.Name,
-	}); err != nil {
+	if err = w.List(context.TODO(),
+		ipInstanceList,
+		client.MatchingLabels{
+			constants.LabelPod: pod.Name,
+		},
+		client.InNamespace(pod.Namespace),
+	); err != nil {
 		return err
 	}
 
@@ -114,6 +118,30 @@ func (w *Worker) DeCouple(pod *corev1.Pod) (err error) {
 		}
 	}
 
+	return w.releaseIPFromPod(pod)
+}
+
+func (w *Worker) IPReserve(pod *corev1.Pod) (err error) {
+	if len(pod.Annotations[constants.AnnotationIP]) == 0 {
+		return
+	}
+
+	var ipInstanceList = &networkingv1.IPInstanceList{}
+	if err = w.List(context.TODO(),
+		ipInstanceList,
+		client.MatchingLabels{
+			constants.LabelPod: pod.Name,
+		},
+		client.InNamespace(pod.Namespace),
+	); err != nil {
+		return err
+	}
+
+	for i := range ipInstanceList.Items {
+		if err = w.updateIPStatus(&ipInstanceList.Items[i], "", pod.Name, pod.Namespace, string(networkingv1.IPPhaseReserved)); err != nil {
+			return err
+		}
+	}
 	return w.releaseIPFromPod(pod)
 }
 

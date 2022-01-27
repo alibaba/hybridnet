@@ -14,32 +14,30 @@
  limitations under the License.
 */
 
-package utils
+package clusterchecker
 
-import "sort"
+import "time"
 
-func StringSliceToMap(in []string) (out map[string]struct{}) {
-	out = make(map[string]struct{}, len(in))
-	for _, key := range in {
-		out[key] = struct{}{}
-	}
-	return
+type result struct {
+	err       error
+	timeStamp time.Time
 }
 
-func DeepEqualStringSlice(a []string, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
+func (r *result) Succeed() bool {
+	return r.err == nil
+}
 
-	aCopy := append(make([]string, 0, len(a)), a...)
-	bCopy := append(make([]string, 0, len(b)), b...)
-	sort.Strings(aCopy)
-	sort.Strings(bCopy)
+func (r *result) Error() error {
+	return r.err
+}
 
-	for i := range aCopy {
-		if aCopy[i] != bCopy[i] {
-			return false
-		}
+func (r *result) TimeStamp() time.Time {
+	return r.timeStamp
+}
+
+func NewResult(err error) CheckResult {
+	return &result{
+		err:       err,
+		timeStamp: time.Now(),
 	}
-	return true
 }

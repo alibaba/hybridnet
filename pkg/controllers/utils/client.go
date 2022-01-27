@@ -119,6 +119,14 @@ func ListRemoteClusters(client client.Reader, opts ...client.ListOption) (*multi
 	return &remoteClusterList, nil
 }
 
+func GetRemoteCluster(client client.Reader, name string) (*multiclusterv1.RemoteCluster, error) {
+	var remoteCluster = &multiclusterv1.RemoteCluster{}
+	if err := client.Get(context.TODO(), types.NamespacedName{Name: name}, remoteCluster); err != nil {
+		return nil, err
+	}
+	return remoteCluster, nil
+}
+
 func FindUnderlayNetworkForNodeName(client client.Reader, nodeName string) (underlayNetworkName string, err error) {
 	var node = &corev1.Node{}
 	if err = client.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node); err != nil {
