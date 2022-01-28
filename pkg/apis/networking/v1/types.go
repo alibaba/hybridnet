@@ -79,7 +79,7 @@ type SubnetConfig struct {
 
 type NetworkConfig struct {
 	// +kubebuilder:validation:Optional
-	BGPPeers []BGPPeer `json:"bgpPeers"`
+	BGPPeers []BGPPeer `json:"bgpPeers,omitempty"`
 }
 
 type Address struct {
@@ -88,7 +88,7 @@ type Address struct {
 	// +kubebuilder:validation:Required
 	IP string `json:"ip"`
 	// +kubebuilder:validation:Optional
-	Gateway string `json:"gateway"`
+	Gateway string `json:"gateway,omitempty"`
 	// +kubebuilder:validation:Required
 	NetID *int32 `json:"netID"`
 	// +kubebuilder:validation:Required
@@ -101,9 +101,9 @@ type BGPPeer struct {
 	// +kubebuilder:validation:Required
 	Address string `json:"address"`
 	// +kubebuilder:validation:Optional
-	GracefulRestartSeconds int32 `json:"gracefulRestartSeconds"`
+	GracefulRestartSeconds int32 `json:"gracefulRestartSeconds,omitempty"`
 	// +kubebuilder:validation:Optional
-	Password string `json:"password"`
+	Password string `json:"password,omitempty"`
 }
 
 type IPPhase string
