@@ -26,6 +26,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alibaba/hybridnet/pkg/utils"
+
 	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
 	"github.com/go-logr/logr"
 	"github.com/heptiolabs/healthcheck"
@@ -278,22 +280,11 @@ func (c *CtrlHub) setupSubnetController() error {
 				oldNetwork := updateEvent.ObjectOld.(*networkingv1.Network)
 				newNetwork := updateEvent.ObjectNew.(*networkingv1.Network)
 
-				if len(oldNetwork.Status.SubnetList) != len(newNetwork.Status.SubnetList) ||
-					len(oldNetwork.Status.NodeList) != len(newNetwork.Status.NodeList) {
+				if utils.DeepEqualStringSlice(oldNetwork.Status.SubnetList, newNetwork.Status.SubnetList) ||
+					utils.DeepEqualStringSlice(oldNetwork.Status.NodeList, newNetwork.Status.NodeList) {
 					return true
 				}
 
-				for index, subnet := range oldNetwork.Status.SubnetList {
-					if subnet != newNetwork.Status.SubnetList[index] {
-						return true
-					}
-				}
-
-				for index, node := range oldNetwork.Status.NodeList {
-					if node != newNetwork.Status.NodeList[index] {
-						return true
-					}
-				}
 				return false
 			},
 		},
