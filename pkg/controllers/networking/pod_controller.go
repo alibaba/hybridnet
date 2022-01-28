@@ -27,7 +27,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
-	"k8s.io/klog"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -134,7 +133,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	}
 
 	if strategy.OwnByStatelessWorkload(pod) {
-		klog.V(10).Info("non support strategic IP allocation for stateless workloads")
+		log.V(10).Info("non support strategic IP allocation for stateless workloads")
 	}
 
 	return ctrl.Result{}, wrapError("unable to allocate", r.allocate(ctx, pod, networkName))

@@ -24,6 +24,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/vishvananda/netlink v1.1.1-0.20201029203352-d40f9887b852
 	github.com/vishvananda/netns v0.0.0-20211101163701-50045581ed74
+	go.uber.org/zap v1.15.0
 	golang.org/x/sys v0.0.0-20211205182925-97ca703d548d
 	gopkg.in/DATA-DOG/go-sqlmock.v1 v1.3.0 // indirect
 	k8s.io/api v0.20.13
@@ -31,7 +32,6 @@ require (
 	k8s.io/apiserver v0.20.13
 	k8s.io/client-go v0.20.13
 	k8s.io/component-base v0.20.13
-	k8s.io/klog v1.0.0
 	k8s.io/kubernetes v0.0.0-00010101000000-000000000000
 	k8s.io/utils v0.0.0-20211208161948-7d6a63dca704
 	moul.io/http2curl v1.0.0 // indirect
