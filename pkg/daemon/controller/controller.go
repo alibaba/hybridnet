@@ -401,7 +401,7 @@ func (c *CtrlHub) setupIPInstanceController() error {
 				}, network); err != nil {
 					return false
 				}
-				return network.Spec.Mode == networkingv1.NetworkModeBGP
+				return networkingv1.GetNetworkMode(network) == networkingv1.NetworkModeBGP
 			},
 			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
 				subnet := deleteEvent.Object.(*networkingv1.Subnet)
@@ -411,7 +411,7 @@ func (c *CtrlHub) setupIPInstanceController() error {
 				}, network); err != nil {
 					return false
 				}
-				return network.Spec.Mode == networkingv1.NetworkModeBGP
+				return networkingv1.GetNetworkMode(network) == networkingv1.NetworkModeBGP
 			},
 			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
 				return false
@@ -421,6 +421,34 @@ func (c *CtrlHub) setupIPInstanceController() error {
 			},
 		}); err != nil {
 		return fmt.Errorf("failed to watch networkingv1.Subnet for ip instance controller: %v", err)
+	}
+
+	if err := ipInstanceController.Watch(&source.Kind{Type: &networkingv1.Network{}},
+		&fixedKeyHandler{key: ActionReconcileIPInstance},
+		&predicate.Funcs{
+			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+				oldNetwork := updateEvent.ObjectOld.(*networkingv1.Network)
+				newNetwork := updateEvent.ObjectNew.(*networkingv1.Network)
+
+				if (networkingv1.GetNetworkMode(oldNetwork) != networkingv1.NetworkModeBGP) &&
+					(networkingv1.GetNetworkMode(newNetwork) != networkingv1.NetworkModeBGP) {
+					return false
+				}
+
+				if utils.DeepEqualStringSlice(oldNetwork.Status.SubnetList, newNetwork.Status.SubnetList) ||
+					utils.DeepEqualStringSlice(oldNetwork.Status.NodeList, newNetwork.Status.NodeList) {
+					return true
+				}
+
+				if !reflect.DeepEqual(oldNetwork.Spec.Config, newNetwork.Spec.Config) {
+					return true
+				}
+
+				return false
+			},
+		},
+	); err != nil {
+		return fmt.Errorf("failed to watch networkingv1.Network for ip instance controller: %v", err)
 	}
 
 	if err := ipInstanceController.Watch(c.ipInstanceControllerTriggerSource, &handler.Funcs{}); err != nil {

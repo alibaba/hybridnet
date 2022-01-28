@@ -91,8 +91,7 @@ func NewManager(peeringInterfaceName, grpcListenAddress string, logger logr.Logg
 			manager.routerV4Address = existLinkAddress[0].IP
 		}
 	case 2:
-		if (existLinkAddress[0].IP.To4() != nil && existLinkAddress[1].IP.To4() == nil) ||
-			(existLinkAddress[0].IP.To4() == nil && existLinkAddress[1].IP.To4() != nil) {
+		if (existLinkAddress[0].IP.To4() == nil) != (existLinkAddress[1].IP.To4() == nil) {
 			for _, addr := range existLinkAddress {
 				if addr.IP.To4() == nil {
 					manager.routerV6Address = addr.IP

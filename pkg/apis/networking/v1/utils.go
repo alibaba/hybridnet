@@ -64,7 +64,7 @@ func GetNetworkMode(networkObj *Network) NetworkMode {
 			return NetworkModeVlan
 		}
 	case NetworkTypeOverlay:
-		if networkObj == nil || len(networkObj.Spec.Mode) == 0 {
+		if len(networkObj.Spec.Mode) == 0 {
 			return NetworkModeVxlan
 		}
 	}

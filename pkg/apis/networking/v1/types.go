@@ -97,7 +97,7 @@ type Address struct {
 
 type BGPPeer struct {
 	// +kubebuilder:validation:Required
-	RemoteAS int32 `json:"remoteAS"`
+	ASN int32 `json:"asn"`
 	// +kubebuilder:validation:Required
 	Address string `json:"address"`
 	// +kubebuilder:validation:Optional

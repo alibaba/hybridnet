@@ -187,7 +187,7 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	for _, peer := range localBGPPeers {
-		r.ctrlHubRef.bgpManager.RecordPeer(peer.Address, peer.Password, int(peer.RemoteAS), peer.GracefulRestartSeconds)
+		r.ctrlHubRef.bgpManager.RecordPeer(peer.Address, peer.Password, int(peer.ASN), peer.GracefulRestartSeconds)
 	}
 
 	if err := r.ctrlHubRef.neighV4Manager.SyncNeighs(); err != nil {
