@@ -8,7 +8,7 @@ COPY go.mod ./go.mod
 COPY go.sum ./go.sum
 # cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
-RUN go mod download
+RUN export GOPROXY=https://goproxy.cn,direct && go mod download
 
 COPY . /go/src/github.com/alibaba/hybridnet
 
@@ -20,8 +20,8 @@ RUN export GOCACHE=/tmp && \
     export COMMIT_ID=`git rev-parse --short HEAD 2>/dev/null` && \
     go build -o dist/images/hybridnet -ldflags "-w -s" -v ./cmd/cni && \
     go build -ldflags "-w -s -X \"main.gitCommit=`echo $COMMIT_ID`\" " -o dist/images/hybridnet-daemon -v ./cmd/daemon && \
-    go build -ldflags "-X \"main.gitCommit=`git rev-parse --short HEAD 2>/dev/null`\" " -o dist/images/hybridnet-manager -v ./cmd/manager && \
-    go build -o dist/images/hybridnet-webhook -v ./cmd/webhook && \
+    go build -ldflags "-X \"main.gitCommit=`echo $COMMIT_ID`\" " -o dist/images/hybridnet-manager -v ./cmd/manager && \
+    go build -ldflags "-X \"main.gitCommit=`echo $COMMIT_ID`\" " -o dist/images/hybridnet-webhook -v ./cmd/webhook && \
     echo $COMMIT_ID > ./COMMIT_ID
 
 RUN cd /go/src/github.com/alibaba/hybridnet/dist/secrets && \
