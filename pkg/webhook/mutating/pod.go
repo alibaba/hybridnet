@@ -36,7 +36,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
-// Copy from latest k8s
 // TaintNodeNetworkUnavailable will be added when node's network is unavailable
 // and removed when network becomes ready.
 const TaintNodeNetworkUnavailable = "node.kubernetes.io/network-unavailable"
@@ -73,23 +72,45 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 
 	// Select specific network for pod
 	// Priority as below
-	// 1. Network Annotation/Label from Pod
-	// 2. Subnet Annotation/Label from Pod
+	// 1. Network & Subnet from Pod
+	// 2. Network & Subnet from Namespace
 	// 3. Allocated IP Instance for Pod in Stateful Workloads
 	var (
 		networkName        string
-		networkNameFromPod = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedNetwork], pod.Labels[constants.LabelSpecifiedNetwork])
-		subnetNameFromPod  = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedSubnet], pod.Labels[constants.LabelSpecifiedSubnet])
+		subnetName         string
+		networkNameFromPod string
+		subnetNameFromPod  string
+		networkNameFromNs  string
+		subnetNameFromNs   string
 	)
+
+	if networkNameFromPod, subnetNameFromPod, err = selectNetworkAndSubnetFromObject(ctx, handler.Cache, pod); err != nil {
+		return admission.Errored(http.StatusBadRequest, err)
+	}
+
+	ns := &corev1.Namespace{}
+	if err = handler.Cache.Get(ctx, types.NamespacedName{Name: pod.Namespace}, ns); err != nil {
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+	if networkNameFromNs, subnetNameFromNs, err = selectNetworkAndSubnetFromObject(ctx, handler.Cache, ns); err != nil {
+		return admission.Errored(http.StatusBadRequest, err)
+	}
+
 	switch {
 	case len(networkNameFromPod) > 0:
-		networkName = networkNameFromPod
-	case len(subnetNameFromPod) > 0:
-		subnet := &networkingv1.Subnet{}
-		if err = handler.Cache.Get(ctx, types.NamespacedName{Name: subnetNameFromPod}, subnet); err != nil {
-			return admission.Errored(http.StatusInternalServerError, err)
+		switch {
+		case len(subnetNameFromPod) > 0:
+			networkName = networkNameFromPod
+			subnetName = subnetNameFromPod
+		case networkNameFromPod == networkNameFromNs:
+			// if network match between pod and ns, subnet from ns
+			// will be referred
+			networkName = networkNameFromPod
+			subnetName = subnetNameFromNs
 		}
-		networkName = subnet.Spec.Network
+	case len(networkNameFromNs) > 0:
+		networkName = networkNameFromNs
+		subnetName = subnetNameFromNs
 	case strategy.OwnByStatefulWorkload(pod):
 		if shouldReallocate := !utils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], strategy.DefaultIPRetain); shouldReallocate {
 			// reallocate means that pod will locate on node freely
@@ -116,6 +137,9 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 			}
 		}
 	}
+	// persistent specified network and subnet in pod annotations
+	patchAnnotationToPod(pod, constants.AnnotationSpecifiedNetwork, networkName)
+	patchAnnotationToPod(pod, constants.AnnotationSpecifiedSubnet, subnetName)
 
 	var networkTypeFromPod = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType])
 	var networkType = ipamtypes.ParseNetworkTypeFromString(networkTypeFromPod)
@@ -139,10 +163,10 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 	case ipamtypes.Underlay:
 		if len(networkName) > 0 {
 			klog.Infof("[mutating] patch pod %s/%s with selector of network %s", req.Namespace, req.Name, networkName)
-			pod = patchSelectorToPod(pod, networkNodeSelector)
+			patchSelectorToPod(pod, networkNodeSelector)
 		} else {
 			klog.Infof("[mutating] patch pod %s/%s with underlay attachment selector", req.Namespace, req.Name)
-			pod = patchSelectorToPod(pod, map[string]string{
+			patchSelectorToPod(pod, map[string]string{
 				constants.LabelUnderlayNetworkAttachment: constants.Attached,
 			})
 		}
@@ -151,27 +175,26 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		if feature.DualStackEnabled() {
 			switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
 			case ipamtypes.IPv4Only:
-				pod = patchSelectorToPod(pod, map[string]string{
+				patchSelectorToPod(pod, map[string]string{
 					constants.LabelIPv4AddressQuota: constants.QuotaNonEmpty,
 				})
 			case ipamtypes.IPv6Only:
-				pod = patchSelectorToPod(pod, map[string]string{
+				patchSelectorToPod(pod, map[string]string{
 					constants.LabelIPv6AddressQuota: constants.QuotaNonEmpty,
 				})
 			case ipamtypes.DualStack:
-				pod = patchSelectorToPod(pod, map[string]string{
+				patchSelectorToPod(pod, map[string]string{
 					constants.LabelDualStackAddressQuota: constants.QuotaNonEmpty,
 				})
 			}
 		} else {
-			pod = patchSelectorToPod(pod, map[string]string{
+			patchSelectorToPod(pod, map[string]string{
 				constants.LabelAddressQuota: constants.QuotaNonEmpty,
 			})
 		}
-
 	case ipamtypes.Overlay:
 		klog.Infof("[mutating] patch pod %s/%s with overlay attachment selector", req.Namespace, req.Name)
-		pod = patchSelectorToPod(pod, map[string]string{
+		patchSelectorToPod(pod, map[string]string{
 			constants.LabelOverlayNetworkAttachment: constants.Attached,
 		})
 	default:
@@ -190,17 +213,33 @@ func generatePatchResponseFromPod(original []byte, pod *corev1.Pod) admission.Re
 	return admission.PatchResponseFromRaw(original, marshaled)
 }
 
-func patchSelectorToPod(pod *corev1.Pod, selector map[string]string) *corev1.Pod {
+func patchSelectorToPod(pod *corev1.Pod, selector map[string]string) {
 	if pod.Spec.NodeSelector == nil {
 		pod.Spec.NodeSelector = selector
-		return pod
+		return
 	}
 
 	for k, v := range selector {
 		pod.Spec.NodeSelector[k] = v
 	}
 
-	return pod
+	return
+}
+
+func patchAnnotationToPod(pod *corev1.Pod, key, value string) {
+	if len(value) == 0 {
+		return
+	}
+
+	if pod.Annotations == nil {
+		pod.Annotations = map[string]string{
+			key: value,
+		}
+		return
+	}
+
+	pod.Annotations[key] = value
+	return
 }
 
 func ensureTolerationInPod(pod *corev1.Pod, tolerations ...*corev1.Toleration) *corev1.Pod {
@@ -222,4 +261,31 @@ func tolerationMatch(orig, diff *corev1.Toleration) bool {
 		orig.Effect == diff.Effect &&
 		orig.Operator == diff.Operator &&
 		orig.Value == diff.Value
+}
+
+func selectNetworkAndSubnetFromObject(ctx context.Context, c client.Reader, obj client.Object) (networkName, subnetName string, err error) {
+	networkName = utils.PickFirstNonEmptyString(obj.GetAnnotations()[constants.AnnotationSpecifiedNetwork],
+		obj.GetLabels()[constants.LabelSpecifiedNetwork])
+	subnetName = utils.PickFirstNonEmptyString(obj.GetAnnotations()[constants.AnnotationSpecifiedSubnet],
+		obj.GetLabels()[constants.LabelSpecifiedSubnet])
+
+	if len(subnetName) > 0 {
+		subnet := &networkingv1.Subnet{}
+		if err = c.Get(ctx, types.NamespacedName{Name: subnetName}, subnet); err != nil {
+			return
+		}
+
+		if len(networkName) == 0 {
+			networkName = subnet.Spec.Network
+		}
+		if networkName != subnet.Spec.Network {
+			return "", "", fmt.Errorf("specified network and subnet conflict in %s %s/%s",
+				obj.GetObjectKind().GroupVersionKind().String(),
+				obj.GetNamespace(),
+				obj.GetName(),
+			)
+		}
+	}
+
+	return
 }
