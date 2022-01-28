@@ -147,11 +147,29 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 			}
 		}
 	}
+
+	var networkTypeFromNs = utils.PickFirstNonEmptyString(ns.GetAnnotations()[constants.AnnotationNetworkType],
+		ns.GetLabels()[constants.LabelNetworkType])
+	var networkTypeFromPod = utils.PickFirstNonEmptyString(pod.GetAnnotations()[constants.AnnotationNetworkType],
+		pod.GetLabels()[constants.LabelNetworkType])
+
+	if len(networkTypeFromPod) == 0 {
+		networkTypeFromPod = networkTypeFromNs
+	}
+
+	var ipFamilyFromNs = ns.GetAnnotations()[constants.AnnotationIPFamily]
+	var ipFamilyFromPod = pod.GetAnnotations()[constants.AnnotationIPFamily]
+
+	if len(ipFamilyFromPod) == 0 {
+		ipFamilyFromPod = ipFamilyFromNs
+	}
+
 	// persistent specified network and subnet in pod annotations
 	patchAnnotationToPod(pod, constants.AnnotationSpecifiedNetwork, networkName)
 	patchAnnotationToPod(pod, constants.AnnotationSpecifiedSubnet, subnetNameStr)
+	patchAnnotationToPod(pod, constants.AnnotationNetworkType, networkTypeFromPod)
+	patchAnnotationToPod(pod, constants.AnnotationIPFamily, ipFamilyFromPod)
 
-	var networkTypeFromPod = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType])
 	var networkType = ipamtypes.ParseNetworkTypeFromString(networkTypeFromPod)
 	var networkNodeSelector map[string]string
 	if len(networkName) > 0 {

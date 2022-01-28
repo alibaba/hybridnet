@@ -78,7 +78,8 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 		// or else mutate network type inherit from specified network
 		if len(networkTypeFromPod) > 0 {
 			if !stringEqualCaseInsensitive(string(networkingv1.GetNetworkType(network)), string(networkType)) {
-				return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, fmt.Errorf("specified network type mismatch %s %s", networkType, networkingv1.GetNetworkType(network)), logger)
+				return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError,
+					fmt.Errorf("specified network type mismatch, network-type %s, network %s", networkType, network.Name), logger)
 			}
 		} else {
 			networkType = ipamtypes.ParseNetworkTypeFromString(string(networkingv1.GetNetworkType(network)))
