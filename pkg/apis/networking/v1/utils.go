@@ -105,6 +105,10 @@ func ValidateAddressRange(ar *AddressRange) (err error) {
 	if !cidr.IP.Equal(ipOfCIDR) {
 		return fmt.Errorf("CIDR notation is not standard, should start from %s but from %s", cidr.IP, ipOfCIDR)
 	}
+	ones, bits := cidr.Mask.Size()
+	if ones == bits {
+		return fmt.Errorf("types of /32 or /128 cidrs is not supported")
+	}
 
 	if len(ar.Start) > 0 && !cidr.Contains(start) {
 		return fmt.Errorf("start %s is not in CIDR %s", ar.Start, ar.CIDR)
