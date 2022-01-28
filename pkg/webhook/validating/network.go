@@ -49,7 +49,7 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 	switch networkingv1.GetNetworkType(network) {
 	case networkingv1.NetworkTypeUnderlay:
 		if network.Spec.NodeSelector == nil || len(network.Spec.NodeSelector) == 0 {
-			return admission.Denied("must have node selector")
+			return admission.Denied("must have node selector for underlay network")
 		}
 	case networkingv1.NetworkTypeOverlay:
 		// check uniqueness
@@ -83,6 +83,10 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 			return admission.Denied("must assign net ID for bgp network")
 		}
 
+		if len(network.Spec.Config.BGPPeers) != 1 {
+			return admission.Denied("one and only one bgp router need to be set")
+		}
+
 		for _, peer := range network.Spec.Config.BGPPeers {
 			if net.ParseIP(peer.Address) == nil {
 				return admission.Denied(fmt.Sprintf("invalid bgp peer ip address %v", peer.Address))
@@ -113,6 +117,9 @@ func NetworkUpdateValidation(ctx context.Context, req *admission.Request, handle
 
 	switch networkingv1.GetNetworkType(newN) {
 	case networkingv1.NetworkTypeUnderlay:
+		if newN.Spec.NodeSelector == nil || len(newN.Spec.NodeSelector) == 0 {
+			return admission.Denied("must have node selector for underlay network")
+		}
 	case networkingv1.NetworkTypeOverlay:
 		if newN.Spec.NodeSelector != nil && len(newN.Spec.NodeSelector) > 0 {
 			return admission.Denied("node selector must not be assigned for overlay network")
@@ -123,6 +130,23 @@ func NetworkUpdateValidation(ctx context.Context, req *admission.Request, handle
 
 	if !reflect.DeepEqual(oldN.Spec.Mode, newN.Spec.Mode) {
 		return admission.Denied("network mode must not be changed")
+	}
+
+	switch networkingv1.GetNetworkMode(newN) {
+	case networkingv1.NetworkModeBGP:
+		if len(newN.Spec.Config.BGPPeers) != 1 {
+			return admission.Denied("one and only one bgp router need to be set")
+		}
+
+		for _, peer := range newN.Spec.Config.BGPPeers {
+			if net.ParseIP(peer.Address) == nil {
+				return admission.Denied(fmt.Sprintf("invalid bgp peer ip address %v", peer.Address))
+			}
+		}
+	case networkingv1.NetworkModeVlan:
+	case networkingv1.NetworkModeVxlan:
+	default:
+		return admission.Denied(fmt.Sprintf("unknown network mode %s", networkingv1.GetNetworkMode(newN)))
 	}
 
 	if !reflect.DeepEqual(oldN.Spec.NetID, newN.Spec.NetID) {
