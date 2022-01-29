@@ -65,8 +65,6 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 	var overlayExist bool
 	var overlayForwardNodeIfName string
 	var err error
-	var localBGPSubnets []networkingv1.Subnet
-	var localBGPPeers []networkingv1.BGPPeer
 
 	for _, network := range networkList.Items {
 		switch networkingv1.GetNetworkMode(&network) {
@@ -83,12 +81,6 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 				continue
 			}
 
-			subnetList := &networkingv1.SubnetList{}
-			if err := r.List(ctx, subnetList, client.MatchingFields{NetworkNameIndex: network.Name}); err != nil {
-				return reconcile.Result{Requeue: true},
-					fmt.Errorf("get subnets by node name %v indexer failed: %v", network.Name, err)
-			}
-
 			if network.Spec.NetID == nil {
 				return reconcile.Result{Requeue: true},
 					fmt.Errorf("the net id of network %v must to be set", network.Name)
@@ -99,9 +91,6 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 				return reconcile.Result{Requeue: true},
 					fmt.Errorf("try start bgp manager for network %v failed: %v", network.Name, err)
 			}
-
-			localBGPSubnets = append(localBGPSubnets, subnetList.Items...)
-			localBGPPeers = append(localBGPPeers, network.Spec.Config.BGPPeers...)
 		}
 	}
 
@@ -123,7 +112,7 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 	r.ctrlHubRef.neighV6Manager.ResetInfos()
 
 	r.ctrlHubRef.addrV4Manager.ResetInfos()
-	r.ctrlHubRef.bgpManager.ResetInfos()
+	r.ctrlHubRef.bgpManager.ResetIPInfos()
 
 	for _, ipInstance := range ipInstanceList.Items {
 		netID := ipInstance.Spec.Address.NetID
@@ -159,7 +148,7 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan forward node interface name: %v", err)
 			}
 		case networkingv1.NetworkModeBGP:
-			r.ctrlHubRef.bgpManager.RecordIPInstance(podIP)
+			r.ctrlHubRef.bgpManager.RecordIP(podIP)
 		}
 
 		// create proxy neigh
@@ -175,19 +164,6 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 		if len(forwardNodeIfName) != 0 {
 			neighManager.AddPodInfo(podIP, forwardNodeIfName)
 		}
-	}
-
-	for _, subnet := range localBGPSubnets {
-		_, cidr, err := net.ParseCIDR(subnet.Spec.Range.CIDR)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse subnet cidr %v: %v",
-				subnet.Spec.Range.CIDR, err)
-		}
-		r.ctrlHubRef.bgpManager.RecordSubnet(cidr)
-	}
-
-	for _, peer := range localBGPPeers {
-		r.ctrlHubRef.bgpManager.RecordPeer(peer.Address, peer.Password, int(peer.ASN), peer.GracefulRestartSeconds)
 	}
 
 	if err := r.ctrlHubRef.neighV4Manager.SyncNeighs(); err != nil {
@@ -209,8 +185,8 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv4 addresses: %v", err)
 	}
 
-	if err := r.ctrlHubRef.bgpManager.SyncPathsAndPeers(); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync bgp paths and peers: %v", err)
+	if err := r.ctrlHubRef.bgpManager.SyncIPInfos(); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync bgp ip paths: %v", err)
 	}
 
 	r.ctrlHubRef.iptablesSyncTrigger()

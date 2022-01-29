@@ -62,9 +62,8 @@ const (
 	ActionReconcileIPInstance = "AllIPInstancesRelatedToThisNode"
 	ActionReconcileNode       = "AllNodes"
 
-	InstanceIPIndex  = "instanceIP"
-	EndpointIPIndex  = "endpointIP"
-	NetworkNameIndex = "networkName"
+	InstanceIPIndex = "instanceIP"
+	EndpointIPIndex = "endpointIP"
 
 	NeighUpdateChanSize = 2000
 	LinkUpdateChainSize = 200
@@ -186,11 +185,6 @@ func (c *CtrlHub) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to add instance ip indexer to manager: %v", err)
 	}
 
-	if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Subnet{},
-		NetworkNameIndex, networkNameIndexer); err != nil {
-		return fmt.Errorf("failed to add instance ip indexer to manager: %v", err)
-	}
-
 	if feature.MultiClusterEnabled() {
 		if err := c.mgr.GetFieldIndexer().IndexField(context.TODO(), &multiclusterv1.RemoteVtep{},
 			EndpointIPIndex, endpointIPIndexer); err != nil {
@@ -282,6 +276,10 @@ func (c *CtrlHub) setupSubnetController() error {
 
 				if utils.DeepEqualStringSlice(oldNetwork.Status.SubnetList, newNetwork.Status.SubnetList) ||
 					utils.DeepEqualStringSlice(oldNetwork.Status.NodeList, newNetwork.Status.NodeList) {
+					return true
+				}
+
+				if !reflect.DeepEqual(oldNetwork.Spec.Config, newNetwork.Spec.Config) {
 					return true
 				}
 
@@ -387,68 +385,6 @@ func (c *CtrlHub) setupIPInstanceController() error {
 			},
 		}); err != nil {
 		return fmt.Errorf("failed to watch networkingv1.IPInstance for ip instance controller: %v", err)
-	}
-
-	if err := ipInstanceController.Watch(&source.Kind{Type: &networkingv1.Subnet{}},
-		&fixedKeyHandler{key: ActionReconcileIPInstance},
-		&predicate.ResourceVersionChangedPredicate{},
-		&predicate.Funcs{
-			CreateFunc: func(createEvent event.CreateEvent) bool {
-				subnet := createEvent.Object.(*networkingv1.Subnet)
-				network := &networkingv1.Network{}
-				if err := c.mgr.GetClient().Get(context.Background(), types.NamespacedName{
-					Name: subnet.Spec.Network,
-				}, network); err != nil {
-					return false
-				}
-				return networkingv1.GetNetworkMode(network) == networkingv1.NetworkModeBGP
-			},
-			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
-				subnet := deleteEvent.Object.(*networkingv1.Subnet)
-				network := &networkingv1.Network{}
-				if err := c.mgr.GetClient().Get(context.Background(), types.NamespacedName{
-					Name: subnet.Spec.Network,
-				}, network); err != nil {
-					return false
-				}
-				return networkingv1.GetNetworkMode(network) == networkingv1.NetworkModeBGP
-			},
-			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
-				return false
-			},
-			GenericFunc: func(genericEvent event.GenericEvent) bool {
-				return false
-			},
-		}); err != nil {
-		return fmt.Errorf("failed to watch networkingv1.Subnet for ip instance controller: %v", err)
-	}
-
-	if err := ipInstanceController.Watch(&source.Kind{Type: &networkingv1.Network{}},
-		&fixedKeyHandler{key: ActionReconcileIPInstance},
-		&predicate.Funcs{
-			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
-				oldNetwork := updateEvent.ObjectOld.(*networkingv1.Network)
-				newNetwork := updateEvent.ObjectNew.(*networkingv1.Network)
-
-				if (networkingv1.GetNetworkMode(oldNetwork) != networkingv1.NetworkModeBGP) &&
-					(networkingv1.GetNetworkMode(newNetwork) != networkingv1.NetworkModeBGP) {
-					return false
-				}
-
-				if utils.DeepEqualStringSlice(oldNetwork.Status.SubnetList, newNetwork.Status.SubnetList) ||
-					utils.DeepEqualStringSlice(oldNetwork.Status.NodeList, newNetwork.Status.NodeList) {
-					return true
-				}
-
-				if !reflect.DeepEqual(oldNetwork.Spec.Config, newNetwork.Spec.Config) {
-					return true
-				}
-
-				return false
-			},
-		},
-	); err != nil {
-		return fmt.Errorf("failed to watch networkingv1.Network for ip instance controller: %v", err)
 	}
 
 	if err := ipInstanceController.Watch(c.ipInstanceControllerTriggerSource, &handler.Funcs{}); err != nil {

@@ -19,6 +19,8 @@ package bgp
 import (
 	"net"
 
+	"github.com/go-logr/logr"
+
 	"github.com/osrg/gobgp/v3/pkg/packet/bgp"
 
 	apb "google.golang.org/protobuf/types/known/anypb"
@@ -158,4 +160,35 @@ func generateNextHopAttr(isIPv6 bool, nextHop string, nlri *apb.Any) *apb.Any {
 		NextHop: nextHop,
 	})
 	return v4NextHopAttr
+}
+
+func generatePathListFunc(existSubnetPathMap map[string]*net.IPNet, existIPPathMap map[string]net.IP,
+	logger logr.Logger) func(p *api.Destination) {
+	return func(p *api.Destination) {
+		// only collect the path generated from local
+		if p.Paths[0].NeighborIp == "<nil>" {
+			ipAddr, cidr, err := net.ParseCIDR(p.Prefix)
+			if err != nil {
+				logger.Error(err, "failed to parse path prefix", "path-prefix", p.Prefix)
+				return
+			}
+
+			ones, bits := cidr.Mask.Size()
+			// What if the subnet is a /32 or /128 cidr? But maybe it will never happen.
+			if ones == bits {
+				// this path is generated from ip
+				if existIPPathMap != nil {
+					existIPPathMap[ipAddr.String()] = ipAddr
+				}
+			} else {
+				// this path is generated from subnet
+				if existSubnetPathMap != nil {
+					existSubnetPathMap[p.Prefix] = &net.IPNet{
+						IP:   ipAddr,
+						Mask: cidr.Mask,
+					}
+				}
+			}
+		}
+	}
 }

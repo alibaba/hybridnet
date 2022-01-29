@@ -52,6 +52,8 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 	r.ctrlHubRef.routeV4Manager.ResetInfos()
 	r.ctrlHubRef.routeV6Manager.ResetInfos()
 
+	r.ctrlHubRef.bgpManager.ResetPeerAndSubnetInfos()
+
 	for _, subnet := range subnetList.Items {
 		network := &networkingv1.Network{}
 		if err := r.Get(ctx, types.NamespacedName{Name: subnet.Spec.Network}, network); err != nil {
@@ -94,22 +96,35 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 			isOverlay = true
 			autoNatOutgoing = networkingv1.IsSubnetAutoNatOutgoing(&subnet.Spec)
 		case networkingv1.NetworkModeBGP:
-			forwardNodeIfName = r.ctrlHubRef.config.NodeBGPIfName
+			if isUnderlayOnHost {
+				forwardNodeIfName = r.ctrlHubRef.config.NodeBGPIfName
 
-			if len(network.Spec.Config.BGPPeers) != 1 {
-				return reconcile.Result{Requeue: true},
-					fmt.Errorf("no bgp peer or multiple bgp peers are not supported for network %v", network.Name)
+				localAS := uint32(*network.Spec.NetID)
+				if err = r.ctrlHubRef.bgpManager.TryStart(localAS); err != nil {
+					return reconcile.Result{Requeue: true},
+						fmt.Errorf("try start bgp manager for network %v failed: %v", network.Name, err)
+				}
+
+				if len(network.Spec.Config.BGPPeers) != 1 {
+					return reconcile.Result{Requeue: true},
+						fmt.Errorf("no bgp peer or multiple bgp peers are not supported for network %v", network.Name)
+				}
+
+				for _, peer := range network.Spec.Config.BGPPeers {
+					r.ctrlHubRef.bgpManager.RecordPeer(peer.Address, peer.Password, int(peer.ASN), peer.GracefulRestartSeconds)
+				}
+				r.ctrlHubRef.bgpManager.RecordSubnet(subnetCidr)
+
+				peerAddr := net.ParseIP(network.Spec.Config.BGPPeers[0].Address)
+				if peerAddr == nil {
+					return reconcile.Result{Requeue: true},
+						fmt.Errorf("get invalid bgp peer address %v for network %v",
+							network.Spec.Config.BGPPeers[0].Address, network.Name)
+				}
+
+				// use peer ip as gateway
+				gatewayIP = peerAddr
 			}
-
-			peerAddr := net.ParseIP(network.Spec.Config.BGPPeers[0].Address)
-			if peerAddr == nil {
-				return reconcile.Result{Requeue: true},
-					fmt.Errorf("get invalid bgp peer address %v for network %v",
-						network.Spec.Config.BGPPeers[0].Address, network.Name)
-			}
-
-			// use peer ip as gateway
-			gatewayIP = peerAddr
 		default:
 			return reconcile.Result{Requeue: true}, fmt.Errorf("invalic network mode %v for %v", networkMode, network.Name)
 		}
@@ -160,6 +175,10 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 		if err := r.ctrlHubRef.routeV6Manager.SyncRoutes(); err != nil {
 			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv6 routes: %v", err)
 		}
+	}
+
+	if err := r.ctrlHubRef.bgpManager.SyncPeerAndSubnetInfos(); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync bgp peers and subnet paths: %v", err)
 	}
 
 	r.ctrlHubRef.iptablesSyncTrigger()

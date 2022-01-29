@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 
@@ -49,9 +50,11 @@ type Manager struct {
 
 	logger logr.Logger
 
-	peerMap       map[string]*peerInfo
-	subnetMap     map[string]*net.IPNet
-	ipInstanceMap map[string]net.IP
+	peerMap   map[string]*peerInfo
+	subnetMap map[string]*net.IPNet
+	ipMap     map[string]net.IP
+
+	startMutex *sync.RWMutex
 }
 
 func NewManager(peeringInterfaceName, grpcListenAddress string, logger logr.Logger) (*Manager, error) {
@@ -65,9 +68,11 @@ func NewManager(peeringInterfaceName, grpcListenAddress string, logger logr.Logg
 		logger:               logger,
 		peeringInterfaceName: peeringInterfaceName,
 
-		peerMap:       map[string]*peerInfo{},
-		subnetMap:     map[string]*net.IPNet{},
-		ipInstanceMap: map[string]net.IP{},
+		peerMap:   map[string]*peerInfo{},
+		subnetMap: map[string]*net.IPNet{},
+		ipMap:     map[string]net.IP{},
+
+		startMutex: &sync.RWMutex{},
 	}
 
 	peeringLink, err := netlink.LinkByName(peeringInterfaceName)
@@ -162,26 +167,40 @@ func (m *Manager) RecordSubnet(cidr *net.IPNet) {
 	m.subnetMap[cidr.String()] = cidr
 }
 
-func (m *Manager) RecordIPInstance(ip net.IP) {
-	m.ipInstanceMap[ip.String()] = ip
+func (m *Manager) RecordIP(ip net.IP) {
+	m.ipMap[ip.String()] = ip
 }
 
-func (m *Manager) ResetInfos() {
-	m.peerMap = map[string]*peerInfo{}
+func (m *Manager) ResetSubnetInfos() {
 	m.subnetMap = map[string]*net.IPNet{}
-	m.ipInstanceMap = map[string]net.IP{}
+}
+
+func (m *Manager) ResetPeerInfos() {
+	m.peerMap = map[string]*peerInfo{}
+}
+
+func (m *Manager) ResetPeerAndSubnetInfos() {
+	m.ResetPeerInfos()
+	m.ResetSubnetInfos()
+}
+
+func (m *Manager) ResetIPInfos() {
+	m.ipMap = map[string]net.IP{}
 }
 
 func (m *Manager) TryStart(asn uint32) error {
-	if m.localASN == 0 {
-		m.localASN = asn
-	} else if m.localASN != asn {
-		return fmt.Errorf("can not restart bgp manager (local AS number: %v) with a different AS number %v",
-			m.localASN, asn)
-	} else {
+	m.startMutex.Lock()
+	defer m.startMutex.Unlock()
+
+	if m.localASN != 0 {
+		if m.localASN != asn {
+			return fmt.Errorf("can not restart bgp manager (local AS number: %v) with a different AS number %v",
+				m.localASN, asn)
+		}
 		return nil
 	}
 
+	m.localASN = asn
 	return m.bgpServer.StartBgp(context.Background(), &api.StartBgpRequest{
 		Global: &api.Global{
 			Asn:      m.localASN,
@@ -190,7 +209,7 @@ func (m *Manager) TryStart(asn uint32) error {
 	})
 }
 
-func (m *Manager) SyncPathsAndPeers() error {
+func (m *Manager) SyncPeerInfos() error {
 	// Sync peers configuration.
 	// Because now UpdatePeer will reset bgp session causing a network fluctuation, we will never update an exist bgp peer.
 	existPeerMap := map[string]struct{}{}
@@ -226,33 +245,13 @@ func (m *Manager) SyncPathsAndPeers() error {
 		}
 	}
 
+	return nil
+}
+
+func (m *Manager) SyncSubnetInfos() error {
 	// Sync subnet paths.
 	existSubnetPathMap := map[string]*net.IPNet{}
-	existIPPathMap := map[string]net.IP{}
-
-	listPathFunc := func(p *api.Destination) {
-		// only collect the path generated from local
-		if p.Paths[0].NeighborIp == "<nil>" {
-			ipAddr, cidr, err := net.ParseCIDR(p.Prefix)
-			if err != nil {
-				m.logger.Error(err, "failed to parse path prefix", "path-prefix", p.Prefix)
-				return
-			}
-
-			ones, bits := cidr.Mask.Size()
-			// What if the subnet is a /32 or /128 cidr? But maybe it will never happen.
-			if ones == bits {
-				// this path is generated from ip
-				existIPPathMap[ipAddr.String()] = ipAddr
-			} else {
-				// this path is generated from subnet
-				existSubnetPathMap[p.Prefix] = &net.IPNet{
-					IP:   ipAddr,
-					Mask: cidr.Mask,
-				}
-			}
-		}
-	}
+	listPathFunc := generatePathListFunc(existSubnetPathMap, nil, m.logger)
 
 	if err := m.bgpServer.ListPath(context.Background(),
 		&api.ListPathRequest{Family: v4Family}, listPathFunc); err != nil {
@@ -299,8 +298,28 @@ func (m *Manager) SyncPathsAndPeers() error {
 		}
 	}
 
+	return nil
+}
+
+func (m *Manager) SyncPeerAndSubnetInfos() error {
+	if err := m.SyncPeerInfos(); err != nil {
+		return err
+	}
+
+	return m.SyncSubnetInfos()
+}
+
+func (m *Manager) SyncIPInfos() error {
+	existIPPathMap := map[string]net.IP{}
+	listPathFunc := generatePathListFunc(nil, existIPPathMap, m.logger)
+
+	if err := m.bgpServer.ListPath(context.Background(),
+		&api.ListPathRequest{Family: v4Family}, listPathFunc); err != nil {
+		return fmt.Errorf("failed to list ipv4 path: %v", err)
+	}
+
 	// Ensure paths for ip instances
-	for _, ipInstance := range m.ipInstanceMap {
+	for _, ipInstance := range m.ipMap {
 		nextHop, err := m.getNextHopAddressByIP(ipInstance)
 		if err != nil {
 			m.logger.Error(err, "failed to get next hop address to add path for ip instance, it will be ignore",
@@ -325,7 +344,7 @@ func (m *Manager) SyncPathsAndPeers() error {
 			continue
 		}
 
-		if _, exist := m.ipInstanceMap[ipAddr.String()]; !exist {
+		if _, exist := m.ipMap[ipAddr.String()]; !exist {
 			if err := m.bgpServer.DeletePath(context.Background(), &api.DeletePathRequest{
 				Path: generatePathForIP(ipAddr, nextHop),
 			}); err != nil {

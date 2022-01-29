@@ -128,7 +128,7 @@ func NetworkUpdateValidation(ctx context.Context, req *admission.Request, handle
 		return admission.Denied(fmt.Sprintf("unknown network type %s", networkingv1.GetNetworkType(newN)))
 	}
 
-	if !reflect.DeepEqual(oldN.Spec.Mode, newN.Spec.Mode) {
+	if oldN.Spec.Mode != newN.Spec.Mode {
 		return admission.Denied("network mode must not be changed")
 	}
 
