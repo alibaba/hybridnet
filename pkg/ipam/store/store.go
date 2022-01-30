@@ -284,7 +284,6 @@ func (w *Worker) createIPWithMAC(pod *corev1.Pod, ip *ipamtypes.IP, macAddr stri
 			Address: networkingv1.Address{
 				Version: extractIPVersion(ip),
 				IP:      ip.Address.String(),
-				Gateway: ip.Gateway.String(),
 				NetID: func() *int32 {
 					netID := int32(*ip.NetID)
 					return &netID
@@ -292,6 +291,10 @@ func (w *Worker) createIPWithMAC(pod *corev1.Pod, ip *ipamtypes.IP, macAddr stri
 				MAC: macAddr,
 			},
 		},
+	}
+
+	if ip.Gateway != nil {
+		ipInstance.Spec.Address.Gateway = ip.Gateway.String()
 	}
 
 	return ipInstance, w.Create(context.TODO(), ipInstance)

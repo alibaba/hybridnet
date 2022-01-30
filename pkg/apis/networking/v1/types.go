@@ -23,6 +23,14 @@ const (
 	NetworkTypeOverlay  = NetworkType("Overlay")
 )
 
+type NetworkMode string
+
+const (
+	NetworkModeBGP   = NetworkMode("BGP")
+	NetworkModeVlan  = NetworkMode("Vlan")
+	NetworkModeVxlan = NetworkMode("Vxlan")
+)
+
 type Count struct {
 	// +kubebuilder:validation:Optional
 	Total int32 `json:"total"`
@@ -48,7 +56,7 @@ type AddressRange struct {
 	End string `json:"end,omitempty"`
 	// +kubebuilder:validation:Required
 	CIDR string `json:"cidr"`
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	Gateway string `json:"gateway"`
 	// +kubebuilder:validation:Optional
 	ReservedIPs []string `json:"reservedIPs,omitempty"`
@@ -69,17 +77,33 @@ type SubnetConfig struct {
 	AllowSubnets []string `json:"allowSubnets"`
 }
 
+type NetworkConfig struct {
+	// +kubebuilder:validation:Optional
+	BGPPeers []BGPPeer `json:"bgpPeers,omitempty"`
+}
+
 type Address struct {
 	// +kubebuilder:validation:Required
 	Version IPVersion `json:"version"`
 	// +kubebuilder:validation:Required
 	IP string `json:"ip"`
-	// +kubebuilder:validation:Required
-	Gateway string `json:"gateway"`
+	// +kubebuilder:validation:Optional
+	Gateway string `json:"gateway,omitempty"`
 	// +kubebuilder:validation:Required
 	NetID *int32 `json:"netID"`
 	// +kubebuilder:validation:Required
 	MAC string `json:"mac"`
+}
+
+type BGPPeer struct {
+	// +kubebuilder:validation:Required
+	ASN int32 `json:"asn"`
+	// +kubebuilder:validation:Required
+	Address string `json:"address"`
+	// +kubebuilder:validation:Optional
+	GracefulRestartSeconds int32 `json:"gracefulRestartSeconds,omitempty"`
+	// +kubebuilder:validation:Optional
+	Password string `json:"password,omitempty"`
 }
 
 type IPPhase string

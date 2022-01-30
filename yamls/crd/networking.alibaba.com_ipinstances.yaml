@@ -38,7 +38,7 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: IPInstance is a specification for a IPInstance resource
+        description: IPInstance is the Schema for the ipinstances API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -53,7 +53,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: IPInstanceSpec is the spec for a IPInstance resource
+            description: IPInstanceSpec defines the desired state of IPInstance
             properties:
               address:
                 properties:
@@ -69,7 +69,6 @@ spec:
                   version:
                     type: string
                 required:
-                - gateway
                 - ip
                 - mac
                 - netID
@@ -85,7 +84,7 @@ spec:
             - subnet
             type: object
           status:
-            description: IPInstanceStatus is the status for a IPInstance resource
+            description: IPInstanceStatus defines the observed state of IPInstance
             properties:
               nodeName:
                 type: string
@@ -98,8 +97,6 @@ spec:
               sandboxID:
                 type: string
             type: object
-        required:
-        - spec
         type: object
     served: true
     storage: true

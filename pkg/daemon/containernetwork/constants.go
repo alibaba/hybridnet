@@ -56,7 +56,9 @@ const (
 	IPv6DisableModuleParameter = "/sys/module/ipv6/parameters/disable"
 	IPv6DisableSysctl          = "/proc/sys/net/ipv6/conf/%s/disable_ipv6"
 
-	// IP Masks that have no effect on IP Address
 	DefaultIP4Mask = "255.255.255.255"
 	DefaultIP6Mask = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"
+
+	PodVirtualV4DefaultGateway = "169.254.1.1"
+	PodVirtualV6DefaultGateway = "fe80::ecee:eeff:feee:eeee"
 )

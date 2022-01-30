@@ -103,23 +103,23 @@ func generateCNIResult(cniVersion string, cniResponse *request.PodResponse) (*cu
 			ip = current.IPConfig{
 				Version: "4",
 				Address: net.IPNet{IP: ipAddr.To4(), Mask: mask.Mask},
-				Gateway: net.ParseIP(address.Gateway).To4(),
+				Gateway: net.ParseIP(address.Gateway),
 			}
 
 			route = types.Route{
 				Dst: net.IPNet{IP: net.ParseIP("0.0.0.0").To4(), Mask: net.CIDRMask(0, 32)},
-				GW:  net.ParseIP(address.Gateway).To4(),
+				GW:  net.ParseIP(address.Gateway),
 			}
 		case networkingv1.IPv6:
 			ip = current.IPConfig{
 				Version: "6",
 				Address: net.IPNet{IP: ipAddr.To16(), Mask: mask.Mask},
-				Gateway: net.ParseIP(address.Gateway).To16(),
+				Gateway: net.ParseIP(address.Gateway),
 			}
 
 			route = types.Route{
 				Dst: net.IPNet{IP: net.ParseIP("::").To16(), Mask: net.CIDRMask(0, 128)},
-				GW:  net.ParseIP(address.Gateway).To16(),
+				GW:  net.ParseIP(address.Gateway),
 			}
 		}
 

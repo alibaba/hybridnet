@@ -20,13 +20,10 @@ spec:
     - jsonPath: .spec.netID
       name: NetID
       type: integer
-    - jsonPath: .spec.switchID
-      name: SwitchID
-      type: string
     name: v1
     schema:
       openAPIV3Schema:
-        description: Network is a specification for a Network resource
+        description: Network is the Schema for the networks API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -41,8 +38,31 @@ spec:
           metadata:
             type: object
           spec:
-            description: NetworkSpec is the spec for a Network resource
+            description: NetworkSpec defines the desired state of Network
             properties:
+              config:
+                properties:
+                  bgpPeers:
+                    items:
+                      properties:
+                        address:
+                          type: string
+                        gracefulRestartSeconds:
+                          format: int32
+                          type: integer
+                        password:
+                          type: string
+                        remoteAS:
+                          format: int32
+                          type: integer
+                      required:
+                      - address
+                      - remoteAS
+                      type: object
+                    type: array
+                type: object
+              mode:
+                type: string
               netID:
                 format: int32
                 type: integer
@@ -51,12 +71,13 @@ spec:
                   type: string
                 type: object
               switchID:
+                description: Deprecated, will be removed in v0.5.0
                 type: string
               type:
                 type: string
             type: object
           status:
-            description: NetworkStatus is the status for a Network resource
+            description: NetworkStatus defines the observed state of Network
             properties:
               dualStackStatistics:
                 properties:
@@ -107,8 +128,6 @@ spec:
                   type: string
                 type: array
             type: object
-        required:
-        - spec
         type: object
     served: true
     storage: true
