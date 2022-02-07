@@ -98,6 +98,9 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: 250m
           securityContext:
             privileged: true
             runAsUser: 0
