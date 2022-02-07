@@ -19,6 +19,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/alibaba/hybridnet/pkg/metrics"
@@ -50,4 +51,5 @@ func startMetricsServer() {
 
 	entryLog.Error(http.ListenAndServe(fmt.Sprintf(":%s", *metricsPort), nil),
 		"failed make metrics server listen and serve", "metrics-port", *metricsPort)
+	os.Exit(1)
 }

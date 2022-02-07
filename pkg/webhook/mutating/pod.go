@@ -164,12 +164,6 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		ipFamilyFromPod = ipFamilyFromNs
 	}
 
-	// persistent specified network and subnet in pod annotations
-	patchAnnotationToPod(pod, constants.AnnotationSpecifiedNetwork, networkName)
-	patchAnnotationToPod(pod, constants.AnnotationSpecifiedSubnet, subnetNameStr)
-	patchAnnotationToPod(pod, constants.AnnotationNetworkType, networkTypeFromPod)
-	patchAnnotationToPod(pod, constants.AnnotationIPFamily, ipFamilyFromPod)
-
 	var networkType = ipamtypes.ParseNetworkTypeFromString(networkTypeFromPod)
 	var networkNodeSelector map[string]string
 	if len(networkName) > 0 {
@@ -186,6 +180,12 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 
 		networkNodeSelector = network.Spec.NodeSelector
 	}
+
+	// persistent specified network and subnet in pod annotations
+	patchAnnotationToPod(pod, constants.AnnotationSpecifiedNetwork, networkName)
+	patchAnnotationToPod(pod, constants.AnnotationSpecifiedSubnet, subnetNameStr)
+	patchAnnotationToPod(pod, constants.AnnotationNetworkType, string(networkType))
+	patchAnnotationToPod(pod, constants.AnnotationIPFamily, ipFamilyFromPod)
 
 	switch networkType {
 	case ipamtypes.Underlay:
