@@ -22,7 +22,7 @@ import (
 	"github.com/spf13/pflag"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var (
@@ -34,6 +34,8 @@ var (
 )
 
 func init() {
+	logger := log.Log.WithName("strategy")
+
 	pflag.BoolVar(&DefaultIPRetain, "default-ip-retain", true, "Whether pod IP of stateful workloads will be retained by default.")
 	pflag.StringVar(&statefulWorkloadKindVar, "stateful-workload-kinds", statefulWorkloadKindVar, `stateful workload kinds to use strategic IP allocation,`+
 		`eg: "StatefulSet,AdvancedStatefulSet", default: "StatefulSet"`)
@@ -46,14 +48,14 @@ func init() {
 	for _, kind := range strings.Split(statefulWorkloadKindVar, ",") {
 		if len(kind) > 0 {
 			StatefulWorkloadKind[kind] = true
-			klog.Infof("[strategy] Adding kind %s to known stateful workloads", kind)
+			logger.Info("Adding kind to known stateful workloads", "kind", kind)
 		}
 	}
 
 	for _, kind := range strings.Split(statelessWorkloadKindVar, ",") {
 		if len(kind) > 0 {
 			StatelessWorkloadKind[kind] = true
-			klog.Infof("[strategy] Adding kind %s to known stateless workloads", kind)
+			logger.Info("Adding kind to known stateless workloads", "kind", kind)
 		}
 	}
 }

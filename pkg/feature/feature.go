@@ -17,15 +17,20 @@
 package feature
 
 import (
+	"os"
+
 	"github.com/spf13/pflag"
 	"k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/component-base/featuregate"
-	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func init() {
+	logger := log.Log.WithName("feature")
+
 	if err := feature.DefaultMutableFeatureGate.Add(DefaultHybridnetFeatureGates); err != nil {
-		klog.Fatalf("feature gate init fails: %v", err)
+		logger.Error(err, "failed to init feature gate")
+		os.Exit(1)
 	}
 
 	feature.DefaultMutableFeatureGate.AddFlag(pflag.CommandLine)
@@ -36,6 +41,7 @@ const (
 	// alpha: v0.1
 	//
 	// Enable dual stack allocation in IPAM.
+
 	DualStack featuregate.Feature = "DualStack"
 
 	MultiCluster featuregate.Feature = "MultiCluster"

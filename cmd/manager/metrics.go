@@ -19,16 +19,19 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/alibaba/hybridnet/pkg/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/pflag"
-	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var (
+	entryLog = log.Log.WithName("entry")
+
 	metricsPort = pflag.String("metrics-port", "9899", "The port to listen on for prometheus metrics.")
 
 	gather prometheus.Gatherer
@@ -44,7 +47,9 @@ func startMetricsServer() {
 		promhttp.HandlerOpts{},
 	))
 
-	klog.Infof("Starting metrics server from %s", time.Now().String())
+	entryLog.Info("Starting metrics server", "time", time.Now().String())
 
-	klog.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", *metricsPort), nil))
+	entryLog.Error(http.ListenAndServe(fmt.Sprintf(":%s", *metricsPort), nil),
+		"failed make metrics server listen and serve", "metrics-port", *metricsPort)
+	os.Exit(1)
 }
