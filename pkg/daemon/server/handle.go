@@ -150,11 +150,6 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 			}
 
 			gatewayIP := net.ParseIP(ipInstance.Spec.Address.Gateway)
-			if gatewayIP == nil {
-				errMsg := fmt.Errorf("failed to parse gateway %v for ip %v: %v", ipInstance.Spec.Address.Gateway, ipInstance.Spec.Address.IP, err)
-				cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
-				return
-			}
 
 			ipVersion := networkingv1.IPv4
 			switch ipInstance.Spec.Address.Version {
@@ -226,17 +221,25 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 		return
 	}
 
-	cdh.logger.Info("Create container", "podName", podRequest.PodName, "podNamespace", podRequest.PodNamespace,
-		"macAddr", macAddr, "netID", *netID)
+	cdh.logger.Info("Create container",
+		"podName", podRequest.PodName,
+		"podNamespace", podRequest.PodNamespace,
+		"ipAddr", printAllocatedIPs(allocatedIPs),
+		"macAddr", macAddr,
+		"netID", *netID)
 	hostInterface, err := cdh.configureNic(podRequest.PodName, podRequest.PodNamespace, podRequest.NetNs, podRequest.ContainerID,
-		macAddr, netID, allocatedIPs, networkingv1.GetNetworkType(network))
+		macAddr, netID, allocatedIPs, networkingv1.GetNetworkMode(network))
 	if err != nil {
 		errMsg := fmt.Errorf("failed to configure nic: %v", err)
 		cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
 		return
 	}
-	cdh.logger.Info("Container network created", "podName", podRequest.PodName, "podNamespace", podRequest.PodNamespace,
-		"macAddr", macAddr, "netID", *netID)
+	cdh.logger.Info("Container network created",
+		"podName", podRequest.PodName,
+		"podNamespace", podRequest.PodNamespace,
+		"ipAddr", printAllocatedIPs(allocatedIPs),
+		"macAddr", macAddr,
+		"netID", *netID)
 
 	// update IPInstance crd status
 	for _, ip := range affectedIPInstances {
@@ -286,4 +289,20 @@ func (cdh *cniDaemonHandler) errorWrapper(err error, status int, resp *restful.R
 	_ = resp.WriteHeaderAndEntity(status, request.PodResponse{
 		Err: err.Error(),
 	})
+}
+
+func printAllocatedIPs(allocatedIPs map[networkingv1.IPVersion]*containernetwork.IPInfo) string {
+	ipAddresseString := ""
+	if allocatedIPs[networkingv1.IPv4] != nil && allocatedIPs[networkingv1.IPv4].Addr != nil {
+		ipAddresseString = ipAddresseString + allocatedIPs[networkingv1.IPv4].Addr.String()
+	}
+
+	if allocatedIPs[networkingv1.IPv6] != nil && allocatedIPs[networkingv1.IPv6].Addr != nil {
+		if ipAddresseString != "" {
+			ipAddresseString = ipAddresseString + "/"
+		}
+		ipAddresseString = ipAddresseString + allocatedIPs[networkingv1.IPv6].Addr.String()
+	}
+
+	return ipAddresseString
 }

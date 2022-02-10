@@ -6,34 +6,25 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
-  name: remotesubnets.networking.alibaba.com
+  name: remotevteps.multicluster.alibaba.com
 spec:
-  group: networking.alibaba.com
+  group: multicluster.alibaba.com
   names:
-    kind: RemoteSubnet
-    listKind: RemoteSubnetList
-    plural: remotesubnets
-    singular: remotesubnet
+    kind: RemoteVtep
+    listKind: RemoteVtepList
+    plural: remotevteps
+    singular: remotevtep
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.range.version
-      name: Version
+    - jsonPath: .spec.mac
+      name: MAC
       type: string
-    - jsonPath: .spec.range.cidr
-      name: CIDR
+    - jsonPath: .spec.ip
+      name: IP
       type: string
-    - jsonPath: .spec.range.start
-      name: Start
-      type: string
-    - jsonPath: .spec.range.end
-      name: End
-      type: string
-    - jsonPath: .spec.range.gateway
-      name: Gateway
-      type: string
-    - jsonPath: .spec.range.type
-      name: Type
+    - jsonPath: .spec.nodeName
+      name: NodeName
       type: string
     - jsonPath: .spec.clusterName
       name: ClusterName
@@ -44,7 +35,7 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: RemoteSubnet is a specification for a RemoteSubnet resource
+        description: RemoteVtep is the Schema for the remotevteps API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -59,51 +50,36 @@ spec:
           metadata:
             type: object
           spec:
-            description: RemoteSubnetSpec is the spec for a RemoteSubnet resource
+            description: RemoteVtepSpec defines the desired state of RemoteVtep
             properties:
               clusterName:
+                description: ClusterName is the name of parent cluster who owns this
+                  remote VTEP.
                 type: string
-              range:
-                properties:
-                  cidr:
-                    type: string
-                  end:
-                    type: string
-                  excludeIPs:
-                    items:
-                      type: string
-                    type: array
-                  gateway:
-                    type: string
-                  reservedIPs:
-                    items:
-                      type: string
-                    type: array
-                  start:
-                    type: string
-                  version:
-                    type: string
-                required:
-                - cidr
-                - gateway
-                - version
-                type: object
-              type:
+              endpointIPList:
+                description: EndpointIPList is the IP list of all local endpoints
+                  of this VTEP.
+                items:
+                  type: string
+                type: array
+              ip:
                 type: string
-            required:
-            - clusterName
-            - range
-            - type
+              mac:
+                type: string
+              nodeName:
+                description: NodeName is the name of corresponding node in remote
+                  cluster.
+                type: string
             type: object
           status:
-            description: RemoteSubnetStatus is the status for a RemoteSubnet resource
+            description: RemoteVtepStatus defines the observed state of RemoteVtep
             properties:
               lastModifyTime:
+                description: LastModifyTime shows the last timestamp when the remote
+                  VTEP was updated.
                 format: date-time
                 type: string
             type: object
-        required:
-        - spec
         type: object
     served: true
     storage: true

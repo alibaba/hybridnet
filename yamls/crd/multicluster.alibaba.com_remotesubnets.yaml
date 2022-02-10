@@ -6,14 +6,14 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
-  name: subnets.networking.alibaba.com
+  name: remotesubnets.multicluster.alibaba.com
 spec:
-  group: networking.alibaba.com
+  group: multicluster.alibaba.com
   names:
-    kind: Subnet
-    listKind: SubnetList
-    plural: subnets
-    singular: subnet
+    kind: RemoteSubnet
+    listKind: RemoteSubnetList
+    plural: remotesubnets
+    singular: remotesubnet
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -32,25 +32,19 @@ spec:
     - jsonPath: .spec.range.gateway
       name: Gateway
       type: string
-    - jsonPath: .status.total
-      name: Total
-      type: integer
-    - jsonPath: .status.used
-      name: Used
-      type: integer
-    - jsonPath: .status.available
-      name: Available
-      type: integer
-    - jsonPath: .spec.netID
-      name: NetID
-      type: integer
-    - jsonPath: .spec.network
-      name: Network
+    - jsonPath: .spec.range.networkType
+      name: NetworkType
       type: string
+    - jsonPath: .spec.clusterName
+      name: ClusterName
+      type: string
+    - jsonPath: .status.lastModifyTime
+      name: LastModifyTime
+      type: date
     name: v1
     schema:
       openAPIV3Schema:
-        description: Subnet is the Schema for the subnets API
+        description: RemoteSubnet is the Schema for the remotesubnets API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -65,29 +59,18 @@ spec:
           metadata:
             type: object
           spec:
-            description: SubnetSpec defines the desired state of Subnet
+            description: RemoteSubnetSpec defines the desired state of RemoteSubnet
             properties:
-              config:
-                properties:
-                  allowSubnets:
-                    items:
-                      type: string
-                    type: array
-                  autoNatOutgoing:
-                    type: boolean
-                  gatewayNode:
-                    type: string
-                  gatewayType:
-                    type: string
-                  private:
-                    type: boolean
-                type: object
-              netID:
-                format: int32
-                type: integer
-              network:
+              clusterName:
+                description: ClusterName is the name of parent cluster who owns this
+                  remote subnet.
+                type: string
+              networkType:
+                description: Type is the network type of this remote subnet. Now there
+                  are two known types, Overlay and Underlay.
                 type: string
               range:
+                description: Range is the IP collection of this remote subnet.
                 properties:
                   cidr:
                     type: string
@@ -112,23 +95,16 @@ spec:
                 - version
                 type: object
             required:
-            - network
             - range
             type: object
           status:
-            description: SubnetStatus defines the observed state of Subnet
+            description: RemoteSubnetStatus defines the observed state of RemoteSubnet
             properties:
-              available:
-                format: int32
-                type: integer
-              lastAllocatedIP:
+              lastModifyTime:
+                description: LastModifyTime shows the last timestamp when the remote
+                  subnet was updated.
+                format: date-time
                 type: string
-              total:
-                format: int32
-                type: integer
-              used:
-                format: int32
-                type: integer
             type: object
         type: object
     served: true

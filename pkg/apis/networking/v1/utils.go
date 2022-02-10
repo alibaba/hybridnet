@@ -42,8 +42,9 @@ func IsIPv6Subnet(subnet *Subnet) bool {
 	if subnet.Spec.Range.Version == IPv6 {
 		return true
 	}
-	if gateway := net.ParseIP(subnet.Spec.Range.Gateway); gateway != nil {
-		return gateway.To4() == nil
+
+	if _, cidr, _ := net.ParseCIDR(subnet.Spec.Range.CIDR); cidr != nil {
+		return cidr.IP.To4() == nil
 	}
 	return false
 }
@@ -54,6 +55,21 @@ func GetNetworkType(networkObj *Network) NetworkType {
 	}
 
 	return networkObj.Spec.Type
+}
+
+func GetNetworkMode(networkObj *Network) NetworkMode {
+	switch GetNetworkType(networkObj) {
+	case NetworkTypeUnderlay:
+		if networkObj == nil || len(networkObj.Spec.Mode) == 0 {
+			return NetworkModeVlan
+		}
+	case NetworkTypeOverlay:
+		if len(networkObj.Spec.Mode) == 0 {
+			return NetworkModeVxlan
+		}
+	}
+
+	return networkObj.Spec.Mode
 }
 
 func IsIPv6IPInstance(ip *IPInstance) bool {
@@ -93,17 +109,16 @@ func ValidateAddressRange(ar *AddressRange) (err error) {
 	if end = net.ParseIP(ar.End); len(ar.End) > 0 && end == nil {
 		return fmt.Errorf("invalid range end %s", ar.End)
 	}
-	if gateway = net.ParseIP(ar.Gateway); gateway == nil {
-		return fmt.Errorf("invalid range gateway %s", ar.Gateway)
-	}
-	if gatewayIsIPv6 := gateway.To4() == nil; gatewayIsIPv6 != isIPv6 {
-		return fmt.Errorf("address families of ip version and gateway mismatch")
-	}
+
 	if ipOfCIDR, cidr, err = net.ParseCIDR(ar.CIDR); err != nil {
 		return fmt.Errorf("invalid range CIDR %s", ar.CIDR)
 	}
 	if !cidr.IP.Equal(ipOfCIDR) {
 		return fmt.Errorf("CIDR notation is not standard, should start from %s but from %s", cidr.IP, ipOfCIDR)
+	}
+	ones, bits := cidr.Mask.Size()
+	if ones == bits {
+		return fmt.Errorf("types of /32 or /128 cidrs is not supported")
 	}
 
 	if len(ar.Start) > 0 && !cidr.Contains(start) {
@@ -115,8 +130,17 @@ func ValidateAddressRange(ar *AddressRange) (err error) {
 	if len(ar.Start) > 0 && len(ar.End) > 0 && ip.Cmp(start, end) > 0 {
 		return fmt.Errorf("subnet should have at least one available IP. start=%s, end=%s", start, end)
 	}
-	if !cidr.Contains(gateway) {
-		return fmt.Errorf("gateway %s is not in CIDR %s", ar.Gateway, ar.CIDR)
+
+	if len(ar.Gateway) != 0 {
+		if gateway = net.ParseIP(ar.Gateway); gateway != nil {
+			return fmt.Errorf("invalid range gateway %s", ar.Gateway)
+		}
+		if gatewayIsIPv6 := gateway.To4() == nil; gatewayIsIPv6 != isIPv6 {
+			return fmt.Errorf("address families of ip version and gateway mismatch")
+		}
+		if !cidr.Contains(gateway) {
+			return fmt.Errorf("gateway %s is not in CIDR %s", ar.Gateway, ar.CIDR)
+		}
 	}
 
 	for _, rip := range ar.ReservedIPs {

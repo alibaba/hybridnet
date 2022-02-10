@@ -75,8 +75,8 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 	}
 
 	// NetID validation
-	switch networkingv1.GetNetworkType(network) {
-	case networkingv1.NetworkTypeUnderlay:
+	switch networkingv1.GetNetworkMode(network) {
+	case networkingv1.NetworkModeVlan:
 		if subnet.Spec.NetID == nil {
 			if network.Spec.NetID == nil {
 				return webhookutils.AdmissionDeniedWithLog("must have valid Net ID", logger)
@@ -91,7 +91,18 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 			return webhookutils.AdmissionDeniedWithLog("must not set autoNatOutgoing with underlay subnet", logger)
 		}
 
-	case networkingv1.NetworkTypeOverlay:
+		if len(subnet.Spec.Range.Gateway) == 0 {
+			return admission.Denied("must assign gateway for a vlan subnet")
+		}
+	case networkingv1.NetworkModeBGP:
+		if subnet.Spec.NetID != nil {
+			return admission.Denied("must not assign net ID for bgp subnet")
+		}
+
+		if subnet.Spec.Config != nil && subnet.Spec.Config.AutoNatOutgoing != nil {
+			return admission.Denied("must not set autoNatOutgoing with underlay subnet")
+		}
+	case networkingv1.NetworkModeVxlan:
 		if subnet.Spec.NetID != nil {
 			return webhookutils.AdmissionDeniedWithLog("must not assign net ID for overlay subnet", logger)
 		}

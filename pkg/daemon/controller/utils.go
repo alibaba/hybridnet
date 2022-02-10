@@ -45,15 +45,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/daemon/route"
 )
 
-var (
-	reconcileSubnetRequest = reconcile.Request{NamespacedName: types.NamespacedName{
-		Name: ActionReconcileSubnet,
-	}}
-	reconcileNodeRequest = reconcile.Request{NamespacedName: types.NamespacedName{
-		Name: ActionReconcileNode,
-	}}
-)
-
 // simpleTriggerSource is a trigger to add a simple event to queue of controller
 type simpleTriggerSource struct {
 	queue workqueue.RateLimitingInterface
@@ -206,10 +197,12 @@ func parseSubnetSpecRangeMeta(addressRange *networkingv1.AddressRange) (cidr *ne
 			fmt.Errorf("failed to parse subnet cidr %v error: %v", addressRange.CIDR, err)
 	}
 
-	gateway = net.ParseIP(addressRange.Gateway)
-	if gateway == nil {
-		return nil, nil, nil, nil, nil, nil,
-			fmt.Errorf("invalid gateway ip %v", addressRange.Gateway)
+	if addressRange.Gateway != "" {
+		gateway = net.ParseIP(addressRange.Gateway)
+		if gateway == nil {
+			return nil, nil, nil, nil, nil, nil,
+				fmt.Errorf("invalid gateway ip %v", addressRange.Gateway)
+		}
 	}
 
 	if addressRange.Start != "" {
@@ -259,4 +252,19 @@ func isIPListEqual(a, b []string) bool {
 	}
 
 	return gset.NewStrSetFrom(a).Equal(gset.NewStrSetFrom(b))
+}
+
+func nodeBelongsToNetwork(nodeName string, network *networkingv1.Network) bool {
+	if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
+		return true
+	} else {
+		isUnderlayOnHost := false
+		for _, n := range network.Status.NodeList {
+			if n == nodeName {
+				isUnderlayOnHost = true
+				break
+			}
+		}
+		return isUnderlayOnHost
+	}
 }

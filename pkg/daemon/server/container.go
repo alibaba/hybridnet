@@ -30,19 +30,22 @@ import (
 // ipAddr is a CIDR notation IP address and prefix length
 func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, containerID, mac string,
 	netID *int32, allocatedIPs map[networkingv1.IPVersion]*containernetwork.IPInfo,
-	networkType networkingv1.NetworkType) (string, error) {
+	networkMode networkingv1.NetworkMode) (string, error) {
 
 	var err error
 	var nodeIfName string
 	var mtu int
 
-	switch networkType {
-	case networkingv1.NetworkTypeUnderlay:
+	switch networkMode {
+	case networkingv1.NetworkModeVlan:
 		mtu = cdh.config.VlanMTU
 		nodeIfName = cdh.config.NodeVlanIfName
-	case networkingv1.NetworkTypeOverlay:
+	case networkingv1.NetworkModeVxlan:
 		mtu = cdh.config.VxlanMTU
 		nodeIfName = cdh.config.NodeVxlanIfName
+	case networkingv1.NetworkModeBGP:
+		mtu = cdh.config.BGPMTU
+		nodeIfName = cdh.config.NodeBGPIfName
 	}
 
 	macAddr, err := net.ParseMAC(mac)
@@ -60,7 +63,7 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 	}
 
 	if err = containernetwork.ConfigureContainerNic(containerNicName, hostNicName, nodeIfName,
-		allocatedIPs, macAddr, netID, podNS, mtu, cdh.config.VlanCheckTimeout, networkType,
+		allocatedIPs, macAddr, netID, podNS, mtu, cdh.config.VlanCheckTimeout, networkMode,
 		cdh.config.NeighGCThresh1, cdh.config.NeighGCThresh2, cdh.config.NeighGCThresh3); err != nil {
 		return "", fmt.Errorf("failed to configure container nic for %v.%v: %v", podName, podNamespace, err)
 	}
