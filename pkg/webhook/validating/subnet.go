@@ -23,8 +23,9 @@ import (
 	"reflect"
 	"strings"
 
-	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
@@ -111,6 +112,11 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 	// Address Range validation
 	if err = networkingv1.ValidateAddressRange(&subnet.Spec.Range); err != nil {
 		return webhookutils.AdmissionDeniedWithLog(err.Error(), logger)
+	}
+
+	// IP Family validation
+	if !feature.DualStackEnabled() && networkingv1.IsIPv6Subnet(subnet) {
+		return webhookutils.AdmissionDeniedWithLog("ipv6 subnet non-supported if dualstack not enabled", logger)
 	}
 
 	// Capacity validation
