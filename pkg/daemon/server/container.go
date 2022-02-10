@@ -50,7 +50,7 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 		return "", fmt.Errorf("failed to parse mac %s %v", macAddr, err)
 	}
 
-	containerNicName, hostNicName, podNS, err := initContainerNic(podName, netns, containerID, mtu)
+	containerNicName, hostNicName, podNS, err := initContainerNic(podName, podNamespace, netns, mtu)
 	if err != nil {
 		return "", fmt.Errorf("init container nic for pod %v failed: %v", podName, err)
 	}
@@ -110,7 +110,7 @@ func (cdh cniDaemonHandler) deleteNic(netns string) error {
 	})
 }
 
-func initContainerNic(podName, netns, containerID string, mtu int) (string, string, ns.NetNS, error) {
+func initContainerNic(podName, podNamespace, netns string, mtu int) (string, string, ns.NetNS, error) {
 	podNS, err := ns.GetNS(netns)
 	if err != nil {
 		return "", "", nil, fmt.Errorf("failed to open netns %q: %v", netns, err)
@@ -121,7 +121,7 @@ func initContainerNic(podName, netns, containerID string, mtu int) (string, stri
 		return "", "", nil, fmt.Errorf("failed to open current namespace: %v", err)
 	}
 
-	hostNicName, containerNicName := containernetwork.GenerateContainerVethPair(containerID)
+	hostNicName, containerNicName := containernetwork.GenerateContainerVethPair(podNamespace, podName)
 
 	if err := ns.WithNetNSPath(podNS.Path(), func(_ ns.NetNS) error {
 		veth := netlink.Veth{
