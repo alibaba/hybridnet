@@ -57,7 +57,7 @@ func main() {
 
 	// parse flags
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
-	pflag.StringToIntVarP(&controllerConcurrency, "controller-concurrency", "cc", map[string]int{}, "The specified concurrency of different controllers.")
+	pflag.StringToIntVar(&controllerConcurrency, "controller-concurrency", map[string]int{}, "The specified concurrency of different controllers.")
 	pflag.Parse()
 
 	ctrllog.SetLogger(zap.New(zap.UseDevMode(true)))

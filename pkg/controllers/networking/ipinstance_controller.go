@@ -98,12 +98,12 @@ func (r *IPInstanceReconciler) releaseIP(ipInstance *networkingv1.IPInstance) (e
 // SetupWithManager sets up the controller with the Manager.
 func (r *IPInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerIPInstance).
 		For(&networkingv1.IPInstance{}).
 		WithEventFilter(utils.IgnoreDeletePredicate{}).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.Max(),
-			Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerIPInstance),
 		}).
 		Complete(r)
 }

@@ -171,6 +171,7 @@ func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerNetworkStatus).
 		For(&networkingv1.Network{},
 			builder.WithPredicates(
 				&predicate.GenerationChangedPredicate{},
@@ -242,7 +243,6 @@ func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(
 			controller.Options{
 				MaxConcurrentReconciles: r.Max(),
-				Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerNetworkStatus),
 			},
 		).
 		Complete(r)

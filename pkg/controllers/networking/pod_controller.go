@@ -500,6 +500,7 @@ func squashIPSliceToSubnets(ips []*types.IP) (ret []string) {
 // SetupWithManager sets up the controller with the Manager.
 func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerPod).
 		For(&corev1.Pod{},
 			builder.WithPredicates(
 				&utils.IgnoreDeletePredicate{},
@@ -521,7 +522,6 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.Max(),
-			Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerPod),
 		}).
 		Complete(r)
 }

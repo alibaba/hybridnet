@@ -121,6 +121,7 @@ func (r *SubnetStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request
 // SetupWithManager sets up the controller with the Manager.
 func (r *SubnetStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerSubnetStatus).
 		For(&networkingv1.Subnet{},
 			builder.WithPredicates(
 				&predicate.GenerationChangedPredicate{},
@@ -147,7 +148,6 @@ func (r *SubnetStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.Max(),
-			Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerSubnetStatus),
 		}).
 		Complete(r)
 }

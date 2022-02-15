@@ -65,6 +65,7 @@ func (r *IPAMReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 // SetupWithManager sets up the controller with the Manager.
 func (r *IPAMReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerIPAM).
 		For(&networkingv1.Network{},
 			builder.WithPredicates(
 				&predicate.GenerationChangedPredicate{},
@@ -91,7 +92,6 @@ func (r *IPAMReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(
 			controller.Options{
 				MaxConcurrentReconciles: r.Max(),
-				Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerIPAM),
 			}).
 		Complete(r)
 }

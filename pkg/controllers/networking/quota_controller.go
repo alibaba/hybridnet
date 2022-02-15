@@ -133,6 +133,7 @@ func (r *QuotaReconciler) patchNodeLabels(ctx context.Context, nodeName string, 
 // SetupWithManager sets up the controller with the Manager.
 func (r *QuotaReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerQuota).
 		For(&networkingv1.Network{},
 			builder.WithPredicates(
 				&predicate.ResourceVersionChangedPredicate{},
@@ -141,7 +142,6 @@ func (r *QuotaReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(
 			controller.Options{
 				MaxConcurrentReconciles: r.Max(),
-				Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerQuota),
 			},
 		).
 		Complete(r)

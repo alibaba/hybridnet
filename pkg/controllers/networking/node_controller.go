@@ -110,6 +110,7 @@ func nodeNamesToReconcileRequests(nodeNames []string) []reconcile.Request {
 // SetupWithManager sets up the controller with the Manager.
 func (r *NodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerNode).
 		For(&corev1.Node{},
 			builder.WithPredicates(
 				&utils.IgnoreDeletePredicate{},
@@ -133,7 +134,6 @@ func (r *NodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.Max(),
-			Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerNode),
 		}).
 		Complete(r)
 }

@@ -150,6 +150,7 @@ func (r *RemoteClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 func (r *RemoteClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.LocalManager = mgr
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerRemoteCluster).
 		For(&multiclusterv1.RemoteCluster{},
 			builder.WithPredicates(
 				&utils.IgnoreDeletePredicate{},
@@ -159,7 +160,6 @@ func (r *RemoteClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.Max(),
-			Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerRemoteCluster),
 		}).
 		Complete(r)
 }
@@ -200,7 +200,7 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(name string, re
 		restConfig,
 		&manager.Options{
 			Scheme: r.LocalManager.GetScheme(),
-			Logger: r.LocalManager.GetLogger().WithName("manager-runtime"),
+			Logger: r.LocalManager.GetLogger().WithName("manager-runtime").WithName(name),
 		},
 	)
 	if err != nil {

@@ -50,6 +50,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 )
 
+const ControllerRemoteVTEP = "RemoteVTEP"
 const indexerFieldNode = "node"
 
 //+kubebuilder:rbac:groups=multicluster.alibaba.com,resources=remotevteps,verbs=get;list;watch;create;update;patch;delete
@@ -223,7 +224,7 @@ func (r *RemoteVtepReconciler) garbageCollection(ctx context.Context, log logr.L
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	garbageEvent, err := r.garbageCollection(context.TODO(), mgr.GetLogger().WithName("RemoteVtepGC"))
+	garbageEvent, err := r.garbageCollection(context.TODO(), mgr.GetLogger().WithName("cron").WithName("RemoteVtepGC"))
 	if err != nil {
 		return err
 	}
@@ -240,6 +241,7 @@ func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerRemoteVTEP).
 		For(&corev1.Node{},
 			builder.WithPredicates(
 				&predicate.ResourceVersionChangedPredicate{},
@@ -293,7 +295,6 @@ func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
-			Log:                     mgr.GetLogger().WithName("RemoteVTEPController"),
 		}).
 		Complete(r)
 }

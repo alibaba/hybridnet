@@ -119,6 +119,7 @@ func (r *RemoteClusterUUIDReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // SetupWithManager sets up the controller with the Manager.
 func (r *RemoteClusterUUIDReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerRemoteClusterUUID).
 		For(&multiclusterv1.RemoteCluster{},
 			builder.WithPredicates(
 				&predicate.GenerationChangedPredicate{},
@@ -126,7 +127,6 @@ func (r *RemoteClusterUUIDReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.Max(),
-			Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerRemoteClusterUUID),
 		}).
 		Complete(r)
 }
