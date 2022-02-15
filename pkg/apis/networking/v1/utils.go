@@ -132,7 +132,7 @@ func ValidateAddressRange(ar *AddressRange) (err error) {
 	}
 
 	if len(ar.Gateway) != 0 {
-		if gateway = net.ParseIP(ar.Gateway); gateway != nil {
+		if gateway = net.ParseIP(ar.Gateway); gateway == nil {
 			return fmt.Errorf("invalid range gateway %s", ar.Gateway)
 		}
 		if gatewayIsIPv6 := gateway.To4() == nil; gatewayIsIPv6 != isIPv6 {

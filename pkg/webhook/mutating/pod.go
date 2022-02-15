@@ -252,8 +252,6 @@ func patchSelectorToPod(pod *corev1.Pod, selector map[string]string) {
 	for k, v := range selector {
 		pod.Spec.NodeSelector[k] = v
 	}
-
-	return
 }
 
 func patchAnnotationToPod(pod *corev1.Pod, key, value string) {
@@ -269,7 +267,6 @@ func patchAnnotationToPod(pod *corev1.Pod, key, value string) {
 	}
 
 	pod.Annotations[key] = value
-	return
 }
 
 func ensureTolerationInPod(pod *corev1.Pod, tolerations ...*corev1.Toleration) *corev1.Pod {

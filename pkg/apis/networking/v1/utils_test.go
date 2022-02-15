@@ -57,6 +57,7 @@ func TestValidateAddressRange(t *testing.T) {
 			"wrong gateway",
 			&AddressRange{
 				Version: IPv4,
+				CIDR:    "192.168.8.0/24",
 				Gateway: "192.168.8",
 			},
 			fmt.Errorf("invalid range gateway 192.168.8"),
@@ -65,6 +66,7 @@ func TestValidateAddressRange(t *testing.T) {
 			"IP family mismatch",
 			&AddressRange{
 				Version: IPv6,
+				CIDR:    "192.168.8.0/24",
 				Gateway: "192.168.8.254",
 			},
 			fmt.Errorf("address families of ip version and gateway mismatch"),

@@ -235,7 +235,7 @@ func (m *Manager) SyncPeerInfos() error {
 		}
 	}
 
-	for addr, _ := range existPeerMap {
+	for addr := range existPeerMap {
 		if _, exist := m.peerMap[addr]; !exist {
 			if err := m.bgpServer.DeletePeer(context.Background(), &api.DeletePeerRequest{
 				Address: addr,

@@ -28,12 +28,13 @@ import (
 
 	"github.com/alibaba/hybridnet/pkg/utils"
 
-	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
 	"github.com/go-logr/logr"
 	"github.com/heptiolabs/healthcheck"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
+
+	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -297,10 +298,7 @@ func (c *CtrlHub) setupSubnetController() error {
 				return false
 			},
 			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
-				if checkNodeUpdate(updateEvent) {
-					return true
-				}
-				return false
+				return checkNodeUpdate(updateEvent)
 			},
 			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
 				return false
@@ -423,17 +421,11 @@ func (c *CtrlHub) setupNodeController() error {
 			},
 			CreateFunc: func(createEvent event.CreateEvent) bool {
 				network := createEvent.Object.(*networkingv1.Network)
-				if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
-					return true
-				}
-				return false
+				return networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay
 			},
 			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
 				network := deleteEvent.Object.(*networkingv1.Network)
-				if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
-					return true
-				}
-				return false
+				return networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay
 			},
 			GenericFunc: func(genericEvent event.GenericEvent) bool {
 				return false
@@ -935,14 +927,6 @@ func endpointIPIndexer(obj client.Object) []string {
 		if len(endpointIPs) > 0 {
 			return endpointIPs
 		}
-	}
-	return []string{}
-}
-
-func networkNameIndexer(obj client.Object) []string {
-	subnet, ok := obj.(*networkingv1.Subnet)
-	if ok {
-		return []string{subnet.Spec.Network}
 	}
 	return []string{}
 }

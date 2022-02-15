@@ -535,7 +535,7 @@ func ConfigureIface(ifName string, res *current.Result) error {
 	}
 
 	var v4gw, v6gw net.IP
-	var hasEnabledIPv6 bool = false
+	var hasEnabledIPv6 = false
 	for _, ipc := range res.IPs {
 		if ipc.Interface == nil {
 			continue
@@ -588,7 +588,9 @@ func ConfigureIface(ifName string, res *current.Result) error {
 	}
 
 	if v6gw != nil {
-		ip.SettleAddresses(ifName, 10)
+		if err = ip.SettleAddresses(ifName, 10); err != nil {
+			return fmt.Errorf("failed to settle address on %s: %v", ifName, err)
+		}
 	}
 
 	for _, r := range res.Routes {
