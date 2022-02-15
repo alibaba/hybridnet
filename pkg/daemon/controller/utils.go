@@ -257,14 +257,13 @@ func isIPListEqual(a, b []string) bool {
 func nodeBelongsToNetwork(nodeName string, network *networkingv1.Network) bool {
 	if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
 		return true
-	} else {
-		isUnderlayOnHost := false
-		for _, n := range network.Status.NodeList {
-			if n == nodeName {
-				isUnderlayOnHost = true
-				break
-			}
-		}
-		return isUnderlayOnHost
 	}
+	isUnderlayOnHost := false
+	for _, n := range network.Status.NodeList {
+		if n == nodeName {
+			isUnderlayOnHost = true
+			break
+		}
+	}
+	return isUnderlayOnHost
 }

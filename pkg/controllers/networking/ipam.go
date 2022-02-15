@@ -122,9 +122,8 @@ func (i *ipamManager) DualStack() ipam.DualStackInterface {
 func (i *ipamManager) Refresh(networks []string) error {
 	if feature.DualStackEnabled() {
 		return i.DualStack().Refresh(networks)
-	} else {
-		return i.Interface.Refresh(networks)
 	}
+	return i.Interface.Refresh(networks)
 }
 
 type IPAMStore interface {

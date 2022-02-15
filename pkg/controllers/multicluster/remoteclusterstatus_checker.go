@@ -200,7 +200,6 @@ func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, nam
 		r.Recorder.Event(remoteCluster, corev1.EventTypeWarning, "CheckStatusFail", err.Error())
 		r.Logger.Error(err, "unable to check cluster status", "RemoteCluster", name)
 	}
-	return
 }
 
 func (r *RemoteClusterStatusChecker) getManagerRuntimeByDaemonID(daemonID managerruntime.DaemonID) (managerruntime.ManagerRuntime, error) {
@@ -236,5 +235,4 @@ func fillCondition(status *multiclusterv1.RemoteClusterStatus, condition *metav1
 	} else {
 		status.Conditions[idx] = *condition
 	}
-	return
 }
