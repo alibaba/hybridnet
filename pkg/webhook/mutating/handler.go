@@ -19,7 +19,7 @@ package mutating
 import (
 	"context"
 
-	"k8s.io/api/admission/v1"
+	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -47,15 +47,15 @@ func NewHandler() *Handler {
 
 func (h *Handler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	switch req.Operation {
-	case v1.Create:
+	case admissionv1.Create:
 		if handling, exist := createHandlers[req.Kind]; exist {
 			return handling(ctx, &req, h)
 		}
-	case v1.Update:
+	case admissionv1.Update:
 		if handling, exist := updateHandlers[req.Kind]; exist {
 			return handling(ctx, &req, h)
 		}
-	case v1.Delete:
+	case admissionv1.Delete:
 		if handling, exist := deleteHandlers[req.Kind]; exist {
 			return handling(ctx, &req, h)
 		}
