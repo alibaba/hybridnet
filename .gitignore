@@ -18,3 +18,8 @@ bin
 
 # Dependency directories (remove the comment below to include it)
 vendor/
+
+config/
+
+# only for kubebuilder
+main.go

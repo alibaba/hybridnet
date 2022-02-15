@@ -54,3 +54,62 @@ func TestStringSliceToMap(t *testing.T) {
 		})
 	}
 }
+
+func TestDeepEqualStringSlice(t *testing.T) {
+	tests := []struct {
+		name  string
+		a     []string
+		b     []string
+		equal bool
+	}{
+		{
+			"both nil",
+			nil,
+			nil,
+			true,
+		},
+		{
+			"one nil one empty",
+			nil,
+			[]string{},
+			true,
+		},
+		{
+			"both empty",
+			[]string{},
+			[]string{},
+			true,
+		},
+		{
+			"one nil one normal",
+			nil,
+			[]string{"a", "b"},
+			false,
+		},
+		{
+			"one empty on normal",
+			[]string{"a", "b"},
+			[]string{},
+			false,
+		},
+		{
+			"different",
+			[]string{"a", "b"},
+			[]string{"a", "c"},
+			false,
+		},
+		{
+			"same",
+			[]string{"a", "b"},
+			[]string{"b", "a"},
+			true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.equal != DeepEqualStringSlice(test.a, test.b) {
+				t.Errorf("test %s fails, expected %v but got %v", test.name, test.equal, !test.equal)
+			}
+		})
+	}
+}

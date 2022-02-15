@@ -22,9 +22,12 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/go-logr/logr"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -34,9 +37,9 @@ import (
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/utils"
+	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
 )
 
-// Copy from latest k8s
 // TaintNodeNetworkUnavailable will be added when node's network is unavailable
 // and removed when network becomes ready.
 const TaintNodeNetworkUnavailable = "node.kubernetes.io/network-unavailable"
@@ -48,10 +51,12 @@ func init() {
 }
 
 func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
+	logger := log.FromContext(ctx)
+
 	pod := &corev1.Pod{}
 	err := handler.Decoder.Decode(*req, pod)
 	if err != nil {
-		return admission.Errored(http.StatusBadRequest, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
 	}
 
 	if pod.Spec.HostNetwork {
@@ -61,35 +66,60 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 				Key:      TaintNodeNetworkUnavailable,
 				Operator: corev1.TolerationOpExists,
 				Effect:   corev1.TaintEffectNoSchedule,
-			}))
+			}), logger)
 	}
 
 	// Remove unexpected annotation
 	// 1. pod IP annotation
 	if _, exist := pod.Annotations[constants.AnnotationIP]; exist {
-		klog.Infof("[mutating] remove IP annotation for pod %s/%s", req.Namespace, req.Name)
+		logger.Info("remove IP annotation for pod", "namespace", req.Namespace, "name", req.Name)
 		delete(pod.Annotations, constants.AnnotationIP)
 	}
 
 	// Select specific network for pod
 	// Priority as below
-	// 1. Network Annotation/Label from Pod
-	// 2. Subnet Annotation/Label from Pod
+	// 1. Network & Subnet from Pod
+	// 2. Network & Subnet from Namespace
 	// 3. Allocated IP Instance for Pod in Stateful Workloads
 	var (
-		networkName        string
-		networkNameFromPod = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedNetwork], pod.Labels[constants.LabelSpecifiedNetwork])
-		subnetNameFromPod  = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedSubnet], pod.Labels[constants.LabelSpecifiedSubnet])
+		networkName          string
+		subnetNameStr        string
+		networkNameFromPod   string
+		subnetNameStrFromPod string
+		networkNameFromNs    string
+		subnetNameStrFromNs  string
 	)
+
+	if networkNameFromPod, subnetNameStrFromPod, err = webhookutils.SelectNetworkAndSubnetFromObject(ctx, handler.Cache, pod); err != nil {
+		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest,
+			fmt.Errorf("failed to select network and subnet for pod %s/%s: %v", req.Name, req.Namespace, err), logger)
+	}
+
+	ns := &corev1.Namespace{}
+	// pod.Name/pod.Namespace/req.Name are empty string
+	if err = handler.Cache.Get(ctx, types.NamespacedName{Name: req.Namespace}, ns); err != nil {
+		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError,
+			fmt.Errorf("failed to get namespace for pod %s/%s: %v", req.Name, req.Namespace, err), logger)
+	}
+	if networkNameFromNs, subnetNameStrFromNs, err = webhookutils.SelectNetworkAndSubnetFromObject(ctx, handler.Cache, ns); err != nil {
+		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest,
+			fmt.Errorf("failed to select network and subnet for ns %s: %v", ns.Name, err), logger)
+	}
+
 	switch {
 	case len(networkNameFromPod) > 0:
 		networkName = networkNameFromPod
-	case len(subnetNameFromPod) > 0:
-		subnet := &networkingv1.Subnet{}
-		if err = handler.Cache.Get(ctx, types.NamespacedName{Name: subnetNameFromPod}, subnet); err != nil {
-			return admission.Errored(http.StatusInternalServerError, err)
+		switch {
+		case len(subnetNameStrFromPod) > 0:
+			subnetNameStr = subnetNameStrFromPod
+		case networkNameFromPod == networkNameFromNs:
+			// if network match between pod and ns, subnet from ns
+			// will be referred
+			subnetNameStr = subnetNameStrFromNs
 		}
-		networkName = subnet.Spec.Network
+	case len(networkNameFromNs) > 0:
+		networkName = networkNameFromNs
+		subnetNameStr = subnetNameStrFromNs
 	case strategy.OwnByStatefulWorkload(pod):
 		if shouldReallocate := !utils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], strategy.DefaultIPRetain); shouldReallocate {
 			// reallocate means that pod will locate on node freely
@@ -104,7 +134,7 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 			client.MatchingLabels{
 				constants.LabelPod: pod.Name,
 			}); err != nil {
-			return admission.Errored(http.StatusInternalServerError, err)
+			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 
 		}
 
@@ -117,13 +147,28 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		}
 	}
 
-	var networkTypeFromPod = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType])
+	var networkTypeFromNs = utils.PickFirstNonEmptyString(ns.GetAnnotations()[constants.AnnotationNetworkType],
+		ns.GetLabels()[constants.LabelNetworkType])
+	var networkTypeFromPod = utils.PickFirstNonEmptyString(pod.GetAnnotations()[constants.AnnotationNetworkType],
+		pod.GetLabels()[constants.LabelNetworkType])
+
+	if len(networkTypeFromPod) == 0 {
+		networkTypeFromPod = networkTypeFromNs
+	}
+
+	var ipFamilyFromNs = ns.GetAnnotations()[constants.AnnotationIPFamily]
+	var ipFamilyFromPod = pod.GetAnnotations()[constants.AnnotationIPFamily]
+
+	if len(ipFamilyFromPod) == 0 {
+		ipFamilyFromPod = ipFamilyFromNs
+	}
+
 	var networkType = ipamtypes.ParseNetworkTypeFromString(networkTypeFromPod)
 	var networkNodeSelector map[string]string
 	if len(networkName) > 0 {
 		network := &networkingv1.Network{}
 		if err = handler.Client.Get(ctx, types.NamespacedName{Name: networkName}, network); err != nil {
-			return admission.Errored(http.StatusInternalServerError, err)
+			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 		}
 
 		// specified network takes higher priority than network type defaulting, if no network type specified
@@ -135,69 +180,93 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		networkNodeSelector = network.Spec.NodeSelector
 	}
 
+	// persistent specified network and subnet in pod annotations
+	patchAnnotationToPod(pod, constants.AnnotationSpecifiedNetwork, networkName)
+	patchAnnotationToPod(pod, constants.AnnotationSpecifiedSubnet, subnetNameStr)
+	patchAnnotationToPod(pod, constants.AnnotationNetworkType, string(networkType))
+	patchAnnotationToPod(pod, constants.AnnotationIPFamily, ipFamilyFromPod)
+
 	switch networkType {
 	case ipamtypes.Underlay:
 		if len(networkName) > 0 {
-			klog.Infof("[mutating] patch pod %s/%s with selector of network %s", req.Namespace, req.Name, networkName)
-			pod = patchSelectorToPod(pod, networkNodeSelector)
+			logger.Info("patch pod with selector of network",
+				"namespace", req.Namespace, "name", req.Name, "network", networkName)
+			patchSelectorToPod(pod, networkNodeSelector)
 		} else {
-			klog.Infof("[mutating] patch pod %s/%s with underlay attachment selector", req.Namespace, req.Name)
-			pod = patchSelectorToPod(pod, map[string]string{
+			logger.Info("patch pod with underlay attachment selector",
+				"namespace", req.Namespace, "name", req.Name)
+			patchSelectorToPod(pod, map[string]string{
 				constants.LabelUnderlayNetworkAttachment: constants.Attached,
 			})
 		}
+		// quota label selector to make sure pod will be scheduled on nodes
+		// where capacity of network is enough
+		if feature.DualStackEnabled() {
+			switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
+			case ipamtypes.IPv4Only:
+				patchSelectorToPod(pod, map[string]string{
+					constants.LabelIPv4AddressQuota: constants.QuotaNonEmpty,
+				})
+			case ipamtypes.IPv6Only:
+				patchSelectorToPod(pod, map[string]string{
+					constants.LabelIPv6AddressQuota: constants.QuotaNonEmpty,
+				})
+			case ipamtypes.DualStack:
+				patchSelectorToPod(pod, map[string]string{
+					constants.LabelDualStackAddressQuota: constants.QuotaNonEmpty,
+				})
+			}
+		} else {
+			patchSelectorToPod(pod, map[string]string{
+				constants.LabelAddressQuota: constants.QuotaNonEmpty,
+			})
+		}
 	case ipamtypes.Overlay:
-		klog.Infof("[mutating] patch pod %s/%s with overlay attachment selector", req.Namespace, req.Name)
-		pod = patchSelectorToPod(pod, map[string]string{
+		logger.Info("patch pod with overlay attachment selector",
+			"namespace", req.Namespace, "name", req.Name)
+		patchSelectorToPod(pod, map[string]string{
 			constants.LabelOverlayNetworkAttachment: constants.Attached,
 		})
 	default:
-		return admission.Errored(http.StatusBadRequest, fmt.Errorf("unknown network type %s", networkType))
+		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, fmt.Errorf("unknown network type %s", networkType), logger)
 	}
 
-	// Patch extra node selectors for pod when dual stack mode,
-	// capacity check of overlay network is in validation process, so extra
-	// label selectors is not required
-	if feature.DualStackEnabled() && networkType == ipamtypes.Underlay {
-		switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
-		case ipamtypes.IPv4Only:
-			pod = patchSelectorToPod(pod, map[string]string{
-				constants.LabelIPv4AddressQuota: constants.QuotaNonEmpty,
-			})
-		case ipamtypes.IPv6Only:
-			pod = patchSelectorToPod(pod, map[string]string{
-				constants.LabelIPv6AddressQuota: constants.QuotaNonEmpty,
-			})
-		case ipamtypes.DualStack:
-			pod = patchSelectorToPod(pod, map[string]string{
-				constants.LabelDualStackAddressQuota: constants.QuotaNonEmpty,
-			})
-		}
-	}
-
-	return generatePatchResponseFromPod(req.Object.Raw, pod)
+	return generatePatchResponseFromPod(req.Object.Raw, pod, logger)
 }
 
-func generatePatchResponseFromPod(original []byte, pod *corev1.Pod) admission.Response {
+func generatePatchResponseFromPod(original []byte, pod *corev1.Pod, logger logr.Logger) admission.Response {
 	marshaled, err := json.Marshal(pod)
 	if err != nil {
-		return admission.Errored(http.StatusInternalServerError, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 	}
 
 	return admission.PatchResponseFromRaw(original, marshaled)
 }
 
-func patchSelectorToPod(pod *corev1.Pod, selector map[string]string) *corev1.Pod {
+func patchSelectorToPod(pod *corev1.Pod, selector map[string]string) {
 	if pod.Spec.NodeSelector == nil {
 		pod.Spec.NodeSelector = selector
-		return pod
+		return
 	}
 
 	for k, v := range selector {
 		pod.Spec.NodeSelector[k] = v
 	}
+}
 
-	return pod
+func patchAnnotationToPod(pod *corev1.Pod, key, value string) {
+	if len(value) == 0 {
+		return
+	}
+
+	if pod.Annotations == nil {
+		pod.Annotations = map[string]string{
+			key: value,
+		}
+		return
+	}
+
+	pod.Annotations[key] = value
 }
 
 func ensureTolerationInPod(pod *corev1.Pod, tolerations ...*corev1.Toleration) *corev1.Pod {

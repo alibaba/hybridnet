@@ -97,7 +97,7 @@ func FindSubnetExcludeIPBlocks(cidr *net.IPNet, includedRanges []*IPRange, gatew
 
 			ipRange, err := CreateIPRange(cidrStart, currentRangeStartPrev)
 			if err != nil {
-				return nil, fmt.Errorf("create ip range for %v~%v failed: %v", cidrStart, currentRangeStartPrev, err)
+				return nil, fmt.Errorf("failed to create ip range for %v~%v: %v", cidrStart, currentRangeStartPrev, err)
 			}
 
 			if ipRange != nil {
@@ -117,7 +117,7 @@ func FindSubnetExcludeIPBlocks(cidr *net.IPNet, includedRanges []*IPRange, gatew
 
 		ipRange, err := CreateIPRange(endNext, nextRangeStartPrev)
 		if err != nil {
-			return nil, fmt.Errorf("create ip range for %v~%v failed: %v", endNext, nextRangeStartPrev, err)
+			return nil, fmt.Errorf("failed to create ip range for %v~%v: %v", endNext, nextRangeStartPrev, err)
 		}
 
 		if ipRange != nil {
@@ -142,7 +142,7 @@ Loop2:
 
 		singleIPRange, err := CreateIPRange(ipAddr, ipAddr)
 		if err != nil {
-			return nil, fmt.Errorf("create ip range for ip %v failed: %v", ipAddr, err)
+			return nil, fmt.Errorf("failed to create ip range for ip %v: %v", ipAddr, err)
 		}
 		excludeIPRanges = append(excludeIPRanges, singleIPRange)
 	}

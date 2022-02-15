@@ -23,6 +23,11 @@ import (
 	"reflect"
 	"strings"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
+
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/feature"
@@ -39,7 +44,7 @@ const (
 	MaxSubnetCapacity = 1 << 16
 )
 
-var subnetGVK = gvkConverter(networkingv1.SchemeGroupVersion.WithKind("Subnet"))
+var subnetGVK = gvkConverter(networkingv1.GroupVersion.WithKind("Subnet"))
 
 func init() {
 	createHandlers[subnetGVK] = SubnetCreateValidation
@@ -48,84 +53,102 @@ func init() {
 }
 
 func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
+	logger := log.FromContext(ctx)
+
 	subnet := &networkingv1.Subnet{}
 	err := handler.Decoder.Decode(*req, subnet)
 	if err != nil {
-		return admission.Errored(http.StatusBadRequest, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
 	}
 
 	// Parent Network validation
 	if len(subnet.Spec.Network) == 0 {
-		return admission.Denied("must have parent network")
+		return webhookutils.AdmissionDeniedWithLog("must have parent network", logger)
 	}
 
 	network := &networkingv1.Network{}
 	err = handler.Client.Get(ctx, types.NamespacedName{Name: subnet.Spec.Network}, network)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return admission.Denied(fmt.Sprintf("parent network %s does not exist", subnet.Spec.Network))
+			return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("parent network %s does not exist", subnet.Spec.Network), logger)
 		}
-		return admission.Errored(http.StatusInternalServerError, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 	}
 
 	// NetID validation
-	switch networkingv1.GetNetworkType(network) {
-	case networkingv1.NetworkTypeUnderlay:
+	switch networkingv1.GetNetworkMode(network) {
+	case networkingv1.NetworkModeVlan:
 		if subnet.Spec.NetID == nil {
 			if network.Spec.NetID == nil {
-				return admission.Denied("must have valid Net ID")
+				return webhookutils.AdmissionDeniedWithLog("must have valid Net ID", logger)
 			}
 		} else {
 			if network.Spec.NetID != nil && *subnet.Spec.NetID != *network.Spec.NetID {
-				return admission.Denied("have inconsistent Net ID with network")
+				return webhookutils.AdmissionDeniedWithLog("have inconsistent Net ID with network", logger)
 			}
+		}
+
+		if subnet.Spec.Config != nil && subnet.Spec.Config.AutoNatOutgoing != nil {
+			return webhookutils.AdmissionDeniedWithLog("must not set autoNatOutgoing with underlay subnet", logger)
+		}
+
+		if len(subnet.Spec.Range.Gateway) == 0 {
+			return admission.Denied("must assign gateway for a vlan subnet")
+		}
+	case networkingv1.NetworkModeBGP:
+		if subnet.Spec.NetID != nil {
+			return admission.Denied("must not assign net ID for bgp subnet")
 		}
 
 		if subnet.Spec.Config != nil && subnet.Spec.Config.AutoNatOutgoing != nil {
 			return admission.Denied("must not set autoNatOutgoing with underlay subnet")
 		}
-
-	case networkingv1.NetworkTypeOverlay:
+	case networkingv1.NetworkModeVxlan:
 		if subnet.Spec.NetID != nil {
-			return admission.Denied("must not assign net ID for overlay subnet")
+			return webhookutils.AdmissionDeniedWithLog("must not assign net ID for overlay subnet", logger)
 		}
 	}
 
 	// Address Range validation
 	if err = networkingv1.ValidateAddressRange(&subnet.Spec.Range); err != nil {
-		return admission.Denied(err.Error())
+		return webhookutils.AdmissionDeniedWithLog(err.Error(), logger)
+	}
+
+	// IP Family validation
+	if !feature.DualStackEnabled() && networkingv1.IsIPv6Subnet(subnet) {
+		return webhookutils.AdmissionDeniedWithLog("ipv6 subnet non-supported if dualstack not enabled", logger)
 	}
 
 	// Capacity validation
 	if capacity := networkingv1.CalculateCapacity(&subnet.Spec.Range); capacity > MaxSubnetCapacity {
-		return admission.Denied(fmt.Sprintf("subnet contains more than %d IPs", MaxSubnetCapacity))
+		return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("subnet contains more than %d IPs", MaxSubnetCapacity), logger)
 	}
 
 	// Subnet overlap validation
 	ipamSubnet := transform.TransferSubnetForIPAM(subnet)
 	if err = ipamSubnet.Canonicalize(); err != nil {
-		return admission.Denied(fmt.Sprintf("canonicalize subnet failed: %v", err))
+		return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("canonicalize subnet failed: %v", err), logger)
 	}
 	subnetList := &networkingv1.SubnetList{}
 	if err = handler.Client.List(ctx, subnetList); err != nil {
-		return admission.Errored(http.StatusInternalServerError, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 	}
 	for i := range subnetList.Items {
 		comparedSubnet := transform.TransferSubnetForIPAM(&subnetList.Items[i])
 		// we assume that all existing subnets all have been canonicalized
 		if err = comparedSubnet.Canonicalize(); err == nil && comparedSubnet.Overlap(ipamSubnet) {
-			return admission.Denied(fmt.Sprintf("overlap with existing subnet %s", comparedSubnet.Name))
+			return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("overlap with existing subnet %s", comparedSubnet.Name), logger)
 		}
 	}
 
 	if feature.MultiClusterEnabled() {
-		rcSubnetList := &networkingv1.RemoteSubnetList{}
+		rcSubnetList := &multiclusterv1.RemoteSubnetList{}
 		if err = handler.Client.List(ctx, rcSubnetList); err != nil {
-			return admission.Errored(http.StatusInternalServerError, err)
+			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 		}
 		for _, rcSubnet := range rcSubnetList.Items {
 			if utils.Intersect(&subnet.Spec.Range, &rcSubnet.Spec.Range) {
-				return admission.Denied(fmt.Sprintf("overlap with existing RemoteSubnet %s", rcSubnet.Name))
+				return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("overlap with existing RemoteSubnet %s", rcSubnet.Name), logger)
 			}
 		}
 	}
@@ -134,74 +157,81 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 }
 
 func SubnetUpdateValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
+	logger := log.FromContext(ctx)
+
 	var err error
 	oldS, newS := &networkingv1.Subnet{}, &networkingv1.Subnet{}
 	if err = handler.Decoder.DecodeRaw(req.Object, newS); err != nil {
-		return admission.Errored(http.StatusBadRequest, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
 	}
 	if err = handler.Decoder.DecodeRaw(req.OldObject, oldS); err != nil {
-		return admission.Errored(http.StatusBadRequest, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
 	}
 
 	// Parent Network validation
 	if oldS.Spec.Network != newS.Spec.Network {
-		return admission.Denied("must not change parent network")
+		return webhookutils.AdmissionDeniedWithLog("must not change parent network", logger)
 	}
 
 	network := &networkingv1.Network{}
 	err = handler.Client.Get(ctx, types.NamespacedName{Name: newS.Spec.Network}, network)
 	if err != nil {
-		return admission.Errored(http.StatusInternalServerError, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 	}
 
 	// NetID validation
 	switch networkingv1.GetNetworkType(network) {
 	case networkingv1.NetworkTypeUnderlay:
 		if !reflect.DeepEqual(oldS.Spec.NetID, newS.Spec.NetID) {
-			return admission.Denied("must not change net ID")
+			return webhookutils.AdmissionDeniedWithLog("must not change net ID", logger)
 		}
 
 		if newS.Spec.Config != nil && newS.Spec.Config.AutoNatOutgoing != nil {
-			return admission.Denied("must not set autoNatOutgoing with underlay subnet")
+			return webhookutils.AdmissionDeniedWithLog("must not set autoNatOutgoing with underlay subnet", logger)
 		}
 
 	case networkingv1.NetworkTypeOverlay:
 		if newS.Spec.NetID != nil {
-			return admission.Denied("must not assign net ID for overlay subnet")
+			return webhookutils.AdmissionDeniedWithLog("must not assign net ID for overlay subnet", logger)
 		}
 	}
 
 	// Address Range validation
 	err = networkingv1.ValidateAddressRange(&newS.Spec.Range)
 	if err != nil {
-		return admission.Denied(err.Error())
+		return webhookutils.AdmissionDeniedWithLog(err.Error(), logger)
 	}
 	if oldS.Spec.Range.Start != newS.Spec.Range.Start {
-		return admission.Denied("must not change range start")
+		return webhookutils.AdmissionDeniedWithLog("must not change range start", logger)
 	}
 	if oldS.Spec.Range.End != newS.Spec.Range.End {
-		return admission.Denied("must not change range end")
+		return webhookutils.AdmissionDeniedWithLog("must not change range end", logger)
 	}
 	if oldS.Spec.Range.Gateway != newS.Spec.Range.Gateway {
-		return admission.Denied("must not change range gateway")
+		return webhookutils.AdmissionDeniedWithLog("must not change range gateway", logger)
 	}
 	if oldS.Spec.Range.CIDR != newS.Spec.Range.CIDR {
-		return admission.Denied("must not change range CIDR")
+		return webhookutils.AdmissionDeniedWithLog("must not change range CIDR", logger)
+	}
+	if !utils.DeepEqualStringSlice(oldS.Spec.Range.ExcludeIPs, newS.Spec.Range.ExcludeIPs) {
+		return webhookutils.AdmissionDeniedWithLog("must not change excluded IPs", logger)
 	}
 
 	return admission.Allowed("validation pass")
 }
 
 func SubnetDeleteValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
+	logger := log.FromContext(ctx)
+
 	var err error
 	subnet := &networkingv1.Subnet{}
 	if err = handler.Client.Get(ctx, types.NamespacedName{Name: req.Name}, subnet); err != nil {
-		return admission.Errored(http.StatusBadRequest, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
 	}
 
 	ipList := &networkingv1.IPInstanceList{}
 	if err = handler.Client.List(ctx, ipList, client.MatchingLabels{constants.LabelSubnet: subnet.Name}); err != nil {
-		return admission.Errored(http.StatusInternalServerError, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 	}
 
 	if len(ipList.Items) > 0 {
@@ -209,7 +239,7 @@ func SubnetDeleteValidation(ctx context.Context, req *admission.Request, handler
 		for _, ip := range ipList.Items {
 			usingIPs = append(usingIPs, strings.Split(ip.Spec.Address.IP, "/")[0])
 		}
-		return admission.Denied(fmt.Sprintf("still have using ips %v", usingIPs))
+		return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("still have using ips %v", usingIPs), logger)
 	}
 
 	return admission.Allowed("validation pass")

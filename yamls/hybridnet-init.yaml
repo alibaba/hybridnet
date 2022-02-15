@@ -2841,6 +2841,388 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
+  name: remoteclusters.multicluster.alibaba.com
+spec:
+  group: multicluster.alibaba.com
+  names:
+    kind: RemoteCluster
+    listKind: RemoteClusterList
+    plural: remoteclusters
+    singular: remotecluster
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.apiEndpoint
+      name: APIEndpoint
+      type: string
+    - jsonPath: .status.uuid
+      name: UUID
+      type: string
+    - jsonPath: .status.state
+      name: State
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: RemoteCluster is the Schema for the remoteclusters API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: RemoteClusterSpec defines the desired state of RemoteCluster
+            properties:
+              apiEndpoint:
+                description: APIEndpoint is the API endpoint of the member cluster.
+                  This can be a hostname, hostname:port, IP or IP:port.
+                type: string
+              caData:
+                description: CAData holds PEM-encoded bytes (typically read from a
+                  root certificates bundle). CAData takes precedence over CAFile
+                format: byte
+                type: string
+              certData:
+                description: CertData holds PEM-encoded bytes (typically read from
+                  a client certificate file). CertData takes precedence over CertFile
+                format: byte
+                type: string
+              keyData:
+                description: KeyData holds PEM-encoded bytes (typically read from
+                  a client certificate key file). KeyData takes precedence over KeyFile
+                format: byte
+                type: string
+              timeout:
+                description: Timeout is the maximum length of time to wait before
+                  giving up on a server request. A value of zero means no timeout.
+                format: int32
+                type: integer
+            required:
+            - apiEndpoint
+            type: object
+          status:
+            description: RemoteClusterStatus defines the observed state of RemoteCluster
+            properties:
+              conditions:
+                description: Conditions represents the observations of a cluster's
+                  current state.
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource. --- This struct is intended for direct
+                    use as an array at the field path .status.conditions.  For example,
+                    type FooStatus struct{     // Represents the observations of a
+                    foo's current state.     // Known .status.conditions.type are:
+                    \"Available\", \"Progressing\", and \"Degraded\"     // +patchMergeKey=type
+                    \    // +patchStrategy=merge     // +listType=map     // +listMapKey=type
+                    \    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`
+                    \n     // other fields }"
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition
+                        transitioned from one status to another. This should be when
+                        the underlying condition changed.  If that is not known, then
+                        using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating
+                        details about the transition. This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation
+                        that the condition was set based upon. For instance, if .metadata.generation
+                        is currently 12, but the .status.conditions[x].observedGeneration
+                        is 9, the condition is out of date with respect to the current
+                        state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating
+                        the reason for the condition's last transition. Producers
+                        of specific condition types may define expected values and
+                        meanings for this field, and whether the values are considered
+                        a guaranteed API. The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        --- Many .condition.type values are consistent across resources
+                        like Available, but because arbitrary conditions can be useful
+                        (see .node.status.conditions), the ability to deconflict is
+                        important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              state:
+                description: State is the current state of cluster.
+                type: string
+              uuid:
+                description: UUID is the unique in time and space value for this object.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.4.1
+  creationTimestamp: null
+  name: remotesubnets.multicluster.alibaba.com
+spec:
+  group: multicluster.alibaba.com
+  names:
+    kind: RemoteSubnet
+    listKind: RemoteSubnetList
+    plural: remotesubnets
+    singular: remotesubnet
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.range.version
+      name: Version
+      type: string
+    - jsonPath: .spec.range.cidr
+      name: CIDR
+      type: string
+    - jsonPath: .spec.range.start
+      name: Start
+      type: string
+    - jsonPath: .spec.range.end
+      name: End
+      type: string
+    - jsonPath: .spec.range.gateway
+      name: Gateway
+      type: string
+    - jsonPath: .spec.range.networkType
+      name: NetworkType
+      type: string
+    - jsonPath: .spec.clusterName
+      name: ClusterName
+      type: string
+    - jsonPath: .status.lastModifyTime
+      name: LastModifyTime
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: RemoteSubnet is the Schema for the remotesubnets API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: RemoteSubnetSpec defines the desired state of RemoteSubnet
+            properties:
+              clusterName:
+                description: ClusterName is the name of parent cluster who owns this
+                  remote subnet.
+                type: string
+              networkType:
+                description: Type is the network type of this remote subnet. Now there
+                  are two known types, Overlay and Underlay.
+                type: string
+              range:
+                description: Range is the IP collection of this remote subnet.
+                properties:
+                  cidr:
+                    type: string
+                  end:
+                    type: string
+                  excludeIPs:
+                    items:
+                      type: string
+                    type: array
+                  gateway:
+                    type: string
+                  reservedIPs:
+                    items:
+                      type: string
+                    type: array
+                  start:
+                    type: string
+                  version:
+                    type: string
+                required:
+                - cidr
+                - version
+                type: object
+            required:
+            - range
+            type: object
+          status:
+            description: RemoteSubnetStatus defines the observed state of RemoteSubnet
+            properties:
+              lastModifyTime:
+                description: LastModifyTime shows the last timestamp when the remote
+                  subnet was updated.
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.4.1
+  creationTimestamp: null
+  name: remotevteps.multicluster.alibaba.com
+spec:
+  group: multicluster.alibaba.com
+  names:
+    kind: RemoteVtep
+    listKind: RemoteVtepList
+    plural: remotevteps
+    singular: remotevtep
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.mac
+      name: MAC
+      type: string
+    - jsonPath: .spec.ip
+      name: IP
+      type: string
+    - jsonPath: .spec.nodeName
+      name: NodeName
+      type: string
+    - jsonPath: .spec.clusterName
+      name: ClusterName
+      type: string
+    - jsonPath: .status.lastModifyTime
+      name: LastModifyTime
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: RemoteVtep is the Schema for the remotevteps API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: RemoteVtepSpec defines the desired state of RemoteVtep
+            properties:
+              clusterName:
+                description: ClusterName is the name of parent cluster who owns this
+                  remote VTEP.
+                type: string
+              endpointIPList:
+                description: EndpointIPList is the IP list of all local endpoints
+                  of this VTEP.
+                items:
+                  type: string
+                type: array
+              ip:
+                type: string
+              mac:
+                type: string
+              nodeName:
+                description: NodeName is the name of corresponding node in remote
+                  cluster.
+                type: string
+            type: object
+          status:
+            description: RemoteVtepStatus defines the observed state of RemoteVtep
+            properties:
+              lastModifyTime:
+                description: LastModifyTime shows the last timestamp when the remote
+                  VTEP was updated.
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.4.1
+  creationTimestamp: null
   name: ipinstances.networking.alibaba.com
 spec:
   group: networking.alibaba.com
@@ -2873,7 +3255,7 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: IPInstance is a specification for a IPInstance resource
+        description: IPInstance is the Schema for the ipinstances API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -2888,7 +3270,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: IPInstanceSpec is the spec for a IPInstance resource
+            description: IPInstanceSpec defines the desired state of IPInstance
             properties:
               address:
                 properties:
@@ -2904,7 +3286,6 @@ spec:
                   version:
                     type: string
                 required:
-                - gateway
                 - ip
                 - mac
                 - netID
@@ -2920,7 +3301,7 @@ spec:
             - subnet
             type: object
           status:
-            description: IPInstanceStatus is the status for a IPInstance resource
+            description: IPInstanceStatus defines the observed state of IPInstance
             properties:
               nodeName:
                 type: string
@@ -2933,8 +3314,6 @@ spec:
               sandboxID:
                 type: string
             type: object
-        required:
-        - spec
         type: object
     served: true
     storage: true
@@ -2968,13 +3347,10 @@ spec:
     - jsonPath: .spec.netID
       name: NetID
       type: integer
-    - jsonPath: .spec.switchID
-      name: SwitchID
-      type: string
     name: v1
     schema:
       openAPIV3Schema:
-        description: Network is a specification for a Network resource
+        description: Network is the Schema for the networks API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -2989,8 +3365,31 @@ spec:
           metadata:
             type: object
           spec:
-            description: NetworkSpec is the spec for a Network resource
+            description: NetworkSpec defines the desired state of Network
             properties:
+              config:
+                properties:
+                  bgpPeers:
+                    items:
+                      properties:
+                        address:
+                          type: string
+                        gracefulRestartSeconds:
+                          format: int32
+                          type: integer
+                        password:
+                          type: string
+                        remoteAS:
+                          format: int32
+                          type: integer
+                      required:
+                      - address
+                      - remoteAS
+                      type: object
+                    type: array
+                type: object
+              mode:
+                type: string
               netID:
                 format: int32
                 type: integer
@@ -2999,12 +3398,13 @@ spec:
                   type: string
                 type: object
               switchID:
+                description: Deprecated, will be removed in v0.5.0
                 type: string
               type:
                 type: string
             type: object
           status:
-            description: NetworkStatus is the status for a Network resource
+            description: NetworkStatus defines the observed state of Network
             properties:
               dualStackStatistics:
                 properties:
@@ -3055,349 +3455,6 @@ spec:
                   type: string
                 type: array
             type: object
-        required:
-        - spec
-        type: object
-    served: true
-    storage: true
-    subresources:
-      status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
-
----
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.4.1
-  creationTimestamp: null
-  name: remoteclusters.networking.alibaba.com
-spec:
-  group: networking.alibaba.com
-  names:
-    kind: RemoteCluster
-    listKind: RemoteClusterList
-    plural: remoteclusters
-    singular: remotecluster
-  scope: Cluster
-  versions:
-  - additionalPrinterColumns:
-    - jsonPath: .spec.connConfig.endpoint
-      name: Endpoint
-      type: string
-    - jsonPath: .status.uuid
-      name: UUID
-      type: string
-    - jsonPath: .status.status
-      name: Status
-      type: string
-    name: v1
-    schema:
-      openAPIV3Schema:
-        description: RemoteCluster is a specification for a RemoteCluster resource
-        properties:
-          apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-            type: string
-          kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: RemoteClusterSpec is the spec for a RemoteCluster resource
-            properties:
-              connConfig:
-                properties:
-                  caBundle:
-                    format: byte
-                    type: string
-                  clientCert:
-                    format: byte
-                    type: string
-                  clientKey:
-                    format: byte
-                    type: string
-                  endpoint:
-                    description: 'apiServer address. Format: https://ip:port'
-                    type: string
-                  timeout:
-                    description: 'The maximum length of time to wait before giving
-                      up on a server request. A value of zero means no timeout. Default:
-                      zero second'
-                    format: int32
-                    type: integer
-                required:
-                - caBundle
-                - clientCert
-                - clientKey
-                - endpoint
-                type: object
-            required:
-            - connConfig
-            type: object
-          status:
-            description: RemoteClusterStatus is the status for a RemoteCluster resource
-            properties:
-              conditions:
-                description: Conditions is an array of current cluster conditions.
-                items:
-                  description: ClusterCondition describes current state of a cluster.
-                  properties:
-                    lastProbeTime:
-                      description: Last time the condition was checked.
-                      format: date-time
-                      type: string
-                    lastTransitionTime:
-                      description: Last time the condition transit from one status
-                        to another.
-                      format: date-time
-                      type: string
-                    message:
-                      description: Human readable message indicating details about
-                        last transition.
-                      type: string
-                    reason:
-                      description: (brief) reason for the condition's last transition.
-                      type: string
-                    status:
-                      description: Status of the condition, one of True, False, Unknown.
-                      type: string
-                    type:
-                      description: Type of cluster condition, Ready or Offline.
-                      type: string
-                  type: object
-                type: array
-              status:
-                description: Status is the integrated status of the cluster.
-                type: string
-              uuid:
-                description: A globally unique identifier. Use for validating. Generated
-                  by directly using the corresponding remote cluster's namespace "kube-system"
-                  uid types.UID is also universally unique identifiers (also known
-                  as UUIDs).
-                type: string
-            type: object
-        required:
-        - spec
-        type: object
-    served: true
-    storage: true
-    subresources:
-      status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
-
----
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.4.1
-  creationTimestamp: null
-  name: remotesubnets.networking.alibaba.com
-spec:
-  group: networking.alibaba.com
-  names:
-    kind: RemoteSubnet
-    listKind: RemoteSubnetList
-    plural: remotesubnets
-    singular: remotesubnet
-  scope: Cluster
-  versions:
-  - additionalPrinterColumns:
-    - jsonPath: .spec.range.version
-      name: Version
-      type: string
-    - jsonPath: .spec.range.cidr
-      name: CIDR
-      type: string
-    - jsonPath: .spec.range.start
-      name: Start
-      type: string
-    - jsonPath: .spec.range.end
-      name: End
-      type: string
-    - jsonPath: .spec.range.gateway
-      name: Gateway
-      type: string
-    - jsonPath: .spec.range.type
-      name: Type
-      type: string
-    - jsonPath: .spec.clusterName
-      name: ClusterName
-      type: string
-    - jsonPath: .status.lastModifyTime
-      name: LastModifyTime
-      type: date
-    name: v1
-    schema:
-      openAPIV3Schema:
-        description: RemoteSubnet is a specification for a RemoteSubnet resource
-        properties:
-          apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-            type: string
-          kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: RemoteSubnetSpec is the spec for a RemoteSubnet resource
-            properties:
-              clusterName:
-                type: string
-              range:
-                properties:
-                  cidr:
-                    type: string
-                  end:
-                    type: string
-                  excludeIPs:
-                    items:
-                      type: string
-                    type: array
-                  gateway:
-                    type: string
-                  reservedIPs:
-                    items:
-                      type: string
-                    type: array
-                  start:
-                    type: string
-                  version:
-                    type: string
-                required:
-                - cidr
-                - gateway
-                - version
-                type: object
-              type:
-                type: string
-            required:
-            - clusterName
-            - range
-            - type
-            type: object
-          status:
-            description: RemoteSubnetStatus is the status for a RemoteSubnet resource
-            properties:
-              lastModifyTime:
-                format: date-time
-                type: string
-            type: object
-        required:
-        - spec
-        type: object
-    served: true
-    storage: true
-    subresources:
-      status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
-
----
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.4.1
-  creationTimestamp: null
-  name: remotevteps.networking.alibaba.com
-spec:
-  group: networking.alibaba.com
-  names:
-    kind: RemoteVtep
-    listKind: RemoteVtepList
-    plural: remotevteps
-    singular: remotevtep
-  scope: Cluster
-  versions:
-  - additionalPrinterColumns:
-    - jsonPath: .spec.vtepMAC
-      name: VtepMAC
-      type: string
-    - jsonPath: .spec.vtepIP
-      name: VtepIP
-      type: string
-    - jsonPath: .spec.nodeName
-      name: NodeName
-      type: string
-    - jsonPath: .spec.clusterName
-      name: ClusterName
-      type: string
-    - jsonPath: .status.lastModifyTime
-      name: LastModifyTime
-      type: date
-    name: v1
-    schema:
-      openAPIV3Schema:
-        description: RemoteVtep is a specification for a RemoteVtep resource
-        properties:
-          apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-            type: string
-          kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: RemoteVtepSpec is the spec for a RemoteVtep resource
-            properties:
-              clusterName:
-                type: string
-              endpointIPList:
-                items:
-                  type: string
-                type: array
-              nodeName:
-                type: string
-              vtepIP:
-                type: string
-              vtepMAC:
-                type: string
-            required:
-            - clusterName
-            - nodeName
-            - vtepIP
-            - vtepMAC
-            type: object
-          status:
-            description: RemoteVtepStatus is the status for a RemoteVtep resource
-            properties:
-              lastModifyTime:
-                format: date-time
-                type: string
-            type: object
-        required:
-        - spec
         type: object
     served: true
     storage: true
@@ -3461,7 +3518,7 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: Subnet is a specification for a Subnet resource
+        description: Subnet is the Schema for the subnets API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -3476,7 +3533,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: SubnetSpec is the spec for a Subnet resource
+            description: SubnetSpec defines the desired state of Subnet
             properties:
               config:
                 properties:
@@ -3520,7 +3577,6 @@ spec:
                     type: string
                 required:
                 - cidr
-                - gateway
                 - version
                 type: object
             required:
@@ -3528,7 +3584,7 @@ spec:
             - range
             type: object
           status:
-            description: SubnetStatus is the status for a Subnet resource
+            description: SubnetStatus defines the observed state of Subnet
             properties:
               available:
                 format: int32
@@ -3542,8 +3598,6 @@ spec:
                 format: int32
                 type: integer
             type: object
-        required:
-        - spec
         type: object
     served: true
     storage: true

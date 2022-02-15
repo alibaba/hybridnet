@@ -50,7 +50,7 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: Subnet is a specification for a Subnet resource
+        description: Subnet is the Schema for the subnets API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -65,7 +65,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: SubnetSpec is the spec for a Subnet resource
+            description: SubnetSpec defines the desired state of Subnet
             properties:
               config:
                 properties:
@@ -109,7 +109,6 @@ spec:
                     type: string
                 required:
                 - cidr
-                - gateway
                 - version
                 type: object
             required:
@@ -117,7 +116,7 @@ spec:
             - range
             type: object
           status:
-            description: SubnetStatus is the status for a Subnet resource
+            description: SubnetStatus defines the observed state of Subnet
             properties:
               available:
                 format: int32
@@ -131,8 +130,6 @@ spec:
                 format: int32
                 type: integer
             type: object
-        required:
-        - spec
         type: object
     served: true
     storage: true

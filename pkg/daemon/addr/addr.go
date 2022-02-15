@@ -23,10 +23,11 @@ import (
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 
-	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
+
+	"github.com/alibaba/hybridnet/pkg/constants"
 )
 
 type subnetToPodMap map[string]net.IP
@@ -62,6 +63,7 @@ func (m *Manager) TryAddPodInfo(forwardNodeIfName string, subnet *net.IPNet, pod
 	}
 }
 
+// SyncAddresses try to add an "enhanced" addresses on vlan node forward interface
 // For some environments, physical router or switcher might check the sender address
 // of arp request, if the sender ip address is not in the same subnet of target address
 // the arp request will be take as invalid and dropped.
@@ -71,7 +73,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 	// clear all invalid enhanced addresses
 	linkList, err := netlink.LinkList()
 	if err != nil {
-		return fmt.Errorf("list link failed: %v", err)
+		return fmt.Errorf("failed to list link: %v", err)
 	}
 
 	existEnhancedAddrMap := map[string]map[string]netlink.Addr{}
@@ -86,13 +88,13 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 
 		addrList, err := netlink.AddrList(link, m.family)
 		if err != nil {
-			return fmt.Errorf("list addresses for link %v failed: %v", link.Attrs().Name, err)
+			return fmt.Errorf("failed to list addresses for link %v: %v", link.Attrs().Name, err)
 		}
 
 		for _, addr := range addrList {
 			isEnhancedAddr, err := checkIfEnhancedAddr(link, addr, m.family)
 			if err != nil {
-				return fmt.Errorf("check addr %v enhanced address failed: %v", addr.String(), err)
+				return fmt.Errorf("failed to check addr %v enhanced address: %v", addr.String(), err)
 			}
 
 			linkName := link.Attrs().Name
@@ -120,7 +122,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 			// link doesn't need enhanced address any more
 			for _, enhancedAddr := range existSubnetMap {
 				if err := netlink.AddrDel(existLinkMap[existLinkName], &enhancedAddr); err != nil {
-					return fmt.Errorf("delete link enhanced addr %v failed: %v", enhancedAddr.String(), err)
+					return fmt.Errorf("failed to delete link enhanced addr %v: %v", enhancedAddr.String(), err)
 				}
 			}
 		} else {
@@ -128,7 +130,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 			for subnetString, enhancedAddr := range existSubnetMap {
 				if _, exist := targetSubnetMap[subnetString]; !exist {
 					if err := netlink.AddrDel(existLinkMap[existLinkName], &enhancedAddr); err != nil {
-						return fmt.Errorf("delete link subnet enhanced addr %v failed: %v", enhancedAddr.String(), err)
+						return fmt.Errorf("failed to delete link subnet enhanced addr %v : %v", enhancedAddr.String(), err)
 					}
 				}
 			}
@@ -139,7 +141,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 	for forwardNodeIfName, targetSubnetMap := range m.interfaceToSubnetMap {
 		forwardNodeIf, err := netlink.LinkByName(forwardNodeIfName)
 		if err != nil {
-			return fmt.Errorf("find interface %v failed: %v", forwardNodeIfName, err)
+			return fmt.Errorf("failed to find interface %v: %v", forwardNodeIfName, err)
 		}
 
 		for subnetString, podIP := range targetSubnetMap {
@@ -167,7 +169,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 						// check if exist enhanced address is valid
 						ipInstance, err := getIPInstanceByAddress(enhancedAddr.IP)
 						if err != nil {
-							return fmt.Errorf("get ip instance by address %v failed: %v", enhancedAddr.IP.String(), err)
+							return fmt.Errorf("failed to get ip instance by address %v: %v", enhancedAddr.IP.String(), err)
 						}
 
 						if ipInstance != nil {
@@ -186,7 +188,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 
 			_, subnetCidr, err := net.ParseCIDR(subnetString)
 			if err != nil {
-				return fmt.Errorf("parse subnet cidr %v failed: %v", subnetString, err)
+				return fmt.Errorf("failed to parse subnet cidr %v: %v", subnetString, err)
 			}
 
 			if err := ensureSubnetEnhancedAddr(forwardNodeIf, &netlink.Addr{
@@ -197,7 +199,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 				Label: "",
 				Flags: unix.IFA_F_NOPREFIXROUTE,
 			}, outOfDateEnhancedAddr, m.family); err != nil {
-				return fmt.Errorf("ensure subnet enhanced addr %v failed: %v", podIP.String(), err)
+				return fmt.Errorf("failed to ensure subnet enhanced addr %v: %v", podIP.String(), err)
 			}
 		}
 	}

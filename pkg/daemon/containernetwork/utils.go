@@ -20,13 +20,20 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/containernetworking/cni/pkg/types/current"
+	"github.com/containernetworking/plugins/pkg/ip"
+	"github.com/containernetworking/plugins/pkg/utils/sysctl"
+	"golang.org/x/sys/unix"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 
 	"github.com/vishvananda/netlink"
-	"k8s.io/klog"
 )
 
 type IPInfo struct {
@@ -35,7 +42,7 @@ type IPInfo struct {
 	Cidr *net.IPNet
 }
 
-func GenerateVlanNetIfName(parentName string, vlanID *uint32) (string, error) {
+func GenerateVlanNetIfName(parentName string, vlanID *int32) (string, error) {
 	if vlanID == nil {
 		return "", fmt.Errorf("vlan id should not be nil")
 	}
@@ -51,12 +58,12 @@ func GenerateVlanNetIfName(parentName string, vlanID *uint32) (string, error) {
 	return fmt.Sprintf("%s.%v", parentName, *vlanID), nil
 }
 
-func GenerateVxlanNetIfName(parentName string, vlanID *uint32) (string, error) {
+func GenerateVxlanNetIfName(parentName string, vlanID *int32) (string, error) {
 	if vlanID == nil || *vlanID == 0 {
 		return "", fmt.Errorf("vxlan id should not be nil or zero")
 	}
 
-	maxVxlanID := uint32(1<<24 - 1)
+	maxVxlanID := int32(1<<24 - 1)
 	if *vlanID > maxVxlanID {
 		return "", fmt.Errorf("vxlan id's value range is from 1 to %d", maxVxlanID)
 	}
@@ -64,7 +71,7 @@ func GenerateVxlanNetIfName(parentName string, vlanID *uint32) (string, error) {
 	return fmt.Sprintf("%s%s%v", parentName, VxlanLinkInfix, *vlanID), nil
 }
 
-func EnsureVlanIf(nodeIfName string, vlanID *uint32) (string, error) {
+func EnsureVlanIf(nodeIfName string, vlanID *int32) (string, error) {
 	nodeIf, err := netlink.LinkByName(nodeIfName)
 	if err != nil {
 		return "", err
@@ -133,13 +140,8 @@ func GetDefaultRoute(family int) (*netlink.Route, error) {
 		return nil, err
 	}
 
-	defaultDstString := "0.0.0.0/0"
-	if family == netlink.FAMILY_V6 {
-		defaultDstString = "::/0"
-	}
-
 	for _, route := range routes {
-		if route.Dst == nil || route.Dst.String() == defaultDstString {
+		if IsDefaultRoute(&route, family) {
 			return &route, nil
 		}
 	}
@@ -147,7 +149,20 @@ func GetDefaultRoute(family int) (*netlink.Route, error) {
 	return nil, daemonutils.NotExist
 }
 
-// Get first valid interface by prefer string.
+func IsDefaultRoute(route *netlink.Route, family int) bool {
+	if route == nil {
+		return false
+	}
+
+	defaultDstString := "0.0.0.0/0"
+	if family == netlink.FAMILY_V6 {
+		defaultDstString = "::/0"
+	}
+
+	return route.Dst == nil || route.Dst.String() == defaultDstString
+}
+
+// GetInterfaceByPreferString return first valid interface by prefer string.
 func GetInterfaceByPreferString(preferString string) (*net.Interface, error) {
 	ifList := strings.Split(preferString, ",")
 	for _, iF := range ifList {
@@ -159,8 +174,6 @@ func GetInterfaceByPreferString(preferString string) (*net.Interface, error) {
 		if err == nil {
 			return iif, nil
 		}
-
-		klog.Warningf("failed to get interface %v: %v", iF, err)
 	}
 
 	return nil, fmt.Errorf("no valid interface found by prefer string %v", preferString)
@@ -184,12 +197,12 @@ func ListAllAddress(link netlink.Link) ([]netlink.Addr, error) {
 
 	ipv4AddrList, err := netlink.AddrList(link, netlink.FAMILY_V4)
 	if err != nil {
-		return nil, fmt.Errorf("list ipv4 address for link %v failed %v", link.Attrs().Name, err)
+		return nil, fmt.Errorf("failed to list ipv4 address for link %v: %v", link.Attrs().Name, err)
 	}
 
 	ipv6AddrList, err := netlink.AddrList(link, netlink.FAMILY_V6)
 	if err != nil {
-		return nil, fmt.Errorf("list ipv6 address for link %v failed %v", link.Attrs().Name, err)
+		return nil, fmt.Errorf("failed to list ipv6 address for link %v: %v", link.Attrs().Name, err)
 	}
 
 	for _, addr := range ipv4AddrList {
@@ -212,7 +225,7 @@ func ListLocalAddressExceptLink(exceptLinkName string) ([]netlink.Addr, error) {
 
 	linkList, err := netlink.LinkList()
 	if err != nil {
-		return nil, fmt.Errorf("list link failed: %v", err)
+		return nil, fmt.Errorf("failed to list link: %v", err)
 	}
 
 	for _, link := range linkList {
@@ -221,7 +234,7 @@ func ListLocalAddressExceptLink(exceptLinkName string) ([]netlink.Addr, error) {
 
 			linkAddrList, err := ListAllAddress(link)
 			if err != nil {
-				return nil, fmt.Errorf("link addr for link %v failed: %v", link.Attrs().Name, err)
+				return nil, fmt.Errorf("failed to link addr for link %v: %v", link.Attrs().Name, err)
 			}
 
 			addrList = append(addrList, linkAddrList...)
@@ -235,14 +248,32 @@ func CheckIPIsGlobalUnicast(ip net.IP) bool {
 	return !ip.IsInterfaceLocalMulticast() && ip.IsGlobalUnicast()
 }
 
-func checkPodRuleExist(podCidr *net.IPNet, family int) (bool, error) {
+func checkPodRuleExist(podCidr *net.IPNet, family int) (bool, int, error) {
 	ruleList, err := netlink.RuleList(family)
 	if err != nil {
-		return false, fmt.Errorf("list rule failed: %v", err)
+		return false, 0, fmt.Errorf("failed to list rule: %v", err)
 	}
 
 	for _, rule := range ruleList {
 		if rule.Src != nil && podCidr.String() == rule.Src.String() {
+			return true, rule.Table, nil
+		}
+	}
+
+	return false, 0, nil
+}
+
+func checkDefaultRouteExist(table int, family int) (bool, error) {
+	routeList, err := netlink.RouteListFiltered(family, &netlink.Route{
+		Table: table,
+	}, netlink.RT_FILTER_TABLE)
+
+	if err != nil {
+		return false, fmt.Errorf("failed to list route for table %v", table)
+	}
+
+	for _, route := range routeList {
+		if IsDefaultRoute(&route, family) {
 			return true, nil
 		}
 	}
@@ -253,7 +284,7 @@ func checkPodRuleExist(podCidr *net.IPNet, family int) (bool, error) {
 func checkPodNeighExist(podIP net.IP, forwardNodeIfIndex int, family int) (bool, error) {
 	neighList, err := netlink.NeighProxyList(forwardNodeIfIndex, family)
 	if err != nil {
-		return false, fmt.Errorf("list neighs for forward node if index %v failed: %v", forwardNodeIfIndex, err)
+		return false, fmt.Errorf("failed to list neighs for forward node if index %v: %v", forwardNodeIfIndex, err)
 	}
 
 	for _, neigh := range neighList {
@@ -265,35 +296,317 @@ func checkPodNeighExist(podIP net.IP, forwardNodeIfIndex int, family int) (bool,
 	return false, nil
 }
 
-func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex int, family int) error {
+func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex int, family int,
+	networkMode networkingv1.NetworkMode) error {
+
 	backOffBase := 100 * time.Microsecond
-	retries := 4
+	retries := 5
 
 	for i := 0; i < retries; i++ {
-		time.Sleep(backOffBase)
-		backOffBase = backOffBase * 2
-
-		neighExist, err := checkPodNeighExist(podIP, forwardNodeIfIndex, family)
-		if err != nil {
-			return fmt.Errorf("check pod ip %v neigh exist failed: %v", podIP, err)
-		}
-
-		ruleExist, err := checkPodRuleExist(podCidr, family)
-		if err != nil {
-			return fmt.Errorf("check cidr %v rule exist failed: %v", podCidr, err)
-		}
-
-		if neighExist && ruleExist {
-			break
-		}
-
-		if i == retries-1 {
-			if !neighExist {
-				return fmt.Errorf("proxy neigh for %v is not created, waiting for daemon to create it", podIP)
+		switch networkMode {
+		case networkingv1.NetworkModeVxlan, networkingv1.NetworkModeVlan:
+			neighExist, err := checkPodNeighExist(podIP, forwardNodeIfIndex, family)
+			if err != nil {
+				return fmt.Errorf("failed to check pod ip %v neigh exist: %v", podIP, err)
 			}
 
-			if !ruleExist {
-				return fmt.Errorf("policy rule for %v is not created, waiting for daemon to create it", podCidr)
+			ruleExist, _, err := checkPodRuleExist(podCidr, family)
+			if err != nil {
+				return fmt.Errorf("failed to check cidr %v rule exist: %v", podCidr, err)
+			}
+
+			if neighExist && ruleExist {
+				// ready
+				return nil
+			}
+
+			if i == retries-1 {
+				if !neighExist {
+					return fmt.Errorf("proxy neigh for %v is not created, waiting for daemon to create it", podIP)
+				}
+
+				if !ruleExist {
+					return fmt.Errorf("policy rule for %v is not created, waiting for daemon to create it", podCidr)
+				}
+			}
+		case networkingv1.NetworkModeBGP:
+			ruleExist, table, err := checkPodRuleExist(podCidr, family)
+			if err != nil {
+				return fmt.Errorf("failed to check cidr %v rule and default route exist: %v", podCidr, err)
+			}
+
+			defaultRouteExist := false
+			if ruleExist {
+				defaultRouteExist, err = checkDefaultRouteExist(table, family)
+				if err != nil {
+					return fmt.Errorf("failed to check cidr %v default route exist: %v", podCidr, err)
+				}
+
+				if defaultRouteExist {
+					// ready
+					return nil
+				}
+			}
+
+			if i == retries-1 {
+				if !ruleExist {
+					return fmt.Errorf("policy rule for %v is not created, waiting for daemon to create it", podCidr)
+				}
+
+				if !defaultRouteExist {
+					return fmt.Errorf("default route for %v is not created, waiting for daemon to create it", podCidr)
+				}
+			}
+		default:
+			// do nothing
+			return nil
+		}
+
+		time.Sleep(backOffBase)
+		backOffBase = backOffBase * 2
+	}
+
+	return nil
+}
+
+// AddRoute adds a universally-scoped route to a device with onlink flag.
+func AddRoute(ipn *net.IPNet, gw net.IP, dev netlink.Link) error {
+	return netlink.RouteAdd(&netlink.Route{
+		LinkIndex: dev.Attrs().Index,
+		Scope:     netlink.SCOPE_UNIVERSE,
+		Flags:     int(netlink.FLAG_ONLINK),
+		Dst:       ipn,
+		Gw:        gw,
+	})
+}
+
+func ensureRpFilterConfigs(containerHostIf string) error {
+	for _, key := range []string{"default", "all"} {
+		sysctlPath := fmt.Sprintf(RpFilterSysctl, key)
+		if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
+			return fmt.Errorf("error set: %s sysctl path to 0, error: %v", sysctlPath, err)
+		}
+	}
+
+	sysctlPath := fmt.Sprintf(RpFilterSysctl, containerHostIf)
+	if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
+		return fmt.Errorf("error set: %s sysctl path to 0, error: %v", sysctlPath, err)
+	}
+
+	existInterfaces, err := net.Interfaces()
+	if err != nil {
+		return fmt.Errorf("error get exist interfaces on system: %v", err)
+	}
+
+	for _, existIf := range existInterfaces {
+		if CheckIfContainerNetworkLink(existIf.Name) {
+			continue
+		}
+
+		sysctlPath := fmt.Sprintf(RpFilterSysctl, existIf.Name)
+		sysctlValue, err := daemonutils.GetSysctl(sysctlPath)
+		if err != nil {
+			return fmt.Errorf("error get: %s sysctl path: %v", sysctlPath, err)
+		}
+		if sysctlValue != 0 {
+			if err = daemonutils.SetSysctl(sysctlPath, 0); err != nil {
+				return fmt.Errorf("error set: %s sysctl path to 0, error: %v", sysctlPath, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func enableIPForward(family int) error {
+	if family == netlink.FAMILY_V4 {
+		return ip.EnableIP4Forward()
+	}
+	return ip.EnableIP6Forward()
+}
+
+func ensureNeighGCThresh(family int, neighGCThresh1, neighGCThresh2, neighGCThresh3 int) error {
+	if family == netlink.FAMILY_V4 {
+		// From kernel doc:
+		// neigh/default/gc_thresh1 - INTEGER
+		//     Minimum number of entries to keep.  Garbage collector will not
+		//     purge entries if there are fewer than this number.
+		//     Default: 128
+		if err := daemonutils.SetSysctl(IPv4NeighGCThresh1, neighGCThresh1); err != nil {
+			return fmt.Errorf("error set: %s sysctl path to %v, error: %v", IPv4NeighGCThresh1, neighGCThresh1, err)
+		}
+
+		// From kernel doc:
+		// neigh/default/gc_thresh2 - INTEGER
+		//     Threshold when garbage collector becomes more aggressive about
+		//     purging entries. Entries older than 5 seconds will be cleared
+		//     when over this number.
+		//     Default: 512
+		if err := daemonutils.SetSysctl(IPv4NeighGCThresh2, neighGCThresh2); err != nil {
+			return fmt.Errorf("error set: %s sysctl path to %v, error: %v", IPv4NeighGCThresh2, neighGCThresh2, err)
+		}
+
+		// From kernel doc:
+		// neigh/default/gc_thresh3 - INTEGER
+		//     Maximum number of neighbor entries allowed.  Increase this
+		//     when using large numbers of interfaces and when communicating
+		//     with large numbers of directly-connected peers.
+		//     Default: 1024
+		if err := daemonutils.SetSysctl(IPv4NeighGCThresh3, neighGCThresh3); err != nil {
+			return fmt.Errorf("error set: %s sysctl path to %v, error: %v", IPv4NeighGCThresh3, neighGCThresh3, err)
+		}
+
+		return nil
+	}
+
+	if err := daemonutils.SetSysctl(IPv6NeighGCThresh1, neighGCThresh1); err != nil {
+		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", IPv6NeighGCThresh1, neighGCThresh1, err)
+	}
+
+	if err := daemonutils.SetSysctl(IPv6NeighGCThresh2, neighGCThresh2); err != nil {
+		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", IPv6NeighGCThresh2, neighGCThresh2, err)
+	}
+
+	if err := daemonutils.SetSysctl(IPv6NeighGCThresh3, neighGCThresh3); err != nil {
+		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", IPv6NeighGCThresh3, neighGCThresh3, err)
+	}
+
+	return nil
+}
+
+func CheckIPv6GlobalDisabled() (bool, error) {
+	moduleDisableVar, err := daemonutils.GetSysctl(IPv6DisableModuleParameter)
+	if err != nil {
+		return false, err
+	}
+
+	if moduleDisableVar == 1 {
+		return true, nil
+	}
+
+	sysctlGlobalDisableVar, err := daemonutils.GetSysctl(fmt.Sprintf(IPv6DisableSysctl, "all"))
+	if err != nil {
+		return false, err
+	}
+
+	if sysctlGlobalDisableVar == 1 {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func CheckIPv6Disabled(nicName string) (bool, error) {
+	globalDisabled, err := CheckIPv6GlobalDisabled()
+	if err != nil {
+		return false, err
+	}
+
+	if globalDisabled {
+		return true, nil
+	}
+
+	sysctlDisableVar, err := daemonutils.GetSysctl(fmt.Sprintf(IPv6DisableSysctl, nicName))
+	if err != nil {
+		return false, err
+	}
+
+	if sysctlDisableVar == 1 {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// ConfigureIface takes the result of IPAM plugin and
+// applies to the ifName interface.
+func ConfigureIface(ifName string, res *current.Result) error {
+	if len(res.Interfaces) == 0 {
+		return fmt.Errorf("no interfaces to configure")
+	}
+
+	link, err := netlink.LinkByName(ifName)
+	if err != nil {
+		return fmt.Errorf("failed to lookup %q: %v", ifName, err)
+	}
+
+	if err := netlink.LinkSetUp(link); err != nil {
+		return fmt.Errorf("failed to set %q UP: %v", ifName, err)
+	}
+
+	var v4gw, v6gw net.IP
+	var hasEnabledIPv6 = false
+	for _, ipc := range res.IPs {
+		if ipc.Interface == nil {
+			continue
+		}
+		intIdx := *ipc.Interface
+		if intIdx < 0 || intIdx >= len(res.Interfaces) || res.Interfaces[intIdx].Name != ifName {
+			// IP address is for a different interface
+			return fmt.Errorf("failed to add IP addr %v to %q: invalid interface index", ipc, ifName)
+		}
+
+		// Make sure sysctl "disable_ipv6" is 0 if we are about to add
+		// an IPv6 address to the interface
+		if !hasEnabledIPv6 && ipc.Version == "6" {
+			// Enabled IPv6 for loopback "lo" and the interface
+			// being configured
+			for _, iface := range [2]string{"lo", ifName} {
+				ipv6SysctlValueName := fmt.Sprintf("net.ipv6.conf.%s.disable_ipv6", iface)
+
+				// Read current sysctl value
+				value, err := sysctl.Sysctl(ipv6SysctlValueName)
+				if err != nil || value == "0" {
+					// FIXME: log warning if unable to read sysctl value
+					continue
+				}
+
+				// Write sysctl to enable IPv6
+				_, err = sysctl.Sysctl(ipv6SysctlValueName, "0")
+				if err != nil {
+					return fmt.Errorf("failed to enable IPv6 for interface %q (%s=%s): %v", iface, ipv6SysctlValueName, value, err)
+				}
+			}
+			hasEnabledIPv6 = true
+		}
+
+		addr := &netlink.Addr{
+			IPNet: &ipc.Address,
+			Label: "",
+			Flags: unix.IFA_F_NOPREFIXROUTE,
+		}
+		if err = netlink.AddrAdd(link, addr); err != nil {
+			return fmt.Errorf("failed to add IP addr %v to %q: %v", ipc, ifName, err)
+		}
+
+		gwIsV4 := ipc.Gateway.To4() != nil
+		if gwIsV4 && v4gw == nil {
+			v4gw = ipc.Gateway
+		} else if !gwIsV4 && v6gw == nil {
+			v6gw = ipc.Gateway
+		}
+	}
+
+	if v6gw != nil {
+		if err = ip.SettleAddresses(ifName, 10); err != nil {
+			return fmt.Errorf("failed to settle address on %s: %v", ifName, err)
+		}
+	}
+
+	for _, r := range res.Routes {
+		routeIsV4 := r.Dst.IP.To4() != nil
+		gw := r.GW
+		if gw == nil {
+			if routeIsV4 && v4gw != nil {
+				gw = v4gw
+			} else if !routeIsV4 && v6gw != nil {
+				gw = v6gw
+			}
+		}
+		if err = AddRoute(&r.Dst, gw, link); err != nil {
+			// we skip over duplicate routes as we assume the first one wins
+			if !os.IsExist(err) {
+				return fmt.Errorf("failed to add route '%v via %v dev %v': %v", r.Dst, gw, ifName, err)
 			}
 		}
 	}

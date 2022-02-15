@@ -13,6 +13,7 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 */
+
 package ndp
 
 import (
@@ -29,7 +30,7 @@ func CheckWithTimeout(ifi *net.Interface, srcPod, gateway net.IP, timeout time.D
 	// Use link-local address as the source IPv6 address for NDP communications.
 	ndpConn, srcIP, err := ndp.Dial(ifi, ndp.LinkLocal)
 	if err != nil {
-		return fmt.Errorf("ndp dial interface %v failed: %v", ifi.Name, err)
+		return fmt.Errorf("failed to ndp dial interface %v: %v", ifi.Name, err)
 	}
 
 	defer func() {
@@ -37,7 +38,7 @@ func CheckWithTimeout(ifi *net.Interface, srcPod, gateway net.IP, timeout time.D
 	}()
 
 	if _, err := doNS(ndpConn, gateway, ifi.HardwareAddr, timeout); err != nil {
-		return fmt.Errorf("ndp resolve from ip %v to gateway %v failed: %v"+
+		return fmt.Errorf("failed to resolve ndp from ip %v to gateway %v: %v"+
 			", vlan network seems not working, please check the setting of %v's upper physical switch port first",
 			srcIP.String(), gateway.String(), err, ifi.Name)
 	}
@@ -49,7 +50,7 @@ func CheckWithTimeout(ifi *net.Interface, srcPod, gateway net.IP, timeout time.D
 	}
 
 	if err := doGratuitous(ndpConn, srcPod, ifi.HardwareAddr); err != nil {
-		return fmt.Errorf("send gratuitous ndp for pod %v failed %v", srcPod.String(), err)
+		return fmt.Errorf("failed to send gratuitous ndp for pod %v: %v", srcPod.String(), err)
 	}
 
 	return nil
@@ -86,7 +87,7 @@ func doNS(c *ndp.Conn, target net.IP, hwaddr net.HardwareAddr, timeout time.Dura
 	for {
 		msg, _, _, err := c.ReadFrom()
 		if err != nil {
-			return nil, fmt.Errorf("read from ndp connection failed: %v", err)
+			return nil, fmt.Errorf("failed to read from ndp connection: %v", err)
 		}
 
 		// Expect neighbor advertisement messages with the correct target address.

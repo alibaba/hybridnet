@@ -22,15 +22,18 @@ import (
 	"regexp"
 	"sync"
 
+	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 )
 
 var (
 	rcLock           sync.Mutex
 	validEndpoint    = regexp.MustCompile(`^(https?://)[\w-]+(\.[\w-]+)+:\d{1,5}$`)
-	remoteClusterGVK = gvkConverter(networkingv1.SchemeGroupVersion.WithKind("RemoteCluster"))
+	remoteClusterGVK = gvkConverter(multiclusterv1.GroupVersion.WithKind("RemoteCluster"))
 )
 
 func init() {
@@ -40,17 +43,21 @@ func init() {
 }
 
 func RCCreateValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
-	rc := &networkingv1.RemoteCluster{}
+	logger := log.FromContext(ctx)
+
+	rc := &multiclusterv1.RemoteCluster{}
 	if err := handler.Decoder.Decode(*req, rc); err != nil {
-		return admission.Errored(http.StatusBadRequest, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
 	}
 	return validate(ctx, rc, handler)
 }
 
 func RCUpdateValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
-	newRC := &networkingv1.RemoteCluster{}
+	logger := log.FromContext(ctx)
+
+	newRC := &multiclusterv1.RemoteCluster{}
 	if err := handler.Decoder.DecodeRaw(req.Object, newRC); err != nil {
-		return admission.Errored(http.StatusBadRequest, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
 	}
 	return validate(ctx, newRC, handler)
 }
@@ -59,19 +66,23 @@ func RCDeleteValidation(ctx context.Context, req *admission.Request, handler *Ha
 	return admission.Allowed("validation pass")
 }
 
-func validate(ctx context.Context, rc *networkingv1.RemoteCluster, handler *Handler) admission.Response {
+func validate(ctx context.Context, rc *multiclusterv1.RemoteCluster, handler *Handler) admission.Response {
 	rcLock.Lock()
 	defer rcLock.Unlock()
 
+	logger := log.FromContext(ctx)
+
 	// validate connection config
-	connConfig := rc.Spec.ConnConfig
-	if connConfig.Endpoint == "" || connConfig.CABundle == nil || connConfig.ClientKey == nil || connConfig.ClientCert == nil {
-		return admission.Denied("empty connection config, please check.")
+	if rc.Spec.APIEndpoint == "" {
+		return webhookutils.AdmissionDeniedWithLog("invalid empty endpoint", logger)
+	}
+	if len(rc.Spec.CAData) == 0 || len(rc.Spec.CertData) == 0 || len(rc.Spec.KeyData) == 0 {
+		return webhookutils.AdmissionDeniedWithLog("invalid empty certificate info", logger)
 	}
 
 	// validate endpoint format
-	if !validEndpoint.Match([]byte(connConfig.Endpoint)) {
-		return admission.Denied("endpoint format: https://server:address, please check")
+	if !validEndpoint.Match([]byte(rc.Spec.APIEndpoint)) {
+		return webhookutils.AdmissionDeniedWithLog("endpoint format: https://server:address, please check", logger)
 	}
 
 	return admission.Allowed("validation pass")

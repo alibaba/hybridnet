@@ -345,8 +345,6 @@ func (s *Subnet) Validate() error {
 		return fmt.Errorf("subnet name can not be empty")
 	case len(s.ParentNetwork) == 0:
 		return fmt.Errorf("subnet's partent network can not be empty")
-	case s.Gateway == nil:
-		return fmt.Errorf("gateway is invalid")
 	case s.CIDR.IP == nil || s.CIDR.Mask == nil:
 		return fmt.Errorf("CIDR is invalid")
 	}
@@ -368,7 +366,7 @@ func (s *Subnet) Validate() error {
 	}
 
 	// Gateway must in CIDR
-	if !s.CIDR.Contains(s.Gateway) {
+	if s.Gateway != nil && !s.CIDR.Contains(s.Gateway) {
 		return fmt.Errorf("gateway %s not in CIDR %s", s.Gateway.String(), s.CIDR.String())
 	}
 
@@ -409,7 +407,7 @@ func (s *Subnet) Contains(addr net.IP) bool {
 		}
 	}
 
-	if s.Gateway.Equal(addr) {
+	if s.Gateway != nil && s.Gateway.Equal(addr) {
 		return false
 	}
 

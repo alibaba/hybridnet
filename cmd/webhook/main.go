@@ -18,6 +18,13 @@ package main
 
 import (
 	"flag"
+	"os"
+
+	"go.uber.org/zap/zapcore"
+
+	"github.com/alibaba/hybridnet/pkg/feature"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/spf13/pflag"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -25,18 +32,17 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/klog"
-	"k8s.io/klog/klogr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/webhook/mutating"
 	"github.com/alibaba/hybridnet/pkg/webhook/validating"
 )
 
 var (
+	gitCommit          string
 	scheme             = runtime.NewScheme()
 	port               int
 	metricsBindAddress string
@@ -46,24 +52,23 @@ func init() {
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = networkingv1.AddToScheme(scheme)
+	_ = multiclusterv1.AddToScheme(scheme)
 	_ = admissionv1beta1.AddToScheme(scheme)
 	_ = admissionv1.AddToScheme(scheme)
 
 	pflag.IntVar(&port, "port", 9898, "The port webhook listen on")
 	pflag.StringVar(&metricsBindAddress, "metrics-bind-address", "0", "The bind address for metrics, eg :8080")
 
-	klog.InitFlags(nil)
-
-	// controller-runtime initialize logger with fake implementation
-	// so we should new another Logger for this
-	ctrl.SetLogger(klogr.New())
+	ctrllog.SetLogger(zap.New(zap.UseDevMode(true), zap.Level(zapcore.InfoLevel)))
 }
 
 func main() {
 	// parse flags
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
-	klog.Infof("known features: %v", feature.KnownFeatures())
+
+	var entryLog = ctrllog.Log.WithName("entry")
+	entryLog.Info("starting hybridnet manager", "known-features", feature.KnownFeatures(), "commit-id", gitCommit)
 
 	// create manager
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -73,7 +78,8 @@ func main() {
 		MetricsBindAddress: metricsBindAddress,
 	})
 	if err != nil {
-		klog.Fatal(err)
+		entryLog.Error(err, "unable to start manager")
+		os.Exit(1)
 	}
 
 	// create webhooks
@@ -85,6 +91,7 @@ func main() {
 	})
 
 	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		klog.Fatal(err)
+		entryLog.Error(err, "manager exit unexpectedly")
+		os.Exit(1)
 	}
 }

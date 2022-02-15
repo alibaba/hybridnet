@@ -20,29 +20,32 @@ import (
 	"fmt"
 	"net"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
 
-	"k8s.io/klog"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 )
 
 // ipAddr is a CIDR notation IP address and prefix length
 func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, containerID, mac string,
-	netID *uint32, allocatedIPs map[networkingv1.IPVersion]*containernetwork.IPInfo, networkType networkingv1.NetworkType) (string, error) {
+	netID *int32, allocatedIPs map[networkingv1.IPVersion]*containernetwork.IPInfo,
+	networkMode networkingv1.NetworkMode) (string, error) {
 
 	var err error
 	var nodeIfName string
 	var mtu int
 
-	switch networkType {
-	case networkingv1.NetworkTypeUnderlay:
+	switch networkMode {
+	case networkingv1.NetworkModeVlan:
 		mtu = cdh.config.VlanMTU
 		nodeIfName = cdh.config.NodeVlanIfName
-	case networkingv1.NetworkTypeOverlay:
+	case networkingv1.NetworkModeVxlan:
 		mtu = cdh.config.VxlanMTU
 		nodeIfName = cdh.config.NodeVxlanIfName
+	case networkingv1.NetworkModeBGP:
+		mtu = cdh.config.BGPMTU
+		nodeIfName = cdh.config.NodeBGPIfName
 	}
 
 	macAddr, err := net.ParseMAC(mac)
@@ -52,21 +55,18 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 
 	containerNicName, hostNicName, podNS, err := initContainerNic(podName, podNamespace, netns, mtu)
 	if err != nil {
-		return "", fmt.Errorf("init container nic for pod %v failed: %v", podName, err)
+		return "", fmt.Errorf("failed to init container nic for pod %v: %v", podName, err)
 	}
 
 	if err = containernetwork.ConfigureHostNic(hostNicName, allocatedIPs, cdh.config.LocalDirectTableNum); err != nil {
 		return "", err
 	}
 
-	klog.Infof("Configure container nic for %v.%v", podName, podNamespace)
 	if err = containernetwork.ConfigureContainerNic(containerNicName, hostNicName, nodeIfName,
-		allocatedIPs, macAddr, netID, podNS, mtu, cdh.config.VlanCheckTimeout, networkType,
+		allocatedIPs, macAddr, netID, podNS, mtu, cdh.config.VlanCheckTimeout, networkMode,
 		cdh.config.NeighGCThresh1, cdh.config.NeighGCThresh2, cdh.config.NeighGCThresh3); err != nil {
 		return "", fmt.Errorf("failed to configure container nic for %v.%v: %v", podName, podNamespace, err)
 	}
-
-	klog.Infof("Finish configuring container nic for %v.%v", podName, podNamespace)
 
 	return hostNicName, nil
 }
@@ -132,7 +132,7 @@ func initContainerNic(podName, podNamespace, netns string, mtu int) (string, str
 			PeerName: containerNicName,
 		}
 		if err = netlink.LinkAdd(&veth); err != nil {
-			return fmt.Errorf("create veth pair in netns %v for pod %v failed: %v", podNS.Path(), podName, err)
+			return fmt.Errorf("failed to create veth pair in netns %v for pod %v: %v", podNS.Path(), podName, err)
 		}
 
 		containerHostLink, err := netlink.LinkByName(hostNicName)
@@ -146,7 +146,7 @@ func initContainerNic(podName, podNamespace, netns string, mtu int) (string, str
 
 		return nil
 	}); err != nil {
-		return "", "", nil, fmt.Errorf("generate veth pair for pod %v failed: %v", podName, err)
+		return "", "", nil, fmt.Errorf("failed to generate veth pair for pod %v: %v", podName, err)
 	}
 
 	return containerNicName, hostNicName, podNS, nil

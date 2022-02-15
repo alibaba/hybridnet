@@ -173,6 +173,23 @@ func (a *Allocator) Usage(networkName string) (*types.Usage, map[string]*types.U
 	return network.Usage()
 }
 
+func (a *Allocator) SubnetUsage(networkName, subnetName string) (*types.Usage, error) {
+	a.RLock()
+	defer a.RUnlock()
+
+	network, err := a.Networks.GetNetwork(networkName)
+	if err != nil {
+		return nil, fmt.Errorf("fail to get network %s: %v", networkName, err)
+	}
+
+	subnet, err := network.GetSubnet(subnetName)
+	if err != nil {
+		return nil, fmt.Errorf("fail to get subnet %s: %v", subnetName, err)
+	}
+
+	return subnet.Usage(), nil
+}
+
 func (a *Allocator) GetNetworksByType(networkType types.NetworkType) []string {
 	a.RLock()
 	defer a.RUnlock()

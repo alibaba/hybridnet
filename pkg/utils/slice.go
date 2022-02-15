@@ -13,7 +13,10 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 */
+
 package utils
+
+import "sort"
 
 func StringSliceToMap(in []string) (out map[string]struct{}) {
 	out = make(map[string]struct{}, len(in))
@@ -21,4 +24,22 @@ func StringSliceToMap(in []string) (out map[string]struct{}) {
 		out[key] = struct{}{}
 	}
 	return
+}
+
+func DeepEqualStringSlice(a []string, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	aCopy := append(make([]string, 0, len(a)), a...)
+	bCopy := append(make([]string, 0, len(b)), b...)
+	sort.Strings(aCopy)
+	sort.Strings(bCopy)
+
+	for i := range aCopy {
+		if aCopy[i] != bCopy[i] {
+			return false
+		}
+	}
+	return true
 }

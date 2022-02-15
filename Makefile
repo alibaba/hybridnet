@@ -2,6 +2,8 @@ REGISTRY=github/alibaba
 ARCHS?=amd64 arm64
 DEV_TAG?=dev
 RELEASE_TAG?=release
+GOOS=`go env GOOS`
+GOARCH=`go env GOARCH`
 
 INIT_YAML_FILE=yamls/hybridnet-init.yaml
 RBAC_YAML_FILE=yamls/rbac/rbac.yaml
@@ -41,6 +43,11 @@ CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
 	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.4.1)
 
+# use command of "./bin/kubebuilder create api --group multicluster --kind RemoteXXX --version v1 --namespaced=false" to generate crd types
+KUBEBUILDER_BIN = $(shell pwd)/bin/kubebuilder
+kubebuilder: ## Download kubebuilder binary locally if necessary.
+	$(call curl-get-tool,$(KUBEBUILDER_BIN),https://github.com/kubernetes-sigs/kubebuilder/releases/download/v3.1.0/kubebuilder_${GOOS}_${GOARCH})
+
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 define go-get-tool
@@ -52,5 +59,13 @@ go mod init tmp ;\
 echo "Downloading $(2)" ;\
 GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
 rm -rf $$TMP_DIR ;\
+}
+endef
+
+define curl-get-tool
+@[ -f $(1) ] || { \
+echo "Downloading $(2)" ;\
+curl -L -o $(1) $(2) ;\
+chmod +x $(1) ;\
 }
 endef

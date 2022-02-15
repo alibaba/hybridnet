@@ -26,6 +26,7 @@ const (
 	LabelSpecifiedNetwork = "networking.alibaba.com/specified-network"
 	LabelSpecifiedSubnet  = "networking.alibaba.com/specified-subnet"
 
+	LabelAddressQuota          = "networking.alibaba.com/address-quota"
 	LabelIPv4AddressQuota      = "networking.alibaba.com/ipv4-address-quota"
 	LabelIPv6AddressQuota      = "networking.alibaba.com/ipv6-address-quota"
 	LabelDualStackAddressQuota = "networking.alibaba.com/dualstack-address-quota"

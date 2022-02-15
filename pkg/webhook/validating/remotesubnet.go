@@ -22,15 +22,19 @@ import (
 	"net/http"
 	"sync"
 
+	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 var (
 	rsLock          = sync.Mutex{}
-	remoteSubnetGVK = gvkConverter(networkingv1.SchemeGroupVersion.WithKind("RemoteSubnet"))
+	remoteSubnetGVK = gvkConverter(multiclusterv1.GroupVersion.WithKind("RemoteSubnet"))
 )
 
 func init() {
@@ -43,31 +47,33 @@ func RemoteSubnetCreateValidation(ctx context.Context, req *admission.Request, h
 	rsLock.Lock()
 	defer rsLock.Unlock()
 
+	logger := log.FromContext(ctx)
+
 	var err error
-	var remoteSubnet = &networkingv1.RemoteSubnet{}
+	var remoteSubnet = &multiclusterv1.RemoteSubnet{}
 	if err = handler.Decoder.Decode(*req, remoteSubnet); err != nil {
-		return admission.Errored(http.StatusBadRequest, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
 	}
 
 	var localSubnetList = &networkingv1.SubnetList{}
 	if err = handler.Client.List(ctx, localSubnetList); err != nil {
-		return admission.Errored(http.StatusInternalServerError, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 	}
 	for i := range localSubnetList.Items {
 		var localSubnet = &localSubnetList.Items[i]
 		if utils.Intersect(&remoteSubnet.Spec.Range, &localSubnet.Spec.Range) {
-			return admission.Denied(fmt.Sprintf("overlay with existing subnet %s", localSubnet.Name))
+			return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("overlay with existing subnet %s", localSubnet.Name), logger)
 		}
 	}
 
-	var remoteSubnetList = &networkingv1.RemoteSubnetList{}
+	var remoteSubnetList = &multiclusterv1.RemoteSubnetList{}
 	if err = handler.Client.List(ctx, remoteSubnetList); err != nil {
-		return admission.Errored(http.StatusInternalServerError, err)
+		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 	}
 	for i := range remoteSubnetList.Items {
 		var comparedRemoteCluster = &remoteSubnetList.Items[i]
 		if utils.Intersect(&remoteSubnet.Spec.Range, &comparedRemoteCluster.Spec.Range) {
-			return admission.Denied(fmt.Sprintf("overlay with existing remote subnet %s", comparedRemoteCluster.Name))
+			return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("overlay with existing remote subnet %s", comparedRemoteCluster.Name), logger)
 		}
 	}
 

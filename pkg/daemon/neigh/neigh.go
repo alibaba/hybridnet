@@ -59,19 +59,19 @@ func (m *Manager) SyncNeighs() error {
 	for forwardNodeIfName, ipMap := range m.interfaceToIPSliceMap {
 		forwardNodeIf, err := netlink.LinkByName(forwardNodeIfName)
 		if err != nil {
-			return fmt.Errorf("get forward node if %v failed: %v", forwardNodeIfName, err)
+			return fmt.Errorf("failed to get forward node if %v: %v", forwardNodeIfName, err)
 		}
 
 		neighList, err := netlink.NeighProxyList(forwardNodeIf.Attrs().Index, m.family)
 		if err != nil {
-			return fmt.Errorf("list neighs for forward node if %v failed: %v", forwardNodeIfName, err)
+			return fmt.Errorf("failed to list neighs for forward node if %v: %v", forwardNodeIfName, err)
 		}
 
 		if m.family == netlink.FAMILY_V6 {
 			// For ipv6, proxy_ndp need to be set.
 			sysctlPath := fmt.Sprintf("/proc/sys/net/ipv6/conf/%s/proxy_ndp", forwardNodeIfName)
 			if err := ioutil.WriteFile(sysctlPath, []byte(strconv.Itoa(1)), 0640); err != nil {
-				return fmt.Errorf("set sysctl parameter %v failed: %v", sysctlPath, err)
+				return fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 			}
 		}
 
@@ -79,7 +79,7 @@ func (m *Manager) SyncNeighs() error {
 		for _, neigh := range neighList {
 			if _, exist := ipMap[neigh.IP.String()]; !exist {
 				if err := netlink.NeighDel(&neigh); err != nil {
-					return fmt.Errorf("delete neigh for %v/%v failed: %v", neigh.IP.String(), forwardNodeIfName, err)
+					return fmt.Errorf("failed to delete neigh for %v/%v: %v", neigh.IP.String(), forwardNodeIfName, err)
 				}
 			} else {
 				existNeighMap[neigh.IP.String()] = true
@@ -94,7 +94,7 @@ func (m *Manager) SyncNeighs() error {
 					Flags:     netlink.NTF_PROXY,
 					IP:        ip,
 				}); err != nil {
-					return fmt.Errorf("add neigh for ip %v/%v failed: %v", ip.String(), forwardNodeIfName, err)
+					return fmt.Errorf("failed to add neigh for ip %v/%v: %v", ip.String(), forwardNodeIfName, err)
 				}
 			}
 		}

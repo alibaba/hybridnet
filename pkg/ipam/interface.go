@@ -38,6 +38,7 @@ type Refresh interface {
 
 type Usage interface {
 	Usage(network string) (*types.Usage, map[string]*types.Usage, error)
+	SubnetUsage(network, subnet string) (*types.Usage, error)
 }
 
 type DualStackInterface interface {
@@ -54,12 +55,14 @@ type DualStackInterface interface {
 
 type DualStackUsage interface {
 	Usage(network string) ([3]*types.Usage, map[string]*types.Usage, error)
+	SubnetUsage(network, subnet string) (*types.Usage, error)
 }
 
 type Store interface {
 	Couple(pod *v1.Pod, ip *types.IP) (err error)
 	ReCouple(pod *v1.Pod, ip *types.IP) (err error)
 	DeCouple(pod *v1.Pod) (err error)
+	IPReserve(pod *v1.Pod) (err error)
 	IPRecycle(namespace string, ip *types.IP) (err error)
 	IPUnBind(namespace, ip string) (err error)
 	SyncNetworkUsage(name string, usage *types.Usage) (err error)
@@ -71,6 +74,7 @@ type DualStackStore interface {
 	Couple(pod *v1.Pod, IPs []*types.IP) (err error)
 	ReCouple(pod *v1.Pod, IPs []*types.IP) (err error)
 	DeCouple(pod *v1.Pod) (err error)
+	IPReserve(pod *v1.Pod) (err error)
 	IPRecycle(namespace string, ip *types.IP) (err error)
 	IPUnBind(namespace, ip string) (err error)
 	SyncNetworkUsage(name string, usages [3]*types.Usage) (err error)

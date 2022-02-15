@@ -19,11 +19,12 @@ package validating
 import (
 	"context"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 )
 
-var ipInstanceGVK = gvkConverter(networkingv1.SchemeGroupVersion.WithKind("IPInstance"))
+var ipInstanceGVK = gvkConverter(networkingv1.GroupVersion.WithKind("IPInstance"))
 
 func init() {
 	createHandlers[ipInstanceGVK] = IPInstanceCreateValidation

@@ -1,4 +1,4 @@
-FROM golang:1.15.7 as builder
+FROM golang:1.16.6 as builder
 
 ENV ARCH=arm64
 ENV OS=linux
@@ -21,8 +21,8 @@ RUN export GOCACHE=/tmp && \
     export COMMIT_ID=`git rev-parse --short HEAD 2>/dev/null` && \
     go build -o dist/images/hybridnet -ldflags "-w -s" -v ./cmd/cni && \
     go build -ldflags "-w -s -X \"main.gitCommit=`echo $COMMIT_ID`\" " -o dist/images/hybridnet-daemon -v ./cmd/daemon && \
-    go build -ldflags "-X \"main.gitCommit=`git rev-parse --short HEAD 2>/dev/null`\" " -o dist/images/hybridnet-manager -v ./cmd/manager && \
-    go build -o dist/images/hybridnet-webhook -v ./cmd/webhook && \
+    go build -ldflags "-X \"main.gitCommit=`echo $COMMIT_ID`\" " -o dist/images/hybridnet-manager -v ./cmd/manager && \
+    go build -ldflags "-X \"main.gitCommit=`echo $COMMIT_ID`\" " -o dist/images/hybridnet-webhook -v ./cmd/webhook && \
     echo $COMMIT_ID > ./COMMIT_ID
 
 RUN cd /go/src/github.com/alibaba/hybridnet/dist/secrets && \
