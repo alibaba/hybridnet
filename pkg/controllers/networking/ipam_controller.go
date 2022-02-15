@@ -31,15 +31,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/ipam"
 )
+
+const ControllerIPAM = "IPAM"
 
 // IPAMReconciler reconciles IPAM Manager
 type IPAMReconciler struct {
 	client.Client
 
 	Refresh ipam.Refresh
+
+	concurrency.ControllerConcurrency
 }
 
 //+kubebuilder:rbac:groups=networking.alibaba.com,resources=networks,verbs=get;list;watch;create;update;patch;delete
@@ -60,6 +65,7 @@ func (r *IPAMReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 // SetupWithManager sets up the controller with the Manager.
 func (r *IPAMReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerIPAM).
 		For(&networkingv1.Network{},
 			builder.WithPredicates(
 				&predicate.GenerationChangedPredicate{},
@@ -85,8 +91,7 @@ func (r *IPAMReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			)).
 		WithOptions(
 			controller.Options{
-				MaxConcurrentReconciles: 1,
-				Log:                     mgr.GetLogger().WithName("IPAMController"),
+				MaxConcurrentReconciles: r.Max(),
 			}).
 		Complete(r)
 }

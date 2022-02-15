@@ -36,10 +36,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 )
+
+const ControllerSubnetStatus = "SubnetStatus"
 
 // SubnetStatusReconciler reconciles a Subnet object
 type SubnetStatusReconciler struct {
@@ -47,6 +50,8 @@ type SubnetStatusReconciler struct {
 
 	IPAMManager IPAMManager
 	Recorder    record.EventRecorder
+
+	concurrency.ControllerConcurrency
 }
 
 //+kubebuilder:rbac:groups=networking.alibaba.com,resources=subnets,verbs=get;list;watch;create;update;patch;delete
@@ -116,6 +121,7 @@ func (r *SubnetStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request
 // SetupWithManager sets up the controller with the Manager.
 func (r *SubnetStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerSubnetStatus).
 		For(&networkingv1.Subnet{},
 			builder.WithPredicates(
 				&predicate.GenerationChangedPredicate{},
@@ -141,8 +147,7 @@ func (r *SubnetStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			),
 		).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: 1,
-			Log:                     mgr.GetLogger().WithName("SubnetStatusController"),
+			MaxConcurrentReconciles: r.Max(),
 		}).
 		Complete(r)
 }

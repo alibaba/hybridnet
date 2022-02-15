@@ -46,6 +46,8 @@ import (
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 )
 
+const ControllerRemoteSubnet = "RemoteSubnet"
+
 // RemoteSubnetReconciler reconciles a RemoteSubnet object
 type RemoteSubnetReconciler struct {
 	client.Client
@@ -191,12 +193,13 @@ func (r *RemoteSubnetReconciler) garbageCollection(ctx context.Context, log logr
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RemoteSubnetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	garbageEvent, err := r.garbageCollection(context.TODO(), mgr.GetLogger().WithName("RemoteSubnetGC"))
+	garbageEvent, err := r.garbageCollection(context.TODO(), mgr.GetLogger().WithName("cron").WithName("RemoteSubnetGC"))
 	if err != nil {
 		return err
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerRemoteSubnet).
 		For(&networkingv1.Subnet{},
 			builder.WithPredicates(
 				&predicate.GenerationChangedPredicate{},
@@ -207,7 +210,6 @@ func (r *RemoteSubnetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
-			Log:                     mgr.GetLogger().WithName("RemoteSubnetController"),
 		}).
 		Complete(r)
 }
