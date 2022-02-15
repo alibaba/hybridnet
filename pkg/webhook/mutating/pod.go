@@ -108,14 +108,13 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 
 	switch {
 	case len(networkNameFromPod) > 0:
+		networkName = networkNameFromPod
 		switch {
 		case len(subnetNameStrFromPod) > 0:
-			networkName = networkNameFromPod
 			subnetNameStr = subnetNameStrFromPod
 		case networkNameFromPod == networkNameFromNs:
 			// if network match between pod and ns, subnet from ns
 			// will be referred
-			networkName = networkNameFromPod
 			subnetNameStr = subnetNameStrFromNs
 		}
 	case len(networkNameFromNs) > 0:

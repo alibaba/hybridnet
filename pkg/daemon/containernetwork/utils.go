@@ -316,7 +316,8 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 			}
 
 			if neighExist && ruleExist {
-				break
+				// ready
+				return nil
 			}
 
 			if i == retries-1 {
@@ -342,7 +343,8 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 				}
 
 				if defaultRouteExist {
-					break
+					// ready
+					return nil
 				}
 			}
 
@@ -356,7 +358,8 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 				}
 			}
 		default:
-			break
+			// do nothing
+			return nil
 		}
 
 		time.Sleep(backOffBase)
