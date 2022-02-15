@@ -37,12 +37,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 )
 
-const indexerFieldNetwork = "network"
+const (
+	ControllerNetworkStatus = "NetworkStatus"
+	indexerFieldNetwork     = "network"
+)
 
 // NetworkStatusReconciler reconciles status of network objects
 type NetworkStatusReconciler struct {
@@ -50,6 +54,8 @@ type NetworkStatusReconciler struct {
 
 	IPAMManager IPAMManager
 	Recorder    record.EventRecorder
+
+	concurrency.ControllerConcurrency
 }
 
 //+kubebuilder:rbac:groups=networking.alibaba.com,resources=networks,verbs=get;list;watch;create;update;patch;delete
@@ -235,8 +241,8 @@ func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			)).
 		WithOptions(
 			controller.Options{
-				MaxConcurrentReconciles: 1,
-				Log:                     mgr.GetLogger().WithName("NetworkStatusController"),
+				MaxConcurrentReconciles: r.Max(),
+				Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerNetworkStatus),
 			},
 		).
 		Complete(r)

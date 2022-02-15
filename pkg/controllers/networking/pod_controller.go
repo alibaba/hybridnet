@@ -37,6 +37,7 @@ import (
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
@@ -45,6 +46,8 @@ import (
 	globalutils "github.com/alibaba/hybridnet/pkg/utils"
 	"github.com/alibaba/hybridnet/pkg/utils/transform"
 )
+
+const ControllerPod = "Pod"
 
 const (
 	ReasonIPAllocationSucceed = "IPAllocationSucceed"
@@ -62,6 +65,8 @@ type PodReconciler struct {
 
 	IPAMStore   IPAMStore
 	IPAMManager IPAMManager
+
+	concurrency.ControllerConcurrency
 }
 
 //+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
@@ -515,8 +520,8 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			),
 		).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: 1,
-			Log:                     mgr.GetLogger().WithName("PodController"),
+			MaxConcurrentReconciles: r.Max(),
+			Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerPod),
 		}).
 		Complete(r)
 }

@@ -35,6 +35,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/managerruntime"
 )
 
+const CheckerRemoteClusterStatus = "RemoteClusterStatus"
 const DaemonNotFound = "DaemonNotFound"
 const CheckException = "CheckException"
 

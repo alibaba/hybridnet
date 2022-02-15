@@ -33,12 +33,17 @@ import (
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 )
+
+const ControllerNode = "Node"
 
 // NodeReconciler reconciles a Node object
 type NodeReconciler struct {
 	client.Client
+
+	concurrency.ControllerConcurrency
 }
 
 //+kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch;create;update;patch;delete
@@ -127,8 +132,8 @@ func (r *NodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			),
 		).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: 1,
-			Log:                     mgr.GetLogger().WithName("NodeController"),
+			MaxConcurrentReconciles: r.Max(),
+			Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerNode),
 		}).
 		Complete(r)
 }

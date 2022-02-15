@@ -26,9 +26,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 )
+
+const ControllerIPInstance = "IPInstance"
 
 // IPInstanceReconciler reconciles a IPInstance object
 type IPInstanceReconciler struct {
@@ -37,6 +40,8 @@ type IPInstanceReconciler struct {
 	// TODO: construct
 	IPAMManager IPAMManager
 	IPAMStore   IPAMStore
+
+	concurrency.ControllerConcurrency
 }
 
 //+kubebuilder:rbac:groups=networking.alibaba.com,resources=ipinstances,verbs=get;list;watch;create;update;patch;delete
@@ -97,8 +102,8 @@ func (r *IPInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(utils.IgnoreDeletePredicate{}).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: 1,
-			Log:                     mgr.GetLogger().WithName("IPInstanceController"),
+			MaxConcurrentReconciles: r.Max(),
+			Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerIPInstance),
 		}).
 		Complete(r)
 }

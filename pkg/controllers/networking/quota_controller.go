@@ -35,13 +35,18 @@ import (
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 )
 
+const ControllerQuota = "Quota"
+
 // QuotaReconciler reconciles quota labels on node
 type QuotaReconciler struct {
 	client.Client
+
+	concurrency.ControllerConcurrency
 }
 
 func (r *QuotaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
@@ -135,8 +140,8 @@ func (r *QuotaReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			)).
 		WithOptions(
 			controller.Options{
-				MaxConcurrentReconciles: 1,
-				Log:                     mgr.GetLogger().WithName("QuotaController"),
+				MaxConcurrentReconciles: r.Max(),
+				Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerQuota),
 			},
 		).
 		Complete(r)

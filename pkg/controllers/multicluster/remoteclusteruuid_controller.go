@@ -33,8 +33,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
+	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 )
+
+const ControllerRemoteClusterUUID = "RemoteClusterUUID"
 
 type RemoteClusterUUIDReconciler struct {
 	client.Client
@@ -42,6 +45,8 @@ type RemoteClusterUUIDReconciler struct {
 	Recorder record.EventRecorder
 
 	UUIDMutex UUIDMutex
+
+	concurrency.ControllerConcurrency
 }
 
 func (r *RemoteClusterUUIDReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
@@ -120,8 +125,8 @@ func (r *RemoteClusterUUIDReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			),
 		).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: 1,
-			Log:                     mgr.GetLogger().WithName("RemoteClusterUUIDController"),
+			MaxConcurrentReconciles: r.Max(),
+			Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerRemoteClusterUUID),
 		}).
 		Complete(r)
 }

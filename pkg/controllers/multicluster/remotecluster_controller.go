@@ -34,9 +34,12 @@ import (
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/managerruntime"
 )
+
+const ControllerRemoteCluster = "RemoteCluster"
 
 // RemoteClusterReconciler reconciles a RemoteCluster object
 type RemoteClusterReconciler struct {
@@ -51,6 +54,8 @@ type RemoteClusterReconciler struct {
 	Event chan<- ClusterCheckEvent
 
 	LocalManager manager.Manager
+
+	concurrency.ControllerConcurrency
 }
 
 //+kubebuilder:rbac:groups=multicluster.alibaba.com,resources=remoteclusters,verbs=get;list;watch;create;update;patch;delete
@@ -153,8 +158,8 @@ func (r *RemoteClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			),
 		).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: 1,
-			Log:                     mgr.GetLogger().WithName("RemoteClusterController"),
+			MaxConcurrentReconciles: r.Max(),
+			Log:                     mgr.GetLogger().WithName("controller").WithName(ControllerRemoteCluster),
 		}).
 		Complete(r)
 }
