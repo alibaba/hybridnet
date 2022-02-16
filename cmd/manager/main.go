@@ -56,11 +56,13 @@ func main() {
 	var (
 		controllerConcurrency map[string]int
 		zapOptions            zap.Options
+		metricsPort           int
 	)
 
 	// register flags
 	zapOptions.BindFlags(flag.CommandLine)
 	pflag.StringToIntVar(&controllerConcurrency, "controller-concurrency", map[string]int{}, "The specified concurrency of different controllers.")
+	pflag.IntVar(&metricsPort, "metrics-port", 9899, "The port to listen on for prometheus metrics.")
 
 	// parse flags
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
@@ -74,8 +76,9 @@ func main() {
 	signalContext := ctrl.SetupSignalHandler()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		Logger: ctrl.Log.WithName("manager"),
+		Scheme:             scheme,
+		Logger:             ctrl.Log.WithName("manager"),
+		MetricsBindAddress: fmt.Sprintf(":%d", metricsPort),
 	})
 	if err != nil {
 		entryLog.Error(err, "unable to start manager")
@@ -210,9 +213,6 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
-	// TODO: migrate to manager
-	go startMetricsServer()
 
 	if err = mgr.Start(signalContext); err != nil {
 		entryLog.Error(err, "manager exit unexpectedly")

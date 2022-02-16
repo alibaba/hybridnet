@@ -17,15 +17,27 @@
 package metrics
 
 import (
-	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
+
+func init() {
+	metrics.Registry.MustRegister(IPUsageGauge,
+		IPAllocationPeriodSummary,
+		RemoteClusterStatusCheckDuration,
+	)
+}
 
 const (
 	IPTotalUsageType     = "total"
 	IPUsedUsageType      = "used"
 	IPAvailableUsageType = "available"
+)
+
+const (
+	IPv4      = "ipv4"
+	IPv6      = "ipv6"
+	DualStack = "dualstack"
 )
 
 var IPUsageGauge = prometheus.NewGaugeVec(
@@ -35,6 +47,7 @@ var IPUsageGauge = prometheus.NewGaugeVec(
 	},
 	[]string{
 		"networkName",
+		"ipFamily",
 		"usageType",
 	},
 )
@@ -56,24 +69,13 @@ var IPAllocationPeriodSummary = prometheus.NewSummaryVec(
 	},
 )
 
-var RemoteClusterStatusUpdateDuration = prometheus.NewHistogram(
+var RemoteClusterStatusCheckDuration = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
-		Name:    "remote_cluster_status_update_duration_seconds",
-		Help:    "Time taken for the remote cluster status update.",
+		Name:    "remote_cluster_status_check_duration",
+		Help:    "time taken for checking remote cluster status.",
 		Buckets: []float64{0.01, 0.05, 0.1, 0.5, 1.0, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 22.5, 25.0, 27.5, 30.0, 50.0, 75.0, 100.0, 1000.0},
 	},
+	[]string{
+		"clusterName",
+	},
 )
-
-func RegisterForManager() prometheus.Gatherer {
-	r := prometheus.NewRegistry()
-	r.MustRegister(IPUsageGauge)
-	r.MustRegister(IPAllocationPeriodSummary)
-	r.MustRegister(RemoteClusterStatusUpdateDuration)
-	return r
-}
-
-// RemoteClusterStatusUpdateDurationFromStart records the duration of the cluster health status operation
-func RemoteClusterStatusUpdateDurationFromStart(start time.Time) {
-	duration := time.Since(start)
-	RemoteClusterStatusUpdateDuration.Observe(duration.Seconds())
-}
