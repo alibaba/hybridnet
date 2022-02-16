@@ -20,12 +20,6 @@ import (
 	"flag"
 	"os"
 
-	"go.uber.org/zap/zapcore"
-
-	"github.com/alibaba/hybridnet/pkg/feature"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
 	"github.com/spf13/pflag"
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
@@ -33,10 +27,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/webhook/mutating"
 	"github.com/alibaba/hybridnet/pkg/webhook/validating"
 )
@@ -55,20 +52,24 @@ func init() {
 	_ = multiclusterv1.AddToScheme(scheme)
 	_ = admissionv1beta1.AddToScheme(scheme)
 	_ = admissionv1.AddToScheme(scheme)
-
-	pflag.IntVar(&port, "port", 9898, "The port webhook listen on")
-	pflag.StringVar(&metricsBindAddress, "metrics-bind-address", "0", "The bind address for metrics, eg :8080")
-
-	ctrllog.SetLogger(zap.New(zap.UseDevMode(true), zap.Level(zapcore.InfoLevel)))
 }
 
 func main() {
+	var zapOptions = zap.Options{}
+
+	// register flags
+	zapOptions.BindFlags(flag.CommandLine)
+	pflag.IntVar(&port, "port", 9898, "The port webhook listen on")
+	pflag.StringVar(&metricsBindAddress, "metrics-bind-address", "0", "The bind address for metrics, eg :8080")
+
 	// parse flags
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
+	ctrllog.SetLogger(zap.New(zap.UseFlagOptions(&zapOptions)))
+
 	var entryLog = ctrllog.Log.WithName("entry")
-	entryLog.Info("starting hybridnet manager", "known-features", feature.KnownFeatures(), "commit-id", gitCommit)
+	entryLog.Info("starting hybridnet webhook", "known-features", feature.KnownFeatures(), "commit-id", gitCommit)
 
 	// create manager
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
