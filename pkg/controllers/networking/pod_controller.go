@@ -515,8 +515,13 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						return false
 					}
 
-					// only pod after scheduling and before IP-allocation should be processed
-					return len(pod.Spec.NodeName) > 0 && !metav1.HasAnnotation(pod.ObjectMeta, constants.AnnotationIP)
+					if pod.DeletionTimestamp.IsZero() {
+						// only pod after scheduling and before IP-allocation should be processed
+						return len(pod.Spec.NodeName) > 0 && !metav1.HasAnnotation(pod.ObjectMeta, constants.AnnotationIP)
+					}
+
+					// terminating pods owned by stateful workloads should be processed for IP reservation
+					return strategy.OwnByStatefulWorkload(pod)
 				}),
 			),
 		).
