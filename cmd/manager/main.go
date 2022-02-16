@@ -53,14 +53,20 @@ func init() {
 }
 
 func main() {
-	var controllerConcurrency map[string]int
+	var (
+		controllerConcurrency map[string]int
+		zapOptions            zap.Options
+	)
+
+	// register flags
+	zapOptions.BindFlags(flag.CommandLine)
+	pflag.StringToIntVar(&controllerConcurrency, "controller-concurrency", map[string]int{}, "The specified concurrency of different controllers.")
 
 	// parse flags
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
-	pflag.StringToIntVar(&controllerConcurrency, "controller-concurrency", map[string]int{}, "The specified concurrency of different controllers.")
 	pflag.Parse()
 
-	ctrllog.SetLogger(zap.New(zap.UseDevMode(true)))
+	ctrllog.SetLogger(zap.New(zap.UseFlagOptions(&zapOptions)))
 
 	var entryLog = ctrllog.Log.WithName("entry")
 	entryLog.Info("starting hybridnet manager", "known-features", feature.KnownFeatures(), "commit-id", gitCommit)
