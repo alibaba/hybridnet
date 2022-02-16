@@ -18,7 +18,15 @@ package metrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
+
+func init() {
+	metrics.Registry.MustRegister(IPUsageGauge,
+		IPAllocationPeriodSummary,
+		RemoteClusterStatusCheckDuration,
+	)
+}
 
 const (
 	IPTotalUsageType     = "total"
@@ -71,11 +79,3 @@ var RemoteClusterStatusCheckDuration = prometheus.NewHistogramVec(
 		"clusterName",
 	},
 )
-
-func RegisterForManager() prometheus.Gatherer {
-	r := prometheus.NewRegistry()
-	r.MustRegister(IPUsageGauge)
-	r.MustRegister(IPAllocationPeriodSummary)
-	r.MustRegister(RemoteClusterStatusCheckDuration)
-	return r
-}
