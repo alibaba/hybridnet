@@ -41,6 +41,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/metrics"
 )
 
 const (
@@ -137,6 +138,9 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
+	// update metrics
+	updateUsageMetrics(network)
+
 	// patch network status
 	networkPatch := client.MergeFrom(network.DeepCopy())
 	network.Status = *networkStatus
@@ -150,6 +154,33 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	log.V(8).Info(fmt.Sprintf("sync network status to %+v", networkStatus))
 	return ctrl.Result{}, nil
+}
+
+func updateUsageMetrics(network *networkingv1.Network) {
+	if feature.DualStackEnabled() {
+		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv4, metrics.IPTotalUsageType).
+			Set(float64(network.Status.Statistics.Total))
+		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv4, metrics.IPUsedUsageType).
+			Set(float64(network.Status.Statistics.Used))
+		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv4, metrics.IPAvailableUsageType).
+			Set(float64(network.Status.Statistics.Available))
+		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv6, metrics.IPTotalUsageType).
+			Set(float64(network.Status.IPv6Statistics.Total))
+		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv6, metrics.IPUsedUsageType).
+			Set(float64(network.Status.IPv6Statistics.Used))
+		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv6, metrics.IPAvailableUsageType).
+			Set(float64(network.Status.IPv6Statistics.Available))
+		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.DualStack, metrics.IPAvailableUsageType).
+			Set(float64(network.Status.DualStackStatistics.Available))
+		return
+	}
+
+	metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv4, metrics.IPTotalUsageType).
+		Set(float64(network.Status.Statistics.Total))
+	metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv4, metrics.IPUsedUsageType).
+		Set(float64(network.Status.Statistics.Used))
+	metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv4, metrics.IPAvailableUsageType).
+		Set(float64(network.Status.Statistics.Available))
 }
 
 // SetupWithManager sets up the controller with the Manager.

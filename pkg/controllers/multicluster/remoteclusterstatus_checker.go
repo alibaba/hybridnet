@@ -33,6 +33,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/controllers/multicluster/clusterchecker"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/managerruntime"
+	"github.com/alibaba/hybridnet/pkg/metrics"
 )
 
 const CheckerRemoteClusterStatus = "RemoteClusterStatus"
@@ -102,6 +103,11 @@ func (r *RemoteClusterStatusChecker) crontab(ctx context.Context) {
 }
 
 func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, name string, daemonID managerruntime.DaemonID) {
+	start := time.Now()
+	defer func() {
+		metrics.RemoteClusterStatusCheckDuration.WithLabelValues(name).Observe(time.Since(start).Seconds())
+	}()
+
 	remoteCluster, err := utils.GetRemoteCluster(r, name)
 	if err != nil {
 		// TODO: handle fetch error here
