@@ -139,7 +139,7 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// update metrics
-	updateUsageMetrics(network)
+	updateUsageMetrics(network.Name, networkStatus)
 
 	// patch network status
 	networkPatch := client.MergeFrom(network.DeepCopy())
@@ -156,31 +156,31 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-func updateUsageMetrics(network *networkingv1.Network) {
+func updateUsageMetrics(networkName string, networkStatus *networkingv1.NetworkStatus) {
 	if feature.DualStackEnabled() {
-		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv4, metrics.IPTotalUsageType).
-			Set(float64(network.Status.Statistics.Total))
-		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv4, metrics.IPUsedUsageType).
-			Set(float64(network.Status.Statistics.Used))
-		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv4, metrics.IPAvailableUsageType).
-			Set(float64(network.Status.Statistics.Available))
-		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv6, metrics.IPTotalUsageType).
-			Set(float64(network.Status.IPv6Statistics.Total))
-		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv6, metrics.IPUsedUsageType).
-			Set(float64(network.Status.IPv6Statistics.Used))
-		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv6, metrics.IPAvailableUsageType).
-			Set(float64(network.Status.IPv6Statistics.Available))
-		metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.DualStack, metrics.IPAvailableUsageType).
-			Set(float64(network.Status.DualStackStatistics.Available))
+		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv4, metrics.IPTotalUsageType).
+			Set(float64(networkStatus.Statistics.Total))
+		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv4, metrics.IPUsedUsageType).
+			Set(float64(networkStatus.Statistics.Used))
+		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv4, metrics.IPAvailableUsageType).
+			Set(float64(networkStatus.Statistics.Available))
+		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv6, metrics.IPTotalUsageType).
+			Set(float64(networkStatus.IPv6Statistics.Total))
+		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv6, metrics.IPUsedUsageType).
+			Set(float64(networkStatus.IPv6Statistics.Used))
+		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv6, metrics.IPAvailableUsageType).
+			Set(float64(networkStatus.IPv6Statistics.Available))
+		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.DualStack, metrics.IPAvailableUsageType).
+			Set(float64(networkStatus.DualStackStatistics.Available))
 		return
 	}
 
-	metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv4, metrics.IPTotalUsageType).
-		Set(float64(network.Status.Statistics.Total))
-	metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv4, metrics.IPUsedUsageType).
-		Set(float64(network.Status.Statistics.Used))
-	metrics.IPUsageGauge.WithLabelValues(network.Name, metrics.IPv4, metrics.IPAvailableUsageType).
-		Set(float64(network.Status.Statistics.Available))
+	metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv4, metrics.IPTotalUsageType).
+		Set(float64(networkStatus.Statistics.Total))
+	metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv4, metrics.IPUsedUsageType).
+		Set(float64(networkStatus.Statistics.Used))
+	metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv4, metrics.IPAvailableUsageType).
+		Set(float64(networkStatus.Statistics.Available))
 }
 
 // SetupWithManager sets up the controller with the Manager.
