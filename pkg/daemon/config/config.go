@@ -41,7 +41,7 @@ const (
 	DefaultVxlanUDPPort = 8472
 
 	DefaultVlanCheckTimeout                     = 3 * time.Second
-	DefaultIptablesCheckDuration                = 5 * time.Second
+	DefaultIPtablesCheckDuration                = 5 * time.Second
 	DefaultVxlanBaseReachableTime               = 5 * time.Second
 	DefaultVxlanExpiredNeighCachesClearInterval = 1 * time.Hour
 
@@ -106,7 +106,7 @@ func ParseFlags() (*Configuration, error) {
 		argMetricsServerAddress                 = pflag.String("metrics-addr", DefaultMetricsServerBindAddress, "The address which daemon metrics server bind")
 		argBGPgRPCServerAddress                 = pflag.String("bgp-grpc-server-addr", DefaultBGPgRPCServerBindAddress, "The address which daemon bgp grpc server bind, for using gobgp command to debug")
 		argLocalDirectTableNum                  = pflag.Int("local-direct-table", DefaultLocalDirectTableNum, "The number of local-pod-direct route table")
-		argIptableCheckDuration                 = pflag.Duration("iptables-check-duration", DefaultIptablesCheckDuration, "The time period for iptables manager to check iptables rules")
+		argIPtablesCheckDuration                = pflag.Duration("iptables-check-duration", DefaultIPtablesCheckDuration, "The time period for iptables manager to check iptables rules")
 		argToOverlaySubnetTableNum              = pflag.Int("to-overlay-table", DefaultToOverlaySubnetTableNum, "The number of to-overlay-pod-subnet route table")
 		argOverlayMarkTableNum                  = pflag.Int("overlay-mark-table", DefaultOverlayMarkTableNum, "The number of overlay-mark routing table")
 		argVlanCheckTimeout                     = pflag.Duration("vlan-check-timeout", DefaultVlanCheckTimeout, "The timeout of vlan network environment check while pod creating")
@@ -144,7 +144,7 @@ func ParseFlags() (*Configuration, error) {
 		OverlayMarkTableNum:                  *argOverlayMarkTableNum,
 		VlanCheckTimeout:                     *argVlanCheckTimeout,
 		VxlanUDPPort:                         *argVxlanUDPPort,
-		IptablesCheckDuration:                *argIptableCheckDuration,
+		IptablesCheckDuration:                *argIPtablesCheckDuration,
 		VxlanBaseReachableTime:               *argVxlanBaseReachableTime,
 		NeighGCThresh1:                       *argNeighGCThresh1,
 		NeighGCThresh2:                       *argNeighGCThresh2,

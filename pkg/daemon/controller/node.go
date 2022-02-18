@@ -217,8 +217,7 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
 			node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
 			node.Annotations[constants.AnnotationNodeLocalVxlanIPList] == "" {
-			logger.Info("node's vtep information has not been updated", "node", node.Name)
-			continue
+			return reconcile.Result{Requeue: true}, fmt.Errorf("node %v's vtep information has not been updated", node.Name)
 		}
 
 		vtepMac, err := net.ParseMAC(node.Annotations[constants.AnnotationNodeVtepMac])
@@ -280,7 +279,8 @@ func checkNodeUpdate(updateEvent event.UpdateEvent) bool {
 	newNode := updateEvent.ObjectNew.(*corev1.Node)
 
 	if oldNode.Annotations[constants.AnnotationNodeVtepIP] != newNode.Annotations[constants.AnnotationNodeVtepIP] ||
-		oldNode.Annotations[constants.AnnotationNodeVtepMac] != newNode.Annotations[constants.AnnotationNodeVtepMac] {
+		oldNode.Annotations[constants.AnnotationNodeVtepMac] != newNode.Annotations[constants.AnnotationNodeVtepMac] ||
+		oldNode.Annotations[constants.AnnotationNodeLocalVxlanIPList] != newNode.Annotations[constants.AnnotationNodeLocalVxlanIPList] {
 		return true
 	}
 	return false
