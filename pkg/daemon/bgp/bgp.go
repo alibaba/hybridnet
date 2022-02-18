@@ -209,7 +209,19 @@ func (m *Manager) TryStart(asn uint32) error {
 	})
 }
 
+func (m *Manager) CheckIfStart() bool {
+	m.startMutex.Lock()
+	defer m.startMutex.Unlock()
+
+	return m.localASN != 0
+}
+
 func (m *Manager) SyncPeerInfos() error {
+	// If bgp manager is not started, do nothing.
+	if !m.CheckIfStart() {
+		return nil
+	}
+
 	// Sync peers configuration.
 	// Because now UpdatePeer will reset bgp session causing a network fluctuation, we will never update an exist bgp peer.
 	existPeerMap := map[string]struct{}{}
@@ -249,6 +261,11 @@ func (m *Manager) SyncPeerInfos() error {
 }
 
 func (m *Manager) SyncSubnetInfos() error {
+	// If bgp manager is not started, do nothing.
+	if !m.CheckIfStart() {
+		return nil
+	}
+
 	// Sync subnet paths.
 	existSubnetPathMap := map[string]*net.IPNet{}
 	listPathFunc := generatePathListFunc(existSubnetPathMap, nil, m.logger)
@@ -310,6 +327,11 @@ func (m *Manager) SyncPeerAndSubnetInfos() error {
 }
 
 func (m *Manager) SyncIPInfos() error {
+	// If bgp manager is not started, do nothing.
+	if !m.CheckIfStart() {
+		return nil
+	}
+
 	existIPPathMap := map[string]net.IP{}
 	listPathFunc := generatePathListFunc(nil, existIPPathMap, m.logger)
 
