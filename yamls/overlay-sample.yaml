@@ -6,7 +6,6 @@ metadata:
 spec:
   netID: 4
   type: Overlay
-  switchID: "virtual-switch"
 
 ---
 apiVersion: networking.alibaba.com/v1
@@ -18,4 +17,3 @@ spec:
   range:
     version: "4"
     cidr: "10.14.100.0/24"
-    gateway: "10.14.100.1"
