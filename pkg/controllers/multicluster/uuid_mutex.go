@@ -94,8 +94,9 @@ func (u *uuidMutex) GetUUIDs(name string) []types.UID {
 
 func NewUUIDMutex() UUIDMutex {
 	return &uuidMutex{
-		mutex:     sync.Mutex{},
-		idNameMap: make(map[types.UID]string),
+		mutex:           sync.Mutex{},
+		idNameMap:       make(map[types.UID]string),
+		nameLatestIDMap: make(map[string]types.UID),
 	}
 }
 
