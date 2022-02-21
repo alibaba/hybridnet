@@ -47,17 +47,17 @@ spec:
                       properties:
                         address:
                           type: string
+                        asn:
+                          format: int32
+                          type: integer
                         gracefulRestartSeconds:
                           format: int32
                           type: integer
                         password:
                           type: string
-                        remoteAS:
-                          format: int32
-                          type: integer
                       required:
                       - address
-                      - remoteAS
+                      - asn
                       type: object
                     type: array
                 type: object

@@ -22,6 +22,11 @@ rules:
       - subnets/status
       - ipinstances
       - ipinstances/status
+    verbs:
+      - "*"
+  - apiGroups:
+      - "multicluster.alibaba.com"
+    resources:
       - remoteclusters
       - remoteclusters/status
       - remotesubnets
@@ -1998,6 +2003,7 @@ status:
     plural: ""
   conditions: []
   storedVersions: []
+
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -3374,17 +3380,17 @@ spec:
                       properties:
                         address:
                           type: string
+                        asn:
+                          format: int32
+                          type: integer
                         gracefulRestartSeconds:
                           format: int32
                           type: integer
                         password:
                           type: string
-                        remoteAS:
-                          format: int32
-                          type: integer
                       required:
                       - address
-                      - remoteAS
+                      - asn
                       type: object
                     type: array
                 type: object
