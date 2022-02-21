@@ -32,8 +32,6 @@ spec:
                                 
   type: Underlay                # Required. Underlay or Overlay
   
-  switchID: "switch1"           # Optional. For visibility.
-  
   nodeSelector:                 # Required only for underlay Network.
     network: "s1"               # Label to select target Nodes, which means every node blongs to 
                                 # this network should be patched with this label.
@@ -57,7 +55,6 @@ spec:
                                 # For Overlay type, netID refers to the tunnel id which used by vxlan
                                 
   type: Overlay                 # Required. Underlay or Overlay
-  switchID: "switch1"           # Optional. For visibility.
   
                                 # For an overlay Network, .spec.nodeSelector need not to be set, which
                                 # means every Node of the Kubernetes cluster will be added to it automatically.
@@ -95,10 +92,9 @@ spec:
     
     cidr: "192.168.56.0/24"                           # Required.
     
-    gateway: "192.168.56.1"                           # Required. 
-                                                      # For Underlay Network, it refers to ASW gateway ip. 
-                                                      # For Overlay Network, it refers to a virtual gateway 
-                                                      # ip used by Hybridnet.
+    gateway: "192.168.56.1"                           # Optional. 
+                                                      # For Underlay vlan Network, it refers to ASW gateway ip.
+                                                      # Gateway address will never be allocated to pods.
                                 
     start: "192.168.56.100"                           # Optional. The first usable ip of cidr.
     
@@ -106,7 +102,7 @@ spec:
     
     reservedIPs: "192.168.56.101","192.168.56.102"    # Optional. The reserved ips for later assignment.
     
-    excludeIPs: "192.168.56.103","192.168.56.104"     # Optional. The exclued ips for unusable. 
+    excludeIPs: "192.168.56.103","192.168.56.104"     # Optional. The excluded ips for unusable. 
   config:
     autoNatOutgoing: false                            # Optional, Overlay Network only, Default is true. 
                                                       # If pods in this sunbet can access to addresses outside 

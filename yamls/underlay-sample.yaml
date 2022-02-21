@@ -6,7 +6,6 @@ metadata:
 spec:
   netID: 0
   type: Underlay
-  switchID: "physical-switch1"
   nodeSelector:
     network: "network1"
 
