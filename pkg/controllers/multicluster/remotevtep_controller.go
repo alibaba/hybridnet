@@ -22,22 +22,17 @@ import (
 	"net"
 	"sort"
 	"strings"
-	"time"
 
-	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/wait"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -177,55 +172,10 @@ func (r *RemoteVtepReconciler) pickEndpointIPListForNode(ctx context.Context, no
 	return endpoints, nil
 }
 
-func (r *RemoteVtepReconciler) garbageCollection(ctx context.Context, log logr.Logger) (chan event.GenericEvent, error) {
-	eventChannel := make(chan event.GenericEvent, 10)
-
-	go func() {
-		wait.UntilWithContext(ctx, func(c context.Context) {
-			nodeNames, err := utils.ListNodesToNames(r)
-			if err != nil {
-				log.Error(err, "unable to list nodes")
-				return
-			}
-			var expectedRemoteVTEPSet = sets.NewString()
-			for _, nodeName := range nodeNames {
-				expectedRemoteVTEPSet.Insert(generateRemoteSubnetName(r.ClusterName, nodeName))
-			}
-
-			// TODO: use indexer field instead of label selector
-			var currentRemoteVTEPSet = sets.NewString()
-			remoteVtepList, err := utils.ListRemoteVteps(r.ParentCluster.GetClient(), client.MatchingLabels{constants.LabelCluster: r.ClusterName})
-			if err != nil {
-				log.Error(err, "unable to list remote VTEPs")
-				return
-			}
-			for i := range remoteVtepList.Items {
-				currentRemoteVTEPSet.Insert(remoteVtepList.Items[i].Name)
-			}
-
-			redundantRemoteVTEPSet := currentRemoteVTEPSet.Difference(expectedRemoteVTEPSet)
-			for _, redundantRemoteVTEP := range redundantRemoteVTEPSet.UnsortedList() {
-				// trigger this generic event for the missing (already deleted) objects
-				eventChannel <- event.GenericEvent{
-					Object: &corev1.Node{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: splitNodeNameFromRemoteVTEPName(redundantRemoteVTEP),
-						},
-					},
-				}
-			}
-		}, time.Minute)
-
-		close(eventChannel)
-	}()
-
-	return eventChannel, nil
-}
-
 // SetupWithManager sets up the controller with the Manager.
-func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	garbageEvent, err := r.garbageCollection(context.TODO(), mgr.GetLogger().WithName("cron").WithName("RemoteVtepGC"))
-	if err != nil {
+func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
+	gc := NewRemoteVTEPGarbageCollection(mgr.GetLogger().WithName("cron").WithName("RemoteVtepGC"), r)
+	if err = mgr.Add(gc); err != nil {
 		return err
 	}
 
@@ -254,7 +204,7 @@ func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			),
 		).
-		Watches(&source.Channel{Source: garbageEvent, DestBufferSize: 100},
+		Watches(&source.Channel{Source: gc.EventChannel(), DestBufferSize: 100},
 			&handler.EnqueueRequestForObject{},
 		).
 		// enqueue node if ip instances of node change

@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
@@ -155,7 +156,10 @@ func (r *RemoteClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(
 				&utils.IgnoreDeletePredicate{},
 				// TODO: spec-hash change predicate
-				&utils.RemoteClusterUUIDChangePredicate{},
+				predicate.Or(
+					&utils.RemoteClusterUUIDChangePredicate{},
+					&utils.TerminatingPredicate{},
+				),
 			),
 		).
 		WithOptions(controller.Options{
