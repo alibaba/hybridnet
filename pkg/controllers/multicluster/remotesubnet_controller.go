@@ -20,21 +20,16 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/wait"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -43,7 +38,6 @@ import (
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 )
 
 const ControllerRemoteSubnet = "RemoteSubnet"
@@ -146,55 +140,10 @@ func (r *RemoteSubnetReconciler) cleanRemoteSubnet(ctx context.Context, subnetNa
 	}))
 }
 
-func (r *RemoteSubnetReconciler) garbageCollection(ctx context.Context, log logr.Logger) (<-chan event.GenericEvent, error) {
-	eventChannel := make(chan event.GenericEvent, 10)
-
-	go func() {
-		wait.UntilWithContext(ctx, func(c context.Context) {
-			subnetList, err := utils.ListSubnets(r)
-			if err != nil {
-				log.Error(err, "unable to list subnets")
-				return
-			}
-			var expectedRemoteSubnetSet = sets.NewString()
-			for i := range subnetList.Items {
-				expectedRemoteSubnetSet.Insert(generateRemoteSubnetName(r.ClusterName, subnetList.Items[i].Name))
-			}
-
-			// TODO: use indexer field instead of label selector
-			var currentRemoteSubnetSet = sets.NewString()
-			remoteSubnet, err := utils.ListRemoteSubnets(r.ParentCluster.GetClient(), client.MatchingLabels{constants.LabelCluster: r.ClusterName})
-			if err != nil {
-				log.Error(err, "unable to list remote subnets")
-				return
-			}
-			for i := range remoteSubnet.Items {
-				currentRemoteSubnetSet.Insert(remoteSubnet.Items[i].Name)
-			}
-
-			redundantRemoteSubnetSet := currentRemoteSubnetSet.Difference(expectedRemoteSubnetSet)
-			for _, redundantRemoteSubnet := range redundantRemoteSubnetSet.UnsortedList() {
-				// trigger this generic event for the missing (already deleted) objects
-				eventChannel <- event.GenericEvent{
-					Object: &networkingv1.Subnet{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: splitSubnetNameFromRemoteSubnetName(redundantRemoteSubnet),
-						},
-					},
-				}
-			}
-		}, time.Minute)
-
-		close(eventChannel)
-	}()
-
-	return eventChannel, nil
-}
-
 // SetupWithManager sets up the controller with the Manager.
-func (r *RemoteSubnetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	garbageEvent, err := r.garbageCollection(context.TODO(), mgr.GetLogger().WithName("cron").WithName("RemoteSubnetGC"))
-	if err != nil {
+func (r *RemoteSubnetReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
+	gc := NewRemoteSubnetGarbageCollection(mgr.GetLogger().WithName("cron").WithName("RemoteSubnetGC"), r)
+	if err = mgr.Add(gc); err != nil {
 		return err
 	}
 
@@ -205,7 +154,7 @@ func (r *RemoteSubnetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				&predicate.GenerationChangedPredicate{},
 			),
 		).
-		Watches(&source.Channel{Source: garbageEvent, DestBufferSize: 100},
+		Watches(&source.Channel{Source: gc.EventChannel(), DestBufferSize: 100},
 			&handler.EnqueueRequestForObject{},
 		).
 		WithOptions(controller.Options{
