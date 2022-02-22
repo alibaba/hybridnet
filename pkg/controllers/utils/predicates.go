@@ -218,3 +218,15 @@ func (RemoteClusterUUIDChangePredicate) Update(e event.UpdateEvent) bool {
 
 	return oldRemoteCluster.Status.UUID != newRemoteCluster.Status.UUID
 }
+
+type TerminatingPredicate struct {
+	predicate.Funcs
+}
+
+func (TerminatingPredicate) Create(e event.CreateEvent) bool {
+	return !e.Object.GetDeletionTimestamp().IsZero()
+}
+
+func (TerminatingPredicate) Update(e event.UpdateEvent) bool {
+	return !e.ObjectNew.GetDeletionTimestamp().IsZero()
+}
