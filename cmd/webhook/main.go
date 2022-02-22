@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
@@ -36,6 +35,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/webhook/mutating"
 	"github.com/alibaba/hybridnet/pkg/webhook/validating"
+	zapinit "github.com/alibaba/hybridnet/pkg/zap"
 )
 
 var (
@@ -55,10 +55,7 @@ func init() {
 }
 
 func main() {
-	var zapOptions = zap.Options{}
-
 	// register flags
-	zapOptions.BindFlags(flag.CommandLine)
 	pflag.IntVar(&port, "port", 9898, "The port webhook listen on")
 	pflag.StringVar(&metricsBindAddress, "metrics-bind-address", "0", "The bind address for metrics, eg :8080")
 
@@ -66,7 +63,7 @@ func main() {
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
-	ctrllog.SetLogger(zap.New(zap.UseFlagOptions(&zapOptions)))
+	ctrllog.SetLogger(zapinit.NewZapLogger())
 
 	var entryLog = ctrllog.Log.WithName("entry")
 	entryLog.Info("starting hybridnet webhook", "known-features", feature.KnownFeatures(), "commit-id", gitCommit)

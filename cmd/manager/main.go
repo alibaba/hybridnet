@@ -28,7 +28,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
@@ -39,6 +38,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/managerruntime"
+	zapinit "github.com/alibaba/hybridnet/pkg/zap"
 )
 
 var (
@@ -55,12 +55,10 @@ func init() {
 func main() {
 	var (
 		controllerConcurrency map[string]int
-		zapOptions            zap.Options
 		metricsPort           int
 	)
 
 	// register flags
-	zapOptions.BindFlags(flag.CommandLine)
 	pflag.StringToIntVar(&controllerConcurrency, "controller-concurrency", map[string]int{}, "The specified concurrency of different controllers.")
 	pflag.IntVar(&metricsPort, "metrics-port", 9899, "The port to listen on for prometheus metrics.")
 
@@ -68,7 +66,7 @@ func main() {
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
-	ctrllog.SetLogger(zap.New(zap.UseFlagOptions(&zapOptions)))
+	ctrllog.SetLogger(zapinit.NewZapLogger())
 
 	var entryLog = ctrllog.Log.WithName("entry")
 	entryLog.Info("starting hybridnet manager", "known-features", feature.KnownFeatures(), "commit-id", gitCommit)

@@ -134,6 +134,7 @@ func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, nam
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: remoteCluster.Generation,
 			LastTransitionTime: metav1.Now(),
+			Reason:             "DaemonExist",
 		})
 
 		defer func() {
@@ -175,6 +176,7 @@ func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, nam
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: remoteCluster.Generation,
 			LastTransitionTime: metav1.Now(),
+			Reason:             "CheckAllPass",
 		})
 
 		var allCheckPass = true
@@ -184,11 +186,13 @@ func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, nam
 				Status:             metav1.ConditionTrue,
 				ObservedGeneration: remoteCluster.Generation,
 				LastTransitionTime: metav1.Time{Time: result.TimeStamp()},
+				Reason:             "CheckPass",
 			}
 
 			if !result.Succeed() {
 				allCheckPass = false
 				condition.Status = metav1.ConditionFalse
+				condition.Reason = "CheckFail"
 				condition.Message = result.Error().Error()
 			}
 
