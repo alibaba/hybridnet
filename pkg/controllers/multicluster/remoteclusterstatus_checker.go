@@ -58,18 +58,18 @@ type RemoteClusterStatusChecker struct {
 func (r *RemoteClusterStatusChecker) Start(ctx context.Context) error {
 	r.Logger.Info("remote cluster status checker is starting")
 
-	timer := time.NewTimer(r.CheckPeriod)
+	ticker := time.NewTicker(r.CheckPeriod)
 
 	for {
 		select {
-		case <-timer.C:
+		case <-ticker.C:
 			r.Logger.Info("cron job for all clusters")
 			r.crontab(ctx)
 		case event := <-r.Event:
 			r.Logger.Info("single job for one cluster registration")
 			r.checkClusterStatus(event.Context, event.Name, event.DaemonID)
 		case <-ctx.Done():
-			timer.Stop()
+			ticker.Stop()
 			r.Logger.Info("remote cluster status checker is stopping")
 			return nil
 		}
