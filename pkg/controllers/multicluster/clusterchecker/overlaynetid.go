@@ -37,7 +37,7 @@ func (o *OverlayNetID) Check(clusterManager ctrl.Manager) CheckResult {
 		return NewResult(err)
 	}
 
-	remoteOverlayNetID, err := utils.FindOverlayNetworkNetID(clusterManager.GetClient())
+	remoteOverlayNetID, err := utils.FindOverlayNetworkNetID(clusterManager.GetAPIReader())
 	if err != nil {
 		return NewResult(err)
 	}
