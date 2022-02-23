@@ -129,7 +129,7 @@ func (r *RemoteClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, wrapError("unable to get rest config", err)
 	}
 	var managerRuntime managerruntime.ManagerRuntime
-	if managerRuntime, err = r.constructClusterManagerRuntime(req.Name, restConfig); err != nil {
+	if managerRuntime, err = r.constructClusterManagerRuntime(remoteCluster, restConfig); err != nil {
 		return ctrl.Result{}, wrapError("unable to create manager runtime", err)
 	}
 
@@ -199,12 +199,12 @@ func (r *RemoteClusterReconciler) guardDaemon(ctx context.Context, name string, 
 	return nil
 }
 
-func (r *RemoteClusterReconciler) constructClusterManagerRuntime(name string, restConfig *rest.Config) (managerruntime.ManagerRuntime, error) {
-	managerRuntime, err := managerruntime.NewManagerRuntime(name,
+func (r *RemoteClusterReconciler) constructClusterManagerRuntime(remoteCluster *multiclusterv1.RemoteCluster, restConfig *rest.Config) (managerruntime.ManagerRuntime, error) {
+	managerRuntime, err := managerruntime.NewManagerRuntime(remoteCluster.Name,
 		restConfig,
 		&manager.Options{
 			Scheme: r.LocalManager.GetScheme(),
-			Logger: r.LocalManager.GetLogger().WithName("manager-runtime").WithName(name),
+			Logger: r.LocalManager.GetLogger().WithName("manager-runtime").WithName(remoteCluster.Name),
 		},
 	)
 	if err != nil {
@@ -213,18 +213,20 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(name string, re
 
 	// inject RemoteSubnetReconciler
 	if err = (&RemoteSubnetReconciler{
-		Client:        managerRuntime.GetClient(),
-		ClusterName:   name,
-		ParentCluster: r.LocalManager,
+		Client:              managerRuntime.GetClient(),
+		ClusterName:         remoteCluster.Name,
+		ParentCluster:       r.LocalManager,
+		ParentClusterObject: remoteCluster.DeepCopy(),
 	}).SetupWithManager(managerRuntime); err != nil {
 		return nil, wrapError("unable to inject remote subnet reconciler", err)
 	}
 
 	// inject RemoteVtepReconciler
 	if err = (&RemoteVtepReconciler{
-		Client:        managerRuntime.GetClient(),
-		ClusterName:   name,
-		ParentCluster: r.LocalManager,
+		Client:              managerRuntime.GetClient(),
+		ClusterName:         remoteCluster.Name,
+		ParentCluster:       r.LocalManager,
+		ParentClusterObject: remoteCluster.DeepCopy(),
 	}).SetupWithManager(managerRuntime); err != nil {
 		return nil, wrapError("unable to inject remote VTEP reconciler", err)
 	}

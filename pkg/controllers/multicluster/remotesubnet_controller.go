@@ -46,8 +46,9 @@ const ControllerRemoteSubnet = "RemoteSubnet"
 type RemoteSubnetReconciler struct {
 	client.Client
 
-	ClusterName   string
-	ParentCluster cluster.Cluster
+	ClusterName         string
+	ParentCluster       cluster.Cluster
+	ParentClusterObject *multiclusterv1.RemoteCluster
 }
 
 //+kubebuilder:rbac:groups=multicluster.alibaba.com,resources=remotesubnets,verbs=get;list;watch;create;update;patch;delete
@@ -101,7 +102,11 @@ func (r *RemoteSubnetReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return fmt.Errorf("remote subnet %s is terminating, can not be updated", remoteSubnet.Name)
 		}
 
-		// TODO: set owner reference of remote cluster
+		if !metav1.IsControlledBy(remoteSubnet, r.ParentClusterObject) {
+			if err = controllerutil.SetOwnerReference(r.ParentClusterObject, remoteSubnet, r.ParentCluster.GetScheme()); err != nil {
+				return wrapError("unable to set owner reference", err)
+			}
+		}
 
 		if remoteSubnet.Labels == nil {
 			remoteSubnet.Labels = make(map[string]string)
