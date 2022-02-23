@@ -56,9 +56,9 @@ const indexerFieldNode = "node"
 type RemoteVtepReconciler struct {
 	client.Client
 
-	ClusterName string
-
-	ParentCluster cluster.Cluster
+	ClusterName         string
+	ParentCluster       cluster.Cluster
+	ParentClusterObject *multiclusterv1.RemoteCluster
 }
 
 func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
@@ -105,7 +105,11 @@ func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return fmt.Errorf("remote VTEP %s is terminating, can not be updated", remoteVTEP.Name)
 		}
 
-		// TODO: set owner reference to remote cluster
+		if !metav1.IsControlledBy(remoteVTEP, r.ParentClusterObject) {
+			if err = controllerutil.SetOwnerReference(r.ParentClusterObject, remoteVTEP, r.ParentCluster.GetScheme()); err != nil {
+				return wrapError("unable to set owner reference", err)
+			}
+		}
 
 		if remoteVTEP.Labels == nil {
 			remoteVTEP.Labels = make(map[string]string)
