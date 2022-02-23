@@ -63,7 +63,7 @@ func (r *RemoteClusterStatusChecker) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			r.Logger.Info("cron job for all clusters")
+			r.Logger.V(1).Info("cron job for all clusters")
 			r.crontab(ctx)
 		case event := <-r.Event:
 			r.Logger.Info("single job for one cluster registration")
@@ -94,7 +94,7 @@ func (r *RemoteClusterStatusChecker) crontab(ctx context.Context) {
 		}
 	}
 
-	r.Logger.Info("check remote cluster status periodically", "clusters", nameDaemonIDMap)
+	r.Logger.V(1).Info("check remote cluster status periodically", "clusters", nameDaemonIDMap)
 
 	for name, id := range nameDaemonIDMap {
 		r.checkClusterStatus(ctx, name, id)
