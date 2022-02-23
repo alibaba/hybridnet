@@ -79,13 +79,13 @@ func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if !node.DeletionTimestamp.IsZero() {
-		log.V(10).Info("ignore terminating node")
+		log.V(1).Info("ignore terminating node")
 		return ctrl.Result{}, nil
 	}
 
 	var vtepIP, vtepMac, vtepVxlanIPList = node.Annotations[constants.AnnotationNodeVtepIP], node.Annotations[constants.AnnotationNodeVtepMac], node.Annotations[constants.AnnotationNodeLocalVxlanIPList]
 	if len(vtepIP) == 0 || len(vtepMac) == 0 {
-		log.V(10).Info("ignore node without vtep IP or MAC")
+		log.V(1).Info("ignore node without vtep IP or MAC")
 		return ctrl.Result{}, nil
 	}
 
@@ -135,16 +135,18 @@ func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if operationResult == controllerutil.OperationResultNone {
-		log.V(10).Info("remote VTEP is up-to-date", "RemoteVTEP", remoteVTEP.Name)
+		log.V(1).Info("remote VTEP is up-to-date", "RemoteVTEP", remoteVTEP.Name)
 		return ctrl.Result{}, nil
 	}
 
-	if err = r.ParentCluster.GetClient().Status().Patch(ctx, remoteVTEP, client.RawPatch(types.MergePatchType, []byte(fmt.Sprintf(`{"status":{"lastModifyTime":%s}}`, metav1.Now())))); err != nil {
+	remoteVTEPPatch := client.MergeFrom(remoteVTEP.DeepCopyObject())
+	remoteVTEP.Status.LastModifyTime = metav1.Now()
+	if err = r.ParentCluster.GetClient().Status().Patch(ctx, remoteVTEP, remoteVTEPPatch); err != nil {
 		// this error is not fatal, print it and go on
 		log.Error(err, "unable to update VTEP status")
 	}
 
-	log.V(4).Info("update VTEP successfully", "RemoteVTEPSpec", remoteVTEP.Spec)
+	log.Info("update VTEP successfully", "RemoteVTEPSpec", remoteVTEP.Spec)
 	return ctrl.Result{}, nil
 }
 

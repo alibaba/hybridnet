@@ -29,7 +29,7 @@ type RemoteVtepSpec struct {
 	// +kubebuilder:validation:Required
 	NodeName string `json:"nodeName,omitempty"`
 	// VTEPInfo is the basic information of this VTEP.
-	VTEPInfo VTEPInfo `json:",inline"`
+	VTEPInfo `json:",inline"`
 	// EndpointIPList is the IP list of all local endpoints of this VTEP.
 	// +kubebuilder:validation:Optional
 	EndpointIPList []string `json:"endpointIPList,omitempty"`

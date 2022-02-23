@@ -26,8 +26,10 @@ const (
 )
 
 type VTEPInfo struct {
+	// IP is the IP address of this VTEP.
 	// +kubebuilder:validation:Required
 	IP string `json:"ip,omitempty"`
+	// MAC is the MAC address of this VTEP.
 	// +kubebuilder:validation:Required
 	MAC string `json:"mac,omitempty"`
 }

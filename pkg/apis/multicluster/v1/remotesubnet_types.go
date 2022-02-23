@@ -51,7 +51,7 @@ type RemoteSubnetStatus struct {
 // +kubebuilder:printcolumn:name="Start",type=string,JSONPath=`.spec.range.start`
 // +kubebuilder:printcolumn:name="End",type=string,JSONPath=`.spec.range.end`
 // +kubebuilder:printcolumn:name="Gateway",type=string,JSONPath=`.spec.range.gateway`
-// +kubebuilder:printcolumn:name="NetworkType",type=string,JSONPath=`.spec.range.networkType`
+// +kubebuilder:printcolumn:name="NetworkType",type=string,JSONPath=`.spec.networkType`
 // +kubebuilder:printcolumn:name="ClusterName",type=string,JSONPath=`.spec.clusterName`
 // +kubebuilder:printcolumn:name="LastModifyTime",type=date,JSONPath=`.status.lastModifyTime`
 
