@@ -124,16 +124,18 @@ func (r *RemoteSubnetReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if operationResult == controllerutil.OperationResultNone {
-		log.V(10).Info("remote subnet is up-to-date", "RemoteSubnet", remoteSubnet.Name)
+		log.V(1).Info("remote subnet is up-to-date", "RemoteSubnet", remoteSubnet.Name)
 		return ctrl.Result{}, nil
 	}
 
-	if err = r.ParentCluster.GetClient().Status().Patch(ctx, remoteSubnet, client.RawPatch(types.MergePatchType, []byte(fmt.Sprintf(`{"status":{"lastModifyTime":%s}}`, metav1.Now())))); err != nil {
+	remoteSubnetPatch := client.MergeFrom(remoteSubnet.DeepCopyObject())
+	remoteSubnet.Status.LastModifyTime = metav1.Now()
+	if err = r.ParentCluster.GetClient().Status().Patch(ctx, remoteSubnet, remoteSubnetPatch); err != nil {
 		// this error is not fatal, print it and go on
 		log.Error(err, "unable to update remote subnet status")
 	}
 
-	log.V(4).Info("update remote subnet successfully", "RemoteSubnetSpec", remoteSubnet.Spec)
+	log.Info("update remote subnet successfully", "RemoteSubnetSpec", remoteSubnet.Spec)
 	return ctrl.Result{}, nil
 }
 
