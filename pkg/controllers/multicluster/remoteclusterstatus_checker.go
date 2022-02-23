@@ -37,8 +37,11 @@ import (
 )
 
 const CheckerRemoteClusterStatus = "RemoteClusterStatus"
-const DaemonNotFound = "DaemonNotFound"
-const CheckException = "CheckException"
+
+const (
+	ConditionDaemonRegistered = "DaemonRegistered"
+	ConditionCheckerExecuted  = "CheckerExecuted"
+)
 
 type RemoteClusterStatusChecker struct {
 	client.Client
@@ -119,8 +122,8 @@ func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, nam
 		if managerRuntime, err = r.getManagerRuntimeByDaemonID(daemonID); err != nil {
 			remoteCluster.Status.State = multiclusterv1.ClusterOffline
 			fillCondition(&remoteCluster.Status, &metav1.Condition{
-				Type:               DaemonNotFound,
-				Status:             metav1.ConditionTrue,
+				Type:               ConditionDaemonRegistered,
+				Status:             metav1.ConditionFalse,
 				ObservedGeneration: remoteCluster.Generation,
 				LastTransitionTime: metav1.Now(),
 				Reason:             "NotFound",
@@ -130,11 +133,11 @@ func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, nam
 		}
 
 		fillCondition(&remoteCluster.Status, &metav1.Condition{
-			Type:               DaemonNotFound,
-			Status:             metav1.ConditionFalse,
+			Type:               ConditionDaemonRegistered,
+			Status:             metav1.ConditionTrue,
 			ObservedGeneration: remoteCluster.Generation,
 			LastTransitionTime: metav1.Now(),
-			Reason:             "DaemonExist",
+			Reason:             "Registered",
 		})
 
 		defer func() {
@@ -161,22 +164,22 @@ func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, nam
 		if err != nil {
 			remoteCluster.Status.State = multiclusterv1.ClusterNotReady
 			fillCondition(&remoteCluster.Status, &metav1.Condition{
-				Type:               CheckException,
-				Status:             metav1.ConditionTrue,
+				Type:               ConditionCheckerExecuted,
+				Status:             metav1.ConditionFalse,
 				ObservedGeneration: remoteCluster.Generation,
 				LastTransitionTime: metav1.Now(),
-				Reason:             "CheckAllFail",
+				Reason:             "CheckerRunFail",
 				Message:            err.Error(),
 			})
 			return nil
 		}
 
 		fillCondition(&remoteCluster.Status, &metav1.Condition{
-			Type:               CheckException,
-			Status:             metav1.ConditionFalse,
+			Type:               ConditionCheckerExecuted,
+			Status:             metav1.ConditionTrue,
 			ObservedGeneration: remoteCluster.Generation,
 			LastTransitionTime: metav1.Now(),
-			Reason:             "CheckAllPass",
+			Reason:             "CheckerRunSucceed",
 		})
 
 		var allCheckPass = true
