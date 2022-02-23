@@ -32,7 +32,7 @@ spec:
     - jsonPath: .spec.range.gateway
       name: Gateway
       type: string
-    - jsonPath: .spec.range.networkType
+    - jsonPath: .spec.networkType
       name: NetworkType
       type: string
     - jsonPath: .spec.clusterName
