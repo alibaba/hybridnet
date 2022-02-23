@@ -63,8 +63,10 @@ spec:
                   type: string
                 type: array
               ip:
+                description: IP is the IP address of this VTEP.
                 type: string
               mac:
+                description: MAC is the MAC address of this VTEP.
                 type: string
               nodeName:
                 description: NodeName is the name of corresponding node in remote
