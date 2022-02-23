@@ -201,7 +201,7 @@ func main() {
 		if err = mgr.Add(&multicluster.RemoteClusterStatusChecker{
 			Client:      mgr.GetClient(),
 			Logger:      mgr.GetLogger().WithName("checker").WithName(multicluster.CheckerRemoteClusterStatus),
-			CheckPeriod: 2 * time.Minute,
+			CheckPeriod: 30 * time.Second,
 			DaemonHub:   daemonHub,
 			Checker:     clusterStatusChecker,
 			Event:       clusterCheckEvent,
