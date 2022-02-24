@@ -64,7 +64,7 @@ func (r *RemoteClusterUUIDReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	if !remoteCluster.DeletionTimestamp.IsZero() {
-		log.V(10).Info("remote cluster is terminating")
+		log.V(1).Info("remote cluster is terminating")
 		return ctrl.Result{}, nil
 	}
 
@@ -95,7 +95,7 @@ func (r *RemoteClusterUUIDReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	if remoteCluster.Status.UUID == clusterUUID {
-		log.V(10).Info("remote cluster UUID is up-to-date")
+		log.V(1).Info("remote cluster UUID is up-to-date")
 		return ctrl.Result{}, nil
 	}
 
@@ -112,7 +112,7 @@ func (r *RemoteClusterUUIDReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, wrapError("unable to update uuid", err)
 	}
 
-	log.V(4).Info("update remote cluster UUID successfully", "UUID", clusterUUID)
+	log.Info("update remote cluster UUID successfully", "UUID", clusterUUID)
 	return ctrl.Result{}, nil
 }
 

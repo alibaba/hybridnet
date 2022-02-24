@@ -63,15 +63,6 @@ type RemoteClusterReconciler struct {
 //+kubebuilder:rbac:groups=multicluster.alibaba.com,resources=remoteclusters/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=multicluster.alibaba.com,resources=remoteclusters/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the RemoteCluster object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *RemoteClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := ctrllog.FromContext(ctx)
 
@@ -106,7 +97,7 @@ func (r *RemoteClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	var latestUUID types.UID
 	latestUUIDExisting, latestUUID = r.UUIDMutex.GetLatestUUID(remoteCluster.Name)
 	if !latestUUIDExisting {
-		return ctrl.Result{}, fmt.Errorf("uuid is not locked by remote cluster %s", remoteCluster.Name)
+		return ctrl.Result{}, fmt.Errorf("remote cluster %s is not owning one UUID", remoteCluster.Name)
 	}
 	if latestUUID != remoteCluster.Status.UUID {
 		return ctrl.Result{}, fmt.Errorf("uuid locked by remote cluster %s is out-of-date", remoteCluster.Name)
@@ -114,7 +105,7 @@ func (r *RemoteClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// check and recycle orphan UUIDs of this remote cluster
 	for _, orphanUUID := range r.UUIDMutex.GetUUIDs(remoteCluster.Name) {
-		if orphanUUID == latestUUID {
+		if orphanUUID != latestUUID {
 			orphanDaemonID := managerruntime.DaemonID(orphanUUID)
 			if err = r.killDaemon(ctx, orphanDaemonID); err != nil {
 				return ctrl.Result{}, wrapError("unable to kill daemon", err)
@@ -143,7 +134,7 @@ func (r *RemoteClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, wrapError("unable to guard mr daemon", err)
 	}
 
-	log.V(4).Info("create and guard manager runtime successfully")
+	log.Info("create and guard manager runtime successfully")
 	return ctrl.Result{}, nil
 }
 
