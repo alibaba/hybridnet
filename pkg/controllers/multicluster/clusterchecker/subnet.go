@@ -22,6 +22,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/alibaba/hybridnet/pkg/constants"
 	clientutils "github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
@@ -32,7 +33,9 @@ type Subnet struct {
 	LocalClient client.Client
 }
 
-func (o *Subnet) Check(clusterManager ctrl.Manager) CheckResult {
+func (o *Subnet) Check(clusterManager ctrl.Manager, opts ...Option) CheckResult {
+	options := ToOptions(opts...)
+
 	subnetsOfCluster, err := clientutils.ListSubnets(clusterManager.GetAPIReader())
 	if err != nil {
 		return NewResult(err)
@@ -59,7 +62,9 @@ func (o *Subnet) Check(clusterManager ctrl.Manager) CheckResult {
 
 		for k := range localRemoteSubnets.Items {
 			var localRemoteSubnet = &localRemoteSubnets.Items[k]
-			if utils.Intersect(&subnetOfCluster.Spec.Range, &localRemoteSubnet.Spec.Range) {
+			var loopback = localRemoteSubnet.Labels[constants.LabelCluster] == options.ClusterName &&
+				localRemoteSubnet.Labels[constants.LabelSubnet] == subnetOfCluster.Name
+			if !loopback && utils.Intersect(&subnetOfCluster.Spec.Range, &localRemoteSubnet.Spec.Range) {
 				return NewResult(fmt.Errorf("subnet %s in cluster intersect with local remote subnet %s", subnetOfCluster.Name, localRemoteSubnet.Name))
 			}
 		}

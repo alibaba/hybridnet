@@ -16,25 +16,34 @@
 
 package clusterchecker
 
-import (
-	"time"
-
-	controllerruntime "sigs.k8s.io/controller-runtime"
-)
-
-type Checker interface {
-	Register(name string, check Check) error
-	Unregister(name string) error
-	CheckAll(clusterManager controllerruntime.Manager, opts ...Option) (map[string]CheckResult, error)
-	Check(name string, clusterManager controllerruntime.Manager, opts ...Option) (CheckResult, error)
+type Option interface {
+	ApplyToOptions(o *Options)
 }
 
-type CheckResult interface {
-	Succeed() bool
-	Error() error
-	TimeStamp() time.Time
+type Options struct {
+	ClusterName string
 }
 
-type Check interface {
-	Check(clusterManager controllerruntime.Manager, opts ...Option) CheckResult
+type ClusterName string
+
+func (c ClusterName) ApplyToOptions(o *Options) {
+	if o != nil {
+		o.ClusterName = string(c)
+	}
+}
+
+type RawOptions Options
+
+func (r RawOptions) ApplyToOptions(o *Options) {
+	if o != nil {
+		*o = Options(r)
+	}
+}
+
+func ToOptions(opts ...Option) *Options {
+	options := &Options{}
+	for i := range opts {
+		opts[i].ApplyToOptions(options)
+	}
+	return options
 }
