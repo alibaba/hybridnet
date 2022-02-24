@@ -54,9 +54,11 @@ func (c *checker) Unregister(name string) error {
 	return nil
 }
 
-func (c *checker) CheckAll(clusterManager ctrl.Manager) (map[string]CheckResult, error) {
+func (c *checker) CheckAll(clusterManager ctrl.Manager, opts ...Option) (map[string]CheckResult, error) {
 	c.Lock()
 	defer c.Unlock()
+
+	options := ToOptions(opts...)
 
 	if clusterManager == nil {
 		return nil, fmt.Errorf("cluster manager can not be null")
@@ -65,18 +67,18 @@ func (c *checker) CheckAll(clusterManager ctrl.Manager) (map[string]CheckResult,
 	ret := make(map[string]CheckResult)
 	for name, check := range c.checkMap {
 		// TODO: observe panic to error
-		ret[name] = check.Check(clusterManager)
+		ret[name] = check.Check(clusterManager, RawOptions(*options))
 	}
 
 	return ret, nil
 }
 
-func (c *checker) Check(name string, clusterManager ctrl.Manager) (CheckResult, error) {
+func (c *checker) Check(name string, clusterManager ctrl.Manager, opts ...Option) (CheckResult, error) {
 	c.Lock()
 	defer c.Unlock()
 
 	if check, exist := c.checkMap[name]; exist {
-		return check.Check(clusterManager), nil
+		return check.Check(clusterManager, opts...), nil
 	}
 
 	return nil, fmt.Errorf("check %s not found", name)

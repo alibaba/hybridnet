@@ -31,7 +31,7 @@ type Bidirection struct {
 	LocalUUID types.UID
 }
 
-func (b *Bidirection) Check(clusterManager ctrl.Manager) CheckResult {
+func (b *Bidirection) Check(clusterManager ctrl.Manager, opts ...Option) CheckResult {
 	remoteClusterList, err := utils.ListRemoteClusters(clusterManager.GetAPIReader())
 	if err != nil {
 		return NewResult(err)

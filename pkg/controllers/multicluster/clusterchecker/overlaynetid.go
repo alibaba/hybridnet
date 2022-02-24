@@ -31,7 +31,7 @@ type OverlayNetID struct {
 	LocalClient client.Client
 }
 
-func (o *OverlayNetID) Check(clusterManager ctrl.Manager) CheckResult {
+func (o *OverlayNetID) Check(clusterManager ctrl.Manager, opts ...Option) CheckResult {
 	localOverlayNetID, err := utils.FindOverlayNetworkNetID(o.LocalClient)
 	if err != nil {
 		return NewResult(err)

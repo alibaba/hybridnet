@@ -44,11 +44,13 @@ type uuidMutex struct {
 func (u *uuidMutex) Lock(UUID types.UID, name string) (bool, error) {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
+
 	if len(UUID) == 0 {
 		return false, fmt.Errorf("invalid empty UUID")
 	}
 	if currentName, exists := u.idNameMap[UUID]; exists {
 		if currentName == name {
+			u.nameLatestIDMap[name] = UUID
 			return false, nil
 		}
 		return false, fmt.Errorf("UUID %s already locked by %s", UUID, currentName)
@@ -61,6 +63,7 @@ func (u *uuidMutex) Lock(UUID types.UID, name string) (bool, error) {
 func (u *uuidMutex) Unlock(UUID types.UID) bool {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
+
 	if name, exists := u.idNameMap[UUID]; exists {
 		delete(u.idNameMap, UUID)
 		if uuid, exists := u.nameLatestIDMap[name]; exists && uuid == UUID {
