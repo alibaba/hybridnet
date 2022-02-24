@@ -272,7 +272,11 @@ webhooks:
       - apiGroups: ["networking.alibaba.com"]
         apiVersions: ["v1"]
         operations: ["CREATE", "DELETE", "UPDATE"]
-        resources: ["networks", "subnets", "remoteclusters", "remotesubnets"]
+        resources: ["networks", "subnets"]
+      - apiGroups: ["multicluster.alibaba.com"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "DELETE", "UPDATE"]
+        resources: ["remoteclusters", "remotesubnets"]
     sideEffects: None
     timeoutSeconds: 10
   - admissionReviewVersions: ["v1beta1", "v1"]
