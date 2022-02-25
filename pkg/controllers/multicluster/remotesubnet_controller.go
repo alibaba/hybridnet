@@ -38,6 +38,7 @@ import (
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils/sets"
 )
 
 const ControllerRemoteSubnet = "RemoteSubnet"
@@ -49,6 +50,8 @@ type RemoteSubnetReconciler struct {
 	ClusterName         string
 	ParentCluster       cluster.Cluster
 	ParentClusterObject *multiclusterv1.RemoteCluster
+
+	SubnetSet sets.CallbackSet
 }
 
 func (r *RemoteSubnetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
@@ -69,7 +72,8 @@ func (r *RemoteSubnetReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if !subnet.DeletionTimestamp.IsZero() {
-		log.V(10).Info("ignore terminating subnet")
+		log.V(1).Info("ignore terminating subnet")
+		_ = r.cleanRemoteSubnet(ctx, req.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -110,6 +114,8 @@ func (r *RemoteSubnetReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, wrapError("unable to update remote subnet", err)
 	}
 
+	r.SubnetSet.Insert(req.Name)
+
 	if operationResult == controllerutil.OperationResultNone {
 		log.V(1).Info("remote subnet is up-to-date", "RemoteSubnet", remoteSubnet.Name)
 		return ctrl.Result{}, nil
@@ -127,6 +133,7 @@ func (r *RemoteSubnetReconciler) Reconcile(ctx context.Context, req ctrl.Request
 }
 
 func (r *RemoteSubnetReconciler) cleanRemoteSubnet(ctx context.Context, subnetName string) error {
+	r.SubnetSet.Delete(subnetName)
 	return client.IgnoreNotFound(r.ParentCluster.GetClient().Delete(ctx, &multiclusterv1.RemoteSubnet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: generateRemoteSubnetName(r.ClusterName, subnetName),

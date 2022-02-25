@@ -59,6 +59,8 @@ type RemoteVtepReconciler struct {
 	ClusterName         string
 	ParentCluster       cluster.Cluster
 	ParentClusterObject *multiclusterv1.RemoteCluster
+
+	IsRecognizedSubnet func(subnetName string) bool
 }
 
 func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
@@ -80,6 +82,7 @@ func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if !node.DeletionTimestamp.IsZero() {
 		log.V(1).Info("ignore terminating node")
+		_ = r.cleanVTEPForNode(ctx, req.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -151,7 +154,8 @@ func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *RemoteVtepReconciler) cleanVTEPForNode(ctx context.Context, nodeName string) error {
-	return client.IgnoreNotFound(r.ParentCluster.GetClient().Delete(ctx, &multiclusterv1.RemoteVtep{ObjectMeta: metav1.ObjectMeta{Name: generateVTEPName(r.ClusterName, nodeName)}}))
+	return client.IgnoreNotFound(r.ParentCluster.GetClient().Delete(ctx,
+		&multiclusterv1.RemoteVtep{ObjectMeta: metav1.ObjectMeta{Name: generateVTEPName(r.ClusterName, nodeName)}}))
 }
 
 func (r *RemoteVtepReconciler) pickEndpointIPListForNode(ctx context.Context, nodeName string) ([]string, error) {

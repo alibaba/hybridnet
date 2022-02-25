@@ -34,9 +34,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils/sets"
 	"github.com/alibaba/hybridnet/pkg/managerruntime"
 )
 
@@ -202,12 +204,26 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(remoteCluster *
 		return nil, err
 	}
 
+	subnetSet := sets.NewCallbackSet()
+
+	var subnetList *networkingv1.SubnetList
+	if subnetList, err = utils.ListSubnets(managerRuntime.GetAPIReader()); err != nil {
+		return nil, err
+	}
+	for i := range subnetList.Items {
+		var subnet = &subnetList.Items[i]
+		if subnet.DeletionTimestamp.IsZero() {
+			subnetSet.Insert(subnet.Name)
+		}
+	}
+
 	// inject RemoteSubnetReconciler
 	if err = (&RemoteSubnetReconciler{
 		Client:              managerRuntime.GetClient(),
 		ClusterName:         remoteCluster.Name,
 		ParentCluster:       r.LocalManager,
 		ParentClusterObject: remoteCluster.DeepCopy(),
+		SubnetSet:           subnetSet,
 	}).SetupWithManager(managerRuntime); err != nil {
 		return nil, wrapError("unable to inject remote subnet reconciler", err)
 	}
@@ -218,6 +234,7 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(remoteCluster *
 		ClusterName:         remoteCluster.Name,
 		ParentCluster:       r.LocalManager,
 		ParentClusterObject: remoteCluster.DeepCopy(),
+		IsRecognizedSubnet:  subnetSet.Has,
 	}).SetupWithManager(managerRuntime); err != nil {
 		return nil, wrapError("unable to inject remote VTEP reconciler", err)
 	}
