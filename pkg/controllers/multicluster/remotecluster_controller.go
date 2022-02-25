@@ -29,12 +29,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
@@ -206,14 +206,16 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(remoteCluster *
 
 	subnetSet := sets.NewCallbackSet()
 
-	var subnetList *networkingv1.SubnetList
-	if subnetList, err = utils.ListSubnets(managerRuntime.GetAPIReader()); err != nil {
+	var remoteSubnetList *multiclusterv1.RemoteSubnetList
+	if remoteSubnetList, err = utils.ListRemoteSubnets(r.LocalManager.GetClient(), client.MatchingLabels{
+		constants.LabelCluster: remoteCluster.Name,
+	}); err != nil {
 		return nil, err
 	}
-	for i := range subnetList.Items {
-		var subnet = &subnetList.Items[i]
-		if subnet.DeletionTimestamp.IsZero() {
-			subnetSet.Insert(subnet.Name)
+	for i := range remoteSubnetList.Items {
+		var remoteSubnet = &remoteSubnetList.Items[i]
+		if remoteSubnet.DeletionTimestamp.IsZero() {
+			subnetSet.Insert(splitSubnetNameFromRemoteSubnetName(remoteSubnet.Name))
 		}
 	}
 
@@ -234,7 +236,8 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(remoteCluster *
 		ClusterName:         remoteCluster.Name,
 		ParentCluster:       r.LocalManager,
 		ParentClusterObject: remoteCluster.DeepCopy(),
-		IsRecognizedSubnet:  subnetSet.Has,
+		SubnetSet:           subnetSet,
+		EventTrigger:        make(chan event.GenericEvent, 100),
 	}).SetupWithManager(managerRuntime); err != nil {
 		return nil, wrapError("unable to inject remote VTEP reconciler", err)
 	}

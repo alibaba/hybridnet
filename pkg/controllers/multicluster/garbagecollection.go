@@ -99,7 +99,7 @@ func NewRemoteSubnetGarbageCollection(logger logr.Logger, reconciler *RemoteSubn
 }
 
 type RemoteVTEPGarbageCollection struct {
-	eventChan  chan event.GenericEvent
+	eventChan  chan<- event.GenericEvent
 	logger     logr.Logger
 	reconciler *RemoteVtepReconciler
 }
@@ -147,13 +147,9 @@ func (r *RemoteVTEPGarbageCollection) Start(ctx context.Context) error {
 	return nil
 }
 
-func (r *RemoteVTEPGarbageCollection) EventChannel() <-chan event.GenericEvent {
-	return r.eventChan
-}
-
-func NewRemoteVTEPGarbageCollection(logger logr.Logger, reconciler *RemoteVtepReconciler) *RemoteVTEPGarbageCollection {
+func NewRemoteVTEPGarbageCollection(logger logr.Logger, eventChan chan<- event.GenericEvent, reconciler *RemoteVtepReconciler) *RemoteVTEPGarbageCollection {
 	return &RemoteVTEPGarbageCollection{
-		eventChan:  make(chan event.GenericEvent, 10),
+		eventChan:  eventChan,
 		logger:     logger,
 		reconciler: reconciler,
 	}
