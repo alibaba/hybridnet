@@ -34,12 +34,12 @@ type OverlayNetID struct {
 func (o *OverlayNetID) Check(clusterManager ctrl.Manager, opts ...Option) CheckResult {
 	localOverlayNetID, err := utils.FindOverlayNetworkNetID(o.LocalClient)
 	if err != nil {
-		return NewResult(err)
+		return NewResult(fmt.Errorf("unable to find overlay net ID of local cluster: %v", err))
 	}
 
 	remoteOverlayNetID, err := utils.FindOverlayNetworkNetID(clusterManager.GetAPIReader())
 	if err != nil {
-		return NewResult(err)
+		return NewResult(fmt.Errorf("unable to find overlay net ID of remote cluster: %v", err))
 	}
 
 	if *localOverlayNetID == *remoteOverlayNetID {

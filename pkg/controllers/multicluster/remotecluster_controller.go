@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -37,6 +38,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils/sets"
 	"github.com/alibaba/hybridnet/pkg/managerruntime"
 )
 
@@ -202,12 +204,28 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(remoteCluster *
 		return nil, err
 	}
 
+	subnetSet := sets.NewCallbackSet()
+
+	var remoteSubnetList *multiclusterv1.RemoteSubnetList
+	if remoteSubnetList, err = utils.ListRemoteSubnets(r.LocalManager.GetClient(), client.MatchingLabels{
+		constants.LabelCluster: remoteCluster.Name,
+	}); err != nil {
+		return nil, err
+	}
+	for i := range remoteSubnetList.Items {
+		var remoteSubnet = &remoteSubnetList.Items[i]
+		if remoteSubnet.DeletionTimestamp.IsZero() {
+			subnetSet.Insert(splitSubnetNameFromRemoteSubnetName(remoteSubnet.Name))
+		}
+	}
+
 	// inject RemoteSubnetReconciler
 	if err = (&RemoteSubnetReconciler{
 		Client:              managerRuntime.GetClient(),
 		ClusterName:         remoteCluster.Name,
 		ParentCluster:       r.LocalManager,
 		ParentClusterObject: remoteCluster.DeepCopy(),
+		SubnetSet:           subnetSet,
 	}).SetupWithManager(managerRuntime); err != nil {
 		return nil, wrapError("unable to inject remote subnet reconciler", err)
 	}
@@ -218,6 +236,8 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(remoteCluster *
 		ClusterName:         remoteCluster.Name,
 		ParentCluster:       r.LocalManager,
 		ParentClusterObject: remoteCluster.DeepCopy(),
+		SubnetSet:           subnetSet,
+		EventTrigger:        make(chan event.GenericEvent, 100),
 	}).SetupWithManager(managerRuntime); err != nil {
 		return nil, wrapError("unable to inject remote VTEP reconciler", err)
 	}

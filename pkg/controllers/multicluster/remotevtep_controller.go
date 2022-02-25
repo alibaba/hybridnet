@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -43,6 +44,7 @@ import (
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils/sets"
 )
 
 const ControllerRemoteVTEP = "RemoteVTEP"
@@ -59,6 +61,9 @@ type RemoteVtepReconciler struct {
 	ClusterName         string
 	ParentCluster       cluster.Cluster
 	ParentClusterObject *multiclusterv1.RemoteCluster
+
+	SubnetSet    sets.CallbackSet
+	EventTrigger chan event.GenericEvent
 }
 
 func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
@@ -80,6 +85,7 @@ func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if !node.DeletionTimestamp.IsZero() {
 		log.V(1).Info("ignore terminating node")
+		_ = r.cleanVTEPForNode(ctx, req.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -151,7 +157,8 @@ func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *RemoteVtepReconciler) cleanVTEPForNode(ctx context.Context, nodeName string) error {
-	return client.IgnoreNotFound(r.ParentCluster.GetClient().Delete(ctx, &multiclusterv1.RemoteVtep{ObjectMeta: metav1.ObjectMeta{Name: generateVTEPName(r.ClusterName, nodeName)}}))
+	return client.IgnoreNotFound(r.ParentCluster.GetClient().Delete(ctx,
+		&multiclusterv1.RemoteVtep{ObjectMeta: metav1.ObjectMeta{Name: generateVTEPName(r.ClusterName, nodeName)}}))
 }
 
 func (r *RemoteVtepReconciler) pickEndpointIPListForNode(ctx context.Context, nodeName string) ([]string, error) {
@@ -163,8 +170,10 @@ func (r *RemoteVtepReconciler) pickEndpointIPListForNode(ctx context.Context, no
 	var endpoints = make([]string, 0)
 	for i := range ipInstanceList.Items {
 		var ipInstance = &ipInstanceList.Items[i]
-		// TODO: filter recognized subnet
-
+		// only IP of recognized subnets will be handled
+		if !r.SubnetSet.Has(ipInstance.Spec.Subnet) {
+			continue
+		}
 		// only using IP will be valid endpoint
 		if ipInstance == nil || ipInstance.Status.Phase != networkingv1.IPPhaseUsing {
 			continue
@@ -178,9 +187,35 @@ func (r *RemoteVtepReconciler) pickEndpointIPListForNode(ctx context.Context, no
 	return endpoints, nil
 }
 
+// RefreshAll will trigger all nodes to reconcile,
+// this function should be called when recognized subnet set change
+func (r *RemoteVtepReconciler) RefreshAll() {
+	nodeNames, err := utils.ListNodesToNames(r)
+	if err != nil {
+		return
+	}
+
+	for i := range nodeNames {
+		r.EventTrigger <- event.GenericEvent{
+			Object: &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: nodeNames[i],
+				},
+			},
+		}
+	}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
-	gc := NewRemoteVTEPGarbageCollection(mgr.GetLogger().WithName("cron").WithName("RemoteVtepGC"), r)
+	// register refresh-all callback function to trigger on recognized subnet
+	// set change
+	r.SubnetSet.WithCallback(r.RefreshAll)
+
+	gc := NewRemoteVTEPGarbageCollection(mgr.GetLogger().WithName("cron").WithName("RemoteVtepGC"),
+		r.EventTrigger,
+		r,
+	)
 	if err = mgr.Add(gc); err != nil {
 		return err
 	}
@@ -210,7 +245,7 @@ func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 				},
 			),
 		).
-		Watches(&source.Channel{Source: gc.EventChannel(), DestBufferSize: 100},
+		Watches(&source.Channel{Source: r.EventTrigger, DestBufferSize: 100},
 			&handler.EnqueueRequestForObject{},
 		).
 		// enqueue node if ip instances of node change
