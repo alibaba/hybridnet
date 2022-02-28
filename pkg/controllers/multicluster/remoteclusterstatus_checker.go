@@ -160,7 +160,7 @@ func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, nam
 			}
 		}()
 
-		results, err := r.Checker.CheckAll(managerRuntime, clusterchecker.ClusterName(name))
+		results, err := r.Checker.CheckAll(managerRuntime.Manager(), clusterchecker.ClusterName(name))
 		if err != nil {
 			remoteCluster.Status.State = multiclusterv1.ClusterNotReady
 			fillCondition(&remoteCluster.Status, &metav1.Condition{

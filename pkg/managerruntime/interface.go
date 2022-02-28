@@ -24,9 +24,9 @@ import (
 )
 
 type ManagerRuntime interface {
-	manager.Manager
-	Daemon
 	Name() string
+	Manager() manager.Manager
+	Daemon
 }
 
 type Daemon interface {
