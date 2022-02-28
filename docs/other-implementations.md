@@ -4,30 +4,30 @@ There has already so many of CNI implementations in the open source community, w
 believe that there is no one perfect for every user. Here we compare Hybridnet with well-known CNI implementations to show
 differences.
 
-## Hybridnet vs. Kube-ovn
+## Hybridnet vs. Kube-OVN
 
-Kube-ovn is an CNI implementation which integrates the OVN-based Network Virtualization with Kubernetes, offers rich
-functions and features, e.g., multi-tenant container network, subnet isolation.
+Kube-OVN is a CNI implementation, which integrates the OVN-based Network Virtualization with Kubernetes, offers rich
+functions and features, e.g. multi-tenant container network and subnet isolation.
 
-For the overall design, unlike Kube-ovn's offerring rich functions and features, Hybridnet is always designed to be convenient
-and widely-adapted. Without multi-tenant network support, Hybridnet takes more efforts to adapt to user's exist underlay network
+For the overall design, unlike Kube-OVN's offering rich functions and features, Hybridnet is always designed to be convenient
+and widely-adapted. Without multi-tenant network support, Hybridnet takes more effort to adapt to the user's existing underlay network
 and always follows the [Kubernetes network model](https://kubernetes.io/docs/concepts/cluster-administration/networking/#the-kubernetes-network-model).
 For example, when underlay and overlay network exist in one Hybridnet cluster at the same time (hybrid mode), every underlay
-pod will also get a overlay "identity" with the same ip address automatically while communicating with overlay pods, to
+pod will also get an overlay "identity" with the same ip address automatically while communicating with overlay pods, to
 ensure the full network connectivity within the cluster.
 
-One of the biggest differences is that Kube-ovn uses OVN/OVS as the dataplane, while Hybridnet uses common networking
+One of the biggest differences is that Kube-OVN uses OVN/OVS as the dataplane, while Hybridnet uses common networking
 abilities of Linux kernel (e.g., policy route, iptables). OVN/OVS is a popular and powerful software-defined
-networking (SDN) solution, once you want to know how Kube-OVN works, you should have know OVN/OVS a lot. Hybridnet provides
-a less multifunctional but more participatory implementation, to understand Hybridnet, all you need is knowing how to make
+networking (SDN) solution, once you want to know how Kube-OVN works, you have to know OVN/OVS a lot. Hybridnet provides
+a less multifunctional but more participatory implementation, to understand Hybridnet, all you need is to know how to make
 networking configurations on a normal Linux distribution, problems of which can always be easily found on StackOverflow
 or Google.
 
-Another difference is that subnets of Kube-OVN is associated with namespaces. Namespaced subnets build a strong
+Another difference is that subnets of Kube-OVN are associated with namespaces. Namespaced subnets build a strong
 relationship between workloads and ip address resource, but it also gets problems when a user
 (especially heavy Kubernetes users) don't want to change his original ways or habits of organizing workloads.
 Hybridnet provides a total loose coupling relationship between workloads and subnets, which
-sometimes makes things more flexible and convenient. By default, a subnet is shared by every workloads, while you can
+sometimes makes things more flexible and convenient. By default, a subnet is shared by every workload, while you can
 also create a private subnet which can only be used by specific workloads.
 
 ## Hybridnet vs. Calico
