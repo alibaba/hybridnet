@@ -200,8 +200,9 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(remoteCluster *
 		logger,
 		restConfig,
 		&manager.Options{
-			Scheme: r.LocalManager.GetScheme(),
-			Logger: logger,
+			Scheme:             r.LocalManager.GetScheme(),
+			Logger:             logger,
+			MetricsBindAddress: "0",
 		},
 		func(mgr manager.Manager) (err error) {
 			subnetSet := sets.NewCallbackSet()
