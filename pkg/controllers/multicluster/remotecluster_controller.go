@@ -193,56 +193,58 @@ func (r *RemoteClusterReconciler) guardDaemon(ctx context.Context, name string, 
 }
 
 func (r *RemoteClusterReconciler) constructClusterManagerRuntime(remoteCluster *multiclusterv1.RemoteCluster, restConfig *rest.Config) (managerruntime.ManagerRuntime, error) {
-	managerRuntime, err := managerruntime.NewManagerRuntime(remoteCluster.Name,
+	logger := r.LocalManager.GetLogger().WithName("manager-runtime").WithName(remoteCluster.Name)
+	shadowRemoteCluster := remoteCluster.DeepCopy()
+
+	return managerruntime.NewManagerRuntime(remoteCluster.Name,
+		logger,
 		restConfig,
 		&manager.Options{
 			Scheme: r.LocalManager.GetScheme(),
-			Logger: r.LocalManager.GetLogger().WithName("manager-runtime").WithName(remoteCluster.Name),
+			Logger: logger,
+		},
+		func(mgr manager.Manager) (err error) {
+			subnetSet := sets.NewCallbackSet()
+
+			var remoteSubnetList *multiclusterv1.RemoteSubnetList
+			if remoteSubnetList, err = utils.ListRemoteSubnets(r.LocalManager.GetClient(), client.MatchingLabels{
+				constants.LabelCluster: shadowRemoteCluster.Name,
+			}); err != nil {
+				return err
+			}
+			for i := range remoteSubnetList.Items {
+				var remoteSubnet = &remoteSubnetList.Items[i]
+				if remoteSubnet.DeletionTimestamp.IsZero() {
+					subnetSet.Insert(splitSubnetNameFromRemoteSubnetName(remoteSubnet.Name))
+				}
+			}
+
+			// inject RemoteSubnetReconciler
+			if err = (&RemoteSubnetReconciler{
+				Client:              mgr.GetClient(),
+				ClusterName:         shadowRemoteCluster.Name,
+				ParentCluster:       r.LocalManager,
+				ParentClusterObject: shadowRemoteCluster,
+				SubnetSet:           subnetSet,
+			}).SetupWithManager(mgr); err != nil {
+				return wrapError("unable to inject remote subnet reconciler", err)
+			}
+
+			// inject RemoteVtepReconciler
+			if err = (&RemoteVtepReconciler{
+				Client:              mgr.GetClient(),
+				ClusterName:         shadowRemoteCluster.Name,
+				ParentCluster:       r.LocalManager,
+				ParentClusterObject: shadowRemoteCluster,
+				SubnetSet:           subnetSet,
+				EventTrigger:        make(chan event.GenericEvent, 100),
+			}).SetupWithManager(mgr); err != nil {
+				return wrapError("unable to inject remote vtep reconciler", err)
+			}
+
+			return nil
 		},
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	subnetSet := sets.NewCallbackSet()
-
-	var remoteSubnetList *multiclusterv1.RemoteSubnetList
-	if remoteSubnetList, err = utils.ListRemoteSubnets(r.LocalManager.GetClient(), client.MatchingLabels{
-		constants.LabelCluster: remoteCluster.Name,
-	}); err != nil {
-		return nil, err
-	}
-	for i := range remoteSubnetList.Items {
-		var remoteSubnet = &remoteSubnetList.Items[i]
-		if remoteSubnet.DeletionTimestamp.IsZero() {
-			subnetSet.Insert(splitSubnetNameFromRemoteSubnetName(remoteSubnet.Name))
-		}
-	}
-
-	// inject RemoteSubnetReconciler
-	if err = (&RemoteSubnetReconciler{
-		Client:              managerRuntime.GetClient(),
-		ClusterName:         remoteCluster.Name,
-		ParentCluster:       r.LocalManager,
-		ParentClusterObject: remoteCluster.DeepCopy(),
-		SubnetSet:           subnetSet,
-	}).SetupWithManager(managerRuntime); err != nil {
-		return nil, wrapError("unable to inject remote subnet reconciler", err)
-	}
-
-	// inject RemoteVtepReconciler
-	if err = (&RemoteVtepReconciler{
-		Client:              managerRuntime.GetClient(),
-		ClusterName:         remoteCluster.Name,
-		ParentCluster:       r.LocalManager,
-		ParentClusterObject: remoteCluster.DeepCopy(),
-		SubnetSet:           subnetSet,
-		EventTrigger:        make(chan event.GenericEvent, 100),
-	}).SetupWithManager(managerRuntime); err != nil {
-		return nil, wrapError("unable to inject remote VTEP reconciler", err)
-	}
-
-	return managerRuntime, nil
 }
 
 func (r *RemoteClusterReconciler) addFinalizer(ctx context.Context, remoteCluster *multiclusterv1.RemoteCluster) error {
