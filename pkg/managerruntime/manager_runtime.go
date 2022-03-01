@@ -71,10 +71,11 @@ func (m *managerRuntime) Run(ctx context.Context) (err error) {
 	m.Unlock()
 
 	go wait.UntilWithContext(m.ctx, func(ctx context.Context) {
-		m.Lock()
-
-		var err error
-		if m.mgr, err = manager.New(m.restConfig, *m.options); err != nil {
+		var (
+			newManager manager.Manager
+			err        error
+		)
+		if newManager, err = manager.New(m.restConfig, *m.options); err != nil {
 			m.logger.Error(err, "unable to create manager")
 			m.restartCount++
 			m.terminationMessage = err.Error()
@@ -82,7 +83,7 @@ func (m *managerRuntime) Run(ctx context.Context) (err error) {
 			return
 		}
 
-		if err = m.initFunc(m.mgr); err != nil {
+		if err = m.initFunc(newManager); err != nil {
 			m.logger.Error(err, "unable to init manager")
 			m.restartCount++
 			m.terminationMessage = err.Error()
@@ -90,6 +91,8 @@ func (m *managerRuntime) Run(ctx context.Context) (err error) {
 			return
 		}
 
+		m.Lock()
+		m.mgr = newManager
 		m.Unlock()
 
 		m.logger.Info("starting daemon")
