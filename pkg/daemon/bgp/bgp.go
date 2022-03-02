@@ -26,8 +26,6 @@ import (
 
 	"github.com/vishvananda/netlink"
 
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
-
 	"github.com/go-logr/logr"
 
 	api "github.com/osrg/gobgp/v3/api"
@@ -80,7 +78,7 @@ func NewManager(peeringInterfaceName, grpcListenAddress string, logger logr.Logg
 		return nil, fmt.Errorf("failed to get bgp peering link %v: %v", peeringInterfaceName, err)
 	}
 
-	existLinkAddress, err := containernetwork.ListAllAddress(peeringLink)
+	existLinkAddress, err := daemonutils.ListAllAddress(peeringLink)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get link address for bgp peering interface %v: %v", peeringInterfaceName, err)
 	}
@@ -110,12 +108,12 @@ func NewManager(peeringInterfaceName, grpcListenAddress string, logger logr.Logg
 		}
 		fallthrough
 	default:
-		defaultV4Route, err := containernetwork.GetDefaultRoute(netlink.FAMILY_V4)
+		defaultV4Route, err := daemonutils.GetDefaultRoute(netlink.FAMILY_V4)
 		if err != nil && err != daemonutils.NotExist {
 			return nil, fmt.Errorf("failed to get v4 default route: %v", err)
 		}
 
-		defaultV6Route, err := containernetwork.GetDefaultRoute(netlink.FAMILY_V6)
+		defaultV6Route, err := daemonutils.GetDefaultRoute(netlink.FAMILY_V6)
 		if err != nil && err != daemonutils.NotExist {
 			return nil, fmt.Errorf("failed to get v6 default route: %v", err)
 		}

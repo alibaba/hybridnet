@@ -17,12 +17,11 @@
 package containernetwork
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
 	"fmt"
 	"net"
-	"strings"
 	"time"
+
+	"github.com/alibaba/hybridnet/pkg/constants"
 
 	"github.com/containernetworking/plugins/pkg/ns"
 
@@ -37,7 +36,7 @@ import (
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 )
 
-func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*IPInfo, localDirectTableNum int) error {
+func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*daemonutils.IPInfo, localDirectTableNum int) error {
 	hostLink, err := netlink.LinkByName(nicName)
 	if err != nil {
 		return fmt.Errorf("can not find host nic %s %v", nicName, err)
@@ -47,9 +46,9 @@ func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*I
 		return fmt.Errorf("can not set host nic %s up %v", nicName, err)
 	}
 
-	macAddress, err := net.ParseMAC(ContainerHostLinkMac)
+	macAddress, err := net.ParseMAC(constants.ContainerHostLinkMac)
 	if err != nil {
-		return fmt.Errorf("failed to parse mac %v: %v", ContainerHostLinkMac, err)
+		return fmt.Errorf("failed to parse mac %v: %v", constants.ContainerHostLinkMac, err)
 	}
 
 	if err = netlink.LinkSetHardwareAddr(hostLink, macAddress); err != nil {
@@ -65,21 +64,21 @@ func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*I
 		//   means that we don't need to assign the link local address explicitly to each
 		//   host side of the veth, which is one fewer thing to maintain and one fewer
 		//   thing we may clash over.
-		sysctlPath := fmt.Sprintf(ProxyArpSysctl, nicName)
+		sysctlPath := fmt.Sprintf(constants.ProxyArpSysctl, nicName)
 		if err := daemonutils.SetSysctl(sysctlPath, 1); err != nil {
 			return fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}
 
 		// Enable routing to localhost.  This is required to allow for NAT to the local
 		// host.
-		sysctlPath = fmt.Sprintf(RouteLocalNetSysctl, nicName)
+		sysctlPath = fmt.Sprintf(constants.RouteLocalNetSysctl, nicName)
 		if err := daemonutils.SetSysctl(sysctlPath, 1); err != nil {
 			return fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}
 
 		// Normally, the kernel has a delay before responding to proxy ARP but we know
 		// that's not needed in a Hybridnet network so we disable it.
-		sysctlPath = fmt.Sprintf(ProxyDelaySysctl, nicName)
+		sysctlPath = fmt.Sprintf(constants.ProxyDelaySysctl, nicName)
 		if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
 			return fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}
@@ -87,12 +86,12 @@ func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*I
 		// Enable IP forwarding of packets coming _from_ this interface.  For packets to
 		// be forwarded in both directions we need this flag to be set on the fabric-facing
 		// interface too (or for the global default to be set).
-		sysctlPath = fmt.Sprintf(IPv4ForwardingSysctl, nicName)
+		sysctlPath = fmt.Sprintf(constants.IPv4ForwardingSysctl, nicName)
 		if err := daemonutils.SetSysctl(sysctlPath, 1); err != nil {
 			return fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}
 
-		mask := net.IPMask(net.ParseIP(DefaultIP4Mask).To4())
+		mask := net.IPMask(net.ParseIP(constants.DefaultIP4Mask).To4())
 		localPodRoute := &netlink.Route{
 			LinkIndex: hostLink.Attrs().Index,
 			Dst: &net.IPNet{
@@ -113,7 +112,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*I
 		//
 		// But only proxy_ndp be set cannot work, proxy neigh entries should also be added
 		// for each ip to proxy.
-		sysctlPath := fmt.Sprintf(ProxyNdpSysctl, nicName)
+		sysctlPath := fmt.Sprintf(constants.ProxyNdpSysctl, nicName)
 		if err := daemonutils.SetSysctl(sysctlPath, 1); err != nil {
 			return fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}
@@ -121,12 +120,12 @@ func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*I
 		// Enable IP forwarding of packets coming _from_ this interface.  For packets to
 		// be forwarded in both directions we need this flag to be set on the fabric-facing
 		// interface too (or for the global default to be set).
-		sysctlPath = fmt.Sprintf(IPv6ForwardingSysctl, nicName)
+		sysctlPath = fmt.Sprintf(constants.IPv6ForwardingSysctl, nicName)
 		if err := daemonutils.SetSysctl(sysctlPath, 1); err != nil {
 			return fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}
 
-		mask := net.IPMask(net.ParseIP(DefaultIP6Mask).To16())
+		mask := net.IPMask(net.ParseIP(constants.DefaultIP6Mask).To16())
 		localPodRoute := &netlink.Route{
 			LinkIndex: hostLink.Attrs().Index,
 			Dst: &net.IPNet{
@@ -144,9 +143,9 @@ func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*I
 			LinkIndex: hostLink.Attrs().Index,
 			Family:    netlink.FAMILY_V6,
 			Flags:     netlink.NTF_PROXY,
-			IP:        net.ParseIP(PodVirtualV6DefaultGateway),
+			IP:        net.ParseIP(constants.PodVirtualV6DefaultGateway),
 		}); err != nil {
-			return fmt.Errorf("failed to add neigh for ip %v/%v: %v", PodVirtualV4DefaultGateway,
+			return fmt.Errorf("failed to add neigh for ip %v/%v: %v", constants.PodVirtualV4DefaultGateway,
 				hostLink.Attrs().Name, err)
 		}
 	}
@@ -154,7 +153,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*I
 	return nil
 }
 
-func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, allocatedIPs map[networkingv1.IPVersion]*IPInfo,
+func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, allocatedIPs map[networkingv1.IPVersion]*daemonutils.IPInfo,
 	macAddr net.HardwareAddr, netID *int32, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration,
 	networkMode networkingv1.NetworkMode, neighGCThresh1, neighGCThresh2, neighGCThresh3 int) error {
 
@@ -167,12 +166,12 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 
 	switch networkMode {
 	case networkingv1.NetworkModeVlan:
-		forwardNodeIfName, err = GenerateVlanNetIfName(nodeIfName, netID)
+		forwardNodeIfName, err = daemonutils.GenerateVlanNetIfName(nodeIfName, netID)
 		if err != nil {
 			return fmt.Errorf("failed to generate vlan forward node interface name: %v", err)
 		}
 	case networkingv1.NetworkModeVxlan:
-		forwardNodeIfName, err = GenerateVxlanNetIfName(nodeIfName, netID)
+		forwardNodeIfName, err = daemonutils.GenerateVxlanNetIfName(nodeIfName, netID)
 		if err != nil {
 			return fmt.Errorf("failed to generate vxlan forward node interface name: %v", err)
 		}
@@ -189,7 +188,7 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 		// ipv4 address
 		defaultRouteNets = append(defaultRouteNets, &types.Route{
 			Dst: net.IPNet{IP: net.ParseIP("0.0.0.0").To4(), Mask: net.CIDRMask(0, 32)},
-			GW:  net.ParseIP(PodVirtualV4DefaultGateway),
+			GW:  net.ParseIP(constants.PodVirtualV4DefaultGateway),
 		})
 
 		podIP := allocatedIPs[networkingv1.IPv4].Addr
@@ -204,15 +203,15 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 			Interface: current.Int(0),
 		})
 
-		if err := enableIPForward(netlink.FAMILY_V4); err != nil {
+		if err := daemonutils.EnableIPForward(netlink.FAMILY_V4); err != nil {
 			return fmt.Errorf("failed to enable ipv4 forwarding: %v", err)
 		}
 
-		if err := ensureNeighGCThresh(netlink.FAMILY_V4, neighGCThresh1, neighGCThresh2, neighGCThresh3); err != nil {
+		if err := daemonutils.EnsureNeighGCThresh(netlink.FAMILY_V4, neighGCThresh1, neighGCThresh2, neighGCThresh3); err != nil {
 			return fmt.Errorf("failed to ensure ipv4 neigh gc thresh: %v", err)
 		}
 
-		if err := ensureRpFilterConfigs(hostNicName); err != nil {
+		if err := EnsureRpFilterConfigs(hostNicName); err != nil {
 			return fmt.Errorf("failed to ensure sysctl config: %v", err)
 		}
 
@@ -240,7 +239,7 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 		// ipv6 address
 		defaultRouteNets = append(defaultRouteNets, &types.Route{
 			Dst: net.IPNet{IP: net.ParseIP("::").To16(), Mask: net.CIDRMask(0, 128)},
-			GW:  net.ParseIP(PodVirtualV6DefaultGateway),
+			GW:  net.ParseIP(constants.PodVirtualV6DefaultGateway),
 		})
 
 		podIP := allocatedIPs[networkingv1.IPv6].Addr
@@ -255,11 +254,11 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 			Interface: current.Int(0),
 		})
 
-		if err := enableIPForward(netlink.FAMILY_V6); err != nil {
+		if err := daemonutils.EnableIPForward(netlink.FAMILY_V6); err != nil {
 			return fmt.Errorf("failed to enable ipv6 forwarding: %v", err)
 		}
 
-		if err := ensureNeighGCThresh(netlink.FAMILY_V6, neighGCThresh1, neighGCThresh2, neighGCThresh3); err != nil {
+		if err := daemonutils.EnsureNeighGCThresh(netlink.FAMILY_V6, neighGCThresh1, neighGCThresh2, neighGCThresh3); err != nil {
 			return fmt.Errorf("failed to ensure ipv6 neigh gc thresh: %v", err)
 		}
 
@@ -285,11 +284,11 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 			return fmt.Errorf("can not find container nic %s %v", containerNicName, err)
 		}
 
-		if err = netlink.LinkSetName(containerLink, ContainerNicName); err != nil {
+		if err = netlink.LinkSetName(containerLink, constants.ContainerNicName); err != nil {
 			return err
 		}
 
-		link, err := netlink.LinkByName(ContainerNicName)
+		link, err := netlink.LinkByName(constants.ContainerNicName)
 		if err != nil {
 			return err
 		}
@@ -309,13 +308,13 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 		//
 		// This must be done before we set the links UP.
 		if ipv6AddressAllocated {
-			sysctlPath := fmt.Sprintf(AcceptDADSysctl, ContainerNicName)
+			sysctlPath := fmt.Sprintf(constants.AcceptDADSysctl, constants.ContainerNicName)
 			if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
 				return fmt.Errorf("failed to set sysctl parameter %s to %v: %v", sysctlPath, 0, err)
 			}
 		}
 
-		if err := ConfigureIface(ContainerNicName, result); err != nil {
+		if err := daemonutils.ConfigureIface(constants.ContainerNicName, result); err != nil {
 			return fmt.Errorf("failed to config container nic: %v", err)
 		}
 
@@ -332,24 +331,4 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 	}
 
 	return nil
-}
-
-func GenerateContainerVethPair(podNamespace, podName string) (string, string) {
-	// A SHA1 is always 20 bytes long, and so is sufficient for generating the
-	// veth name and mac addr.
-	h := sha1.New()
-	h.Write([]byte(fmt.Sprintf("%s.%s", podNamespace, podName)))
-
-	return fmt.Sprintf("%s%s", ContainerHostLinkPrefix, hex.EncodeToString(h.Sum(nil))[:11]),
-		fmt.Sprintf("%s%s", hex.EncodeToString(h.Sum(nil))[:11], ContainerInitLinkSuffix)
-}
-
-func CheckIfContainerNetworkLink(linkName string) bool {
-	// TODO: suffix "_h" and prefix "h_" is deprecated, need to be removed further
-	return strings.HasSuffix(linkName, "_h") ||
-		strings.HasPrefix(linkName, "h_") ||
-		strings.HasPrefix(linkName, ContainerHostLinkPrefix) ||
-		strings.HasSuffix(linkName, ContainerInitLinkSuffix) ||
-		strings.HasPrefix(linkName, "veth") ||
-		strings.HasPrefix(linkName, "docker")
 }

@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/alibaba/hybridnet/pkg/daemon/utils"
+
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -29,7 +31,6 @@ import (
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/alibaba/hybridnet/pkg/feature"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -83,13 +84,13 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 		switch networkMode {
 		case networkingv1.NetworkModeVlan:
 			if isUnderlayOnHost {
-				forwardNodeIfName, err = containernetwork.EnsureVlanIf(r.ctrlHubRef.config.NodeVlanIfName, netID)
+				forwardNodeIfName, err = utils.EnsureVlanIf(r.ctrlHubRef.config.NodeVlanIfName, netID)
 				if err != nil {
 					return reconcile.Result{Requeue: true}, fmt.Errorf("failed to ensure vlan forward node interface: %v", err)
 				}
 			}
 		case networkingv1.NetworkModeVxlan:
-			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
+			forwardNodeIfName, err = utils.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
 			if err != nil {
 				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan forward node if name: %v", err)
 			}
@@ -166,7 +167,7 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv4 routes: %v", err)
 	}
 
-	globalDisabled, err := containernetwork.CheckIPv6GlobalDisabled()
+	globalDisabled, err := utils.CheckIPv6GlobalDisabled()
 	if err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to check ipv6 global disabled: %v", err)
 	}

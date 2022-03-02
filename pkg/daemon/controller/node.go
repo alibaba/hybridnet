@@ -21,6 +21,10 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+
+	"github.com/alibaba/hybridnet/pkg/daemon/utils"
+
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,7 +34,6 @@ import (
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/alibaba/hybridnet/pkg/daemon/vxlan"
 	"github.com/alibaba/hybridnet/pkg/feature"
 
@@ -76,7 +79,7 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Use parent's valid ipv4 address first, try ipv6 address if no valid ipv4 address exist.
-	existParentAddrList, err := containernetwork.ListAllAddress(link)
+	existParentAddrList, err := utils.ListAllAddress(link)
 	if err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list address for vxlan parent link %v: %v",
 			link.Attrs().Name, err)
@@ -118,7 +121,7 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 	vtepMac := link.Attrs().HardwareAddr
 
-	vxlanLinkName, err := containernetwork.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, overlayNetID)
+	vxlanLinkName, err := utils.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, overlayNetID)
 	if err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan interface name: %v", err)
 	}
@@ -155,7 +158,7 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	patchData := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s","%s":"%s","%s":"%s"}}}`,
 		constants.AnnotationNodeVtepIP, vtepIP.String(),
 		constants.AnnotationNodeVtepMac, vtepMac.String(),
-		constants.AnnotationNodeLocalVxlanIPList, containernetwork.GenerateIPListString(nodeLocalVxlanAddr))
+		constants.AnnotationNodeLocalVxlanIPList, utils.GenerateIPListString(nodeLocalVxlanAddr))
 
 	if err := r.ctrlHubRef.mgr.GetClient().Patch(context.TODO(),
 		thisNode, client.RawPatch(types.StrategicMergePatchType, []byte(patchData))); err != nil {
@@ -179,7 +182,7 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		nodeLocalVxlanAddrMap[addr.IP.String()] = true
 	}
 
-	vxlanDevAddrList, err := containernetwork.ListAllAddress(vxlanDev.Link())
+	vxlanDevAddrList, err := utils.ListAllAddress(vxlanDev.Link())
 	if err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list address for vxlan interface %v: %v",
 			vxlanDev.Link().Name, err)

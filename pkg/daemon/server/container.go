@@ -20,6 +20,10 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/alibaba/hybridnet/pkg/constants"
+
+	"github.com/alibaba/hybridnet/pkg/daemon/utils"
+
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
 
@@ -29,7 +33,7 @@ import (
 
 // ipAddr is a CIDR notation IP address and prefix length
 func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, containerID, mac string,
-	netID *int32, allocatedIPs map[networkingv1.IPVersion]*containernetwork.IPInfo,
+	netID *int32, allocatedIPs map[networkingv1.IPVersion]*utils.IPInfo,
 	networkMode networkingv1.NetworkMode) (string, error) {
 
 	var err error
@@ -82,7 +86,7 @@ func (cdh cniDaemonHandler) deleteNic(netns string) error {
 	}
 
 	return nsHandler.Do(func(netNS ns.NetNS) error {
-		containerLink, err := netlink.LinkByName(containernetwork.ContainerNicName)
+		containerLink, err := netlink.LinkByName(constants.ContainerNicName)
 		// return nil if eth0 not found.
 		if err != nil {
 			return nil
@@ -90,7 +94,7 @@ func (cdh cniDaemonHandler) deleteNic(netns string) error {
 
 		addrList, err := netlink.AddrList(containerLink, netlink.FAMILY_ALL)
 		if err != nil {
-			return fmt.Errorf("list addrs container nic %s error: %v", containernetwork.ContainerNicName, err)
+			return fmt.Errorf("list addrs container nic %s error: %v", constants.ContainerNicName, err)
 		}
 
 		if len(addrList) == 0 {
@@ -98,12 +102,12 @@ func (cdh cniDaemonHandler) deleteNic(netns string) error {
 		}
 
 		if err := netlink.LinkSetDown(containerLink); err != nil {
-			return fmt.Errorf("set delete ns %v %v error: %v", netns, containernetwork.ContainerNicName, err)
+			return fmt.Errorf("set delete ns %v %v error: %v", netns, constants.ContainerNicName, err)
 		}
 
 		for _, addr := range addrList {
 			if err := netlink.AddrDel(containerLink, &addr); err != nil {
-				return fmt.Errorf("delete ns %v %v addr %v error: %v", netns, containernetwork.ContainerNicName, addr.IP, err)
+				return fmt.Errorf("delete ns %v %v addr %v error: %v", netns, constants.ContainerNicName, addr.IP, err)
 			}
 		}
 		return nil

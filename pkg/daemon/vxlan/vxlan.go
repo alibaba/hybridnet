@@ -22,7 +22,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+	"github.com/alibaba/hybridnet/pkg/constants"
 
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 
@@ -66,33 +66,33 @@ func NewVxlanDevice(name string, vxlanID int, parent string, localAddr net.IP, p
 		return nil, err
 	}
 
-	sysctlPath := fmt.Sprintf(containernetwork.IPv4AppSolicitSysctl, link.Name)
+	sysctlPath := fmt.Sprintf(constants.IPv4AppSolicitSysctl, link.Name)
 	if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, 1); err != nil {
 		return nil, fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 	}
 
-	sysctlPath = fmt.Sprintf(containernetwork.IPv4BaseReachableTimeMSSysctl, link.Name)
+	sysctlPath = fmt.Sprintf(constants.IPv4BaseReachableTimeMSSysctl, link.Name)
 	if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, int(1000*baseReachableTime.Seconds())); err != nil {
 		return nil, fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 	}
 
-	ipv6Disabled, err := containernetwork.CheckIPv6Disabled(link.Name)
+	ipv6Disabled, err := daemonutils.CheckIPv6Disabled(link.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check ipv6 disables for link %v: %v", link.Name, err)
 	}
 
 	if !ipv6Disabled {
-		sysctlPath = fmt.Sprintf(containernetwork.IPv6AppSolicitSysctl, link.Name)
+		sysctlPath = fmt.Sprintf(constants.IPv6AppSolicitSysctl, link.Name)
 		if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, 1); err != nil {
 			return nil, fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}
 
-		sysctlPath = fmt.Sprintf(containernetwork.IPv6BaseReachableTimeMSSysctl, link.Name)
+		sysctlPath = fmt.Sprintf(constants.IPv6BaseReachableTimeMSSysctl, link.Name)
 		if err := daemonutils.SetSysctlIgnoreNotExist(sysctlPath, int(1000*baseReachableTime.Seconds())); err != nil {
 			return nil, fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}
 
-		sysctlPath = fmt.Sprintf(containernetwork.AcceptRASysctl, link.Name)
+		sysctlPath = fmt.Sprintf(constants.AcceptRASysctl, link.Name)
 		if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
 			return nil, fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}

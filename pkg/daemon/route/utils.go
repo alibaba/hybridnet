@@ -21,13 +21,13 @@ import (
 	"net"
 	"strings"
 
+	"github.com/alibaba/hybridnet/pkg/constants"
+
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 
 	"golang.org/x/sys/unix"
 
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
-
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 
 	"github.com/vishvananda/netlink"
 )
@@ -190,7 +190,7 @@ func checkIsFromPodSubnetRule(rule netlink.Rule, family int) (bool, error) {
 		}
 
 		// overlay subnet route table found
-		if strings.Contains(link.Attrs().Name, containernetwork.VxlanLinkInfix) &&
+		if strings.Contains(link.Attrs().Name, constants.VxlanLinkInfix) &&
 			!(route.Dst != nil && !route.Dst.IP.IsGlobalUnicast()) {
 			return true, nil
 		}
@@ -388,7 +388,7 @@ func ensureRoutesForVlanSubnet(forwardLink netlink.Link, cidr *net.IPNet, gatewa
 
 	if isLocalSubnet {
 		// Check if forward interface has default route which has the same gateway ip with this hybridnet subnet.
-		defaultRoute, err := containernetwork.GetDefaultRoute(family)
+		defaultRoute, err := daemonutils.GetDefaultRoute(family)
 		if err != nil && err != daemonutils.NotExist {
 			return fmt.Errorf("failed to get default route: %v", err)
 		}
