@@ -27,8 +27,8 @@ type NetworkMode string
 
 const (
 	NetworkModeBGP   = NetworkMode("BGP")
-	NetworkModeVlan  = NetworkMode("Vlan")
-	NetworkModeVxlan = NetworkMode("Vxlan")
+	NetworkModeVlan  = NetworkMode("VLAN")
+	NetworkModeVxlan = NetworkMode("VXLAN")
 )
 
 type Count struct {

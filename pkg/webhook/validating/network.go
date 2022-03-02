@@ -51,7 +51,9 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
 	}
 
-	switch networkingv1.GetNetworkType(network) {
+	networkType := networkingv1.GetNetworkType(network)
+
+	switch networkType {
 	case networkingv1.NetworkTypeUnderlay:
 		if network.Spec.NodeSelector == nil || len(network.Spec.NodeSelector) == 0 {
 			return webhookutils.AdmissionDeniedWithLog("must have node selector for underlay network", logger)
@@ -97,8 +99,18 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 				return admission.Denied(fmt.Sprintf("invalid bgp peer ip address %v", peer.Address))
 			}
 		}
+
+		if networkType != networkingv1.NetworkTypeUnderlay {
+			return admission.Denied("BGP mode can only be used for underlay network")
+		}
 	case networkingv1.NetworkModeVlan:
+		if networkType != networkingv1.NetworkTypeUnderlay {
+			return admission.Denied("VLAN mode can only be used for underlay network")
+		}
 	case networkingv1.NetworkModeVxlan:
+		if networkType != networkingv1.NetworkTypeOverlay {
+			return admission.Denied("VXLAN mode can only be used for overlay network")
+		}
 	default:
 		return admission.Denied(fmt.Sprintf("unknown network mode %s", networkingv1.GetNetworkMode(network)))
 	}
