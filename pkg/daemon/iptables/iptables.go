@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+	"github.com/alibaba/hybridnet/pkg/constants"
 
 	"github.com/alibaba/hybridnet/pkg/daemon/ipset"
 	extraliptables "github.com/coreos/go-iptables/iptables"
@@ -381,7 +381,7 @@ func generateMasqueradeRuleSpec(vxlanIf string, protocol Protocol) []string {
 
 func generateSkipMasqueradeRuleSpec() []string {
 	return []string{"-A", ChainHybridnetPostRouting, "-m", "comment", "--comment", `"skip masquerade if traffic is to local pod"`,
-		"-o", containernetwork.ContainerHostLinkPrefix + "+", "-j", "RETURN"}
+		"-o", constants.ContainerHostLinkPrefix + "+", "-j", "RETURN"}
 }
 
 // TODO: update logic, need to be removed further

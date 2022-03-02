@@ -26,6 +26,8 @@ import (
 	"syscall"
 	"time"
 
+	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
+
 	"github.com/alibaba/hybridnet/pkg/utils"
 
 	"github.com/go-logr/logr"
@@ -231,6 +233,10 @@ func (c *CtrlHub) GetMgrClient() client.Client {
 
 func (c *CtrlHub) GetMgrAPIReader() client.Reader {
 	return c.mgr.GetAPIReader()
+}
+
+func (c *CtrlHub) GetBGPManager() *bgp.Manager {
+	return c.bgpManager
 }
 
 func (c *CtrlHub) setupSubnetController() error {
@@ -535,7 +541,7 @@ func (c *CtrlHub) handleLocalNetworkDeviceEvent() error {
 			for {
 				select {
 				case update := <-addrCh:
-					if containernetwork.CheckIPIsGlobalUnicast(update.LinkAddress.IP) {
+					if daemonutils.CheckIPIsGlobalUnicast(update.LinkAddress.IP) {
 						// Create event to update node configuration.
 						c.nodeControllerTriggerSource.Trigger()
 					}
@@ -674,7 +680,7 @@ func (c *CtrlHub) handleVxlanInterfaceNeighEvent() error {
 							continue
 						}
 
-						if strings.Contains(link.Attrs().Name, containernetwork.VxlanLinkInfix) {
+						if strings.Contains(link.Attrs().Name, constants.VxlanLinkInfix) {
 							go ipSearchExecWrapper(update.IP, link)
 						}
 					}
@@ -707,7 +713,7 @@ func (c *CtrlHub) iptablesSyncLoop() {
 			case networkingv1.NetworkModeVxlan:
 				netID := network.Spec.NetID
 
-				overlayIfName, err := containernetwork.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
+				overlayIfName, err := daemonutils.GenerateVxlanNetIfName(c.config.NodeVxlanIfName, netID)
 				if err != nil {
 					return fmt.Errorf("failed to generate vxlan forward node if name: %v", err)
 				}
@@ -857,7 +863,7 @@ func (c *CtrlHub) iptablesSyncLoop() {
 			return fmt.Errorf("failed to sync v4 iptables rule: %v", err)
 		}
 
-		globalDisabled, err := containernetwork.CheckIPv6GlobalDisabled()
+		globalDisabled, err := daemonutils.CheckIPv6GlobalDisabled()
 		if err != nil {
 			return fmt.Errorf("failed to check ipv6 global disabled: %v", err)
 		}
@@ -938,13 +944,13 @@ func clearVxlanExpiredNeighCaches() error {
 	}
 
 	for _, link := range linkList {
-		if strings.Contains(link.Attrs().Name, containernetwork.VxlanLinkInfix) {
+		if strings.Contains(link.Attrs().Name, constants.VxlanLinkInfix) {
 			if err := neigh.ClearStaleAddFailedNeighEntries(link.Attrs().Index, netlink.FAMILY_V4); err != nil {
 				return fmt.Errorf("failed to clear v4 expired neigh entries for link %v: %v",
 					link.Attrs().Name, err)
 			}
 
-			ipv6Disabled, err := containernetwork.CheckIPv6Disabled(link.Attrs().Name)
+			ipv6Disabled, err := daemonutils.CheckIPv6Disabled(link.Attrs().Name)
 			if err != nil {
 				return fmt.Errorf("failed to check ipv6 disables for link %v: %v", link.Attrs().Name, err)
 			}

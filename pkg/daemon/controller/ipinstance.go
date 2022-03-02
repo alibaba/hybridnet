@@ -70,7 +70,7 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 		switch networkingv1.GetNetworkMode(&network) {
 		case networkingv1.NetworkModeVxlan:
 			netID := network.Spec.NetID
-			overlayForwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
+			overlayForwardNodeIfName, err = daemonutils.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
 			if err != nil {
 				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan forward node if name: %v", err)
 			}
@@ -134,7 +134,7 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 		var forwardNodeIfName string
 		switch networkingv1.GetNetworkMode(network) {
 		case networkingv1.NetworkModeVlan:
-			forwardNodeIfName, err = containernetwork.GenerateVlanNetIfName(r.ctrlHubRef.config.NodeVlanIfName, netID)
+			forwardNodeIfName, err = daemonutils.GenerateVlanNetIfName(r.ctrlHubRef.config.NodeVlanIfName, netID)
 			if err != nil {
 				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vlan forward node interface name: %v", err)
 			}
@@ -143,7 +143,7 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 				r.ctrlHubRef.addrV4Manager.TryAddPodInfo(forwardNodeIfName, subnetCidr, podIP)
 			}
 		case networkingv1.NetworkModeVxlan:
-			forwardNodeIfName, err = containernetwork.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
+			forwardNodeIfName, err = daemonutils.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
 			if err != nil {
 				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan forward node interface name: %v", err)
 			}
@@ -170,7 +170,7 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv4 neighs: %v", err)
 	}
 
-	globalDisabled, err := containernetwork.CheckIPv6GlobalDisabled()
+	globalDisabled, err := daemonutils.CheckIPv6GlobalDisabled()
 	if err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to check ipv6 global disabled: %v", err)
 	}
@@ -199,13 +199,13 @@ func ensureExistPodConfigs(localDirectTableNum int, logger logr.Logger) error {
 	var netnsPaths []string
 	var netnsDir string
 
-	if daemonutils.ValidDockerNetnsDir(containernetwork.DockerNetnsDir) {
-		netnsDir = containernetwork.DockerNetnsDir
+	if daemonutils.ValidDockerNetnsDir(constants.DockerNetnsDir) {
+		netnsDir = constants.DockerNetnsDir
 	} else {
 		logger.Info("docker netns path not exist, try containerd netns path",
-			"docker-netns-path", containernetwork.DockerNetnsDir,
-			"containerd-netns-path", containernetwork.ContainerdNetnsDir)
-		netnsDir = containernetwork.ContainerdNetnsDir
+			"docker-netns-path", constants.DockerNetnsDir,
+			"containerd-netns-path", constants.ContainerdNetnsDir)
+		netnsDir = constants.ContainerdNetnsDir
 	}
 
 	files, err := ioutil.ReadDir(netnsDir)
@@ -226,7 +226,7 @@ func ensureExistPodConfigs(localDirectTableNum int, logger logr.Logger) error {
 	logger.Info("load exist netns", "netns-path", netnsPaths)
 
 	var hostLinkIndex int
-	allocatedIPs := map[networkingv1.IPVersion]*containernetwork.IPInfo{}
+	allocatedIPs := map[networkingv1.IPVersion]*daemonutils.IPInfo{}
 
 	for _, netns := range netnsPaths {
 		nsHandler, err := ns.GetNS(netns)
@@ -235,7 +235,7 @@ func ensureExistPodConfigs(localDirectTableNum int, logger logr.Logger) error {
 		}
 
 		err = nsHandler.Do(func(netNS ns.NetNS) error {
-			link, err := netlink.LinkByName(containernetwork.ContainerNicName)
+			link, err := netlink.LinkByName(constants.ContainerNicName)
 			if err != nil {
 				return fmt.Errorf("get container interface error: %v", err)
 			}
@@ -249,7 +249,7 @@ func ensureExistPodConfigs(localDirectTableNum int, logger logr.Logger) error {
 			if len(v4Addrs) == 0 {
 				allocatedIPs[networkingv1.IPv4] = nil
 			} else {
-				defaultRoute, err := containernetwork.GetDefaultRoute(netlink.FAMILY_V4)
+				defaultRoute, err := daemonutils.GetDefaultRoute(netlink.FAMILY_V4)
 				if err != nil {
 					return fmt.Errorf("failed to get ipv4 default route: %v", err)
 				}
@@ -257,7 +257,7 @@ func ensureExistPodConfigs(localDirectTableNum int, logger logr.Logger) error {
 			}
 
 			for _, addr := range v4Addrs {
-				allocatedIPs[networkingv1.IPv4] = &containernetwork.IPInfo{
+				allocatedIPs[networkingv1.IPv4] = &daemonutils.IPInfo{
 					Addr: addr.IP,
 					Gw:   v4GatewayIP,
 				}
@@ -272,7 +272,7 @@ func ensureExistPodConfigs(localDirectTableNum int, logger logr.Logger) error {
 			if len(v6Addrs) == 0 {
 				allocatedIPs[networkingv1.IPv6] = nil
 			} else {
-				defaultRoute, err := containernetwork.GetDefaultRoute(netlink.FAMILY_V6)
+				defaultRoute, err := daemonutils.GetDefaultRoute(netlink.FAMILY_V6)
 				if err != nil {
 					return fmt.Errorf("failed to get ipv6 default route: %v", err)
 				}
@@ -280,13 +280,13 @@ func ensureExistPodConfigs(localDirectTableNum int, logger logr.Logger) error {
 			}
 
 			for _, addr := range v6Addrs {
-				allocatedIPs[networkingv1.IPv6] = &containernetwork.IPInfo{
+				allocatedIPs[networkingv1.IPv6] = &daemonutils.IPInfo{
 					Addr: addr.IP,
 					Gw:   v6GatewayIP,
 				}
 			}
 
-			_, hostLinkIndex, err = ip.GetVethPeerIfindex(containernetwork.ContainerNicName)
+			_, hostLinkIndex, err = ip.GetVethPeerIfindex(constants.ContainerNicName)
 			if err != nil {
 				return fmt.Errorf("get host link index error: %v", err)
 			}

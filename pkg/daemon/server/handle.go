@@ -23,6 +23,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alibaba/hybridnet/pkg/daemon/utils"
+
+	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
+
 	"github.com/go-logr/logr"
 
 	corev1 "k8s.io/api/core/v1"
@@ -34,7 +38,6 @@ import (
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/alibaba/hybridnet/pkg/daemon/controller"
 	"github.com/alibaba/hybridnet/pkg/request"
 
@@ -45,6 +48,7 @@ type cniDaemonHandler struct {
 	config       *daemonconfig.Configuration
 	mgrClient    client.Client
 	mgrAPIReader client.Reader
+	bgpManager   *bgp.Manager
 
 	logger logr.Logger
 }
@@ -55,6 +59,7 @@ func createCniDaemonHandler(ctx context.Context, config *daemonconfig.Configurat
 		config:       config,
 		mgrClient:    ctrlRef.GetMgrClient(),
 		mgrAPIReader: ctrlRef.GetMgrAPIReader(),
+		bgpManager:   ctrlRef.GetBGPManager(),
 		logger:       logger,
 	}
 
@@ -79,7 +84,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	var netID *int32
 	var affectedIPInstances []*networkingv1.IPInstance
 
-	allocatedIPs := map[networkingv1.IPVersion]*containernetwork.IPInfo{
+	allocatedIPs := map[networkingv1.IPVersion]*utils.IPInfo{
 		networkingv1.IPv4: nil,
 		networkingv1.IPv6: nil,
 	}
@@ -160,7 +165,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 					return
 				}
 
-				allocatedIPs[networkingv1.IPv4] = &containernetwork.IPInfo{
+				allocatedIPs[networkingv1.IPv4] = &utils.IPInfo{
 					Addr: containerIP,
 					Gw:   gatewayIP,
 					Cidr: cidrNet,
@@ -172,7 +177,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 					return
 				}
 
-				allocatedIPs[networkingv1.IPv6] = &containernetwork.IPInfo{
+				allocatedIPs[networkingv1.IPv6] = &utils.IPInfo{
 					Addr: containerIP,
 					Gw:   gatewayIP,
 					Cidr: cidrNet,
@@ -291,7 +296,7 @@ func (cdh *cniDaemonHandler) errorWrapper(err error, status int, resp *restful.R
 	})
 }
 
-func printAllocatedIPs(allocatedIPs map[networkingv1.IPVersion]*containernetwork.IPInfo) string {
+func printAllocatedIPs(allocatedIPs map[networkingv1.IPVersion]*utils.IPInfo) string {
 	ipAddresseString := ""
 	if allocatedIPs[networkingv1.IPv4] != nil && allocatedIPs[networkingv1.IPv4].Addr != nil {
 		ipAddresseString = ipAddresseString + allocatedIPs[networkingv1.IPv4].Addr.String()

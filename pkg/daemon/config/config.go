@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 	"github.com/alibaba/hybridnet/pkg/utils"
 
@@ -172,12 +171,12 @@ func ParseFlags() (*Configuration, error) {
 }
 
 func (config *Configuration) initNicConfig() error {
-	defaultGatewayIf, err := containernetwork.GetDefaultInterface(netlink.FAMILY_V4)
+	defaultGatewayIf, err := daemonutils.GetDefaultInterface(netlink.FAMILY_V4)
 	if err != nil && err != daemonutils.NotExist {
 		return fmt.Errorf("failed to get ipv4 default gateway interface: %v", err)
 	} else if err == daemonutils.NotExist {
 		// IPv4 default gateway interface not found, check IPv6.
-		defaultGatewayIf, err = containernetwork.GetDefaultInterface(netlink.FAMILY_V6)
+		defaultGatewayIf, err = daemonutils.GetDefaultInterface(netlink.FAMILY_V6)
 		if err != nil && err != daemonutils.NotExist {
 			return fmt.Errorf("failed to get ipv6 default gateway interface: %v", err)
 		}
@@ -192,21 +191,21 @@ func (config *Configuration) initNicConfig() error {
 	config.NodeVxlanIfName = utils.PickFirstNonEmptyString(config.NodeVxlanIfName, defaultGatewayIf.Name)
 	config.NodeBGPIfName = utils.PickFirstNonEmptyString(config.NodeBGPIfName, defaultGatewayIf.Name)
 
-	vlanNodeInterface, err := containernetwork.GetInterfaceByPreferString(config.NodeVlanIfName)
+	vlanNodeInterface, err := daemonutils.GetInterfaceByPreferString(config.NodeVlanIfName)
 	if err != nil {
 		return fmt.Errorf("failed to get vlan node interface: %v", err)
 	}
 	// To update prefer result interface.
 	config.NodeVlanIfName = vlanNodeInterface.Name
 
-	vxlanNodeInterface, err := containernetwork.GetInterfaceByPreferString(config.NodeVxlanIfName)
+	vxlanNodeInterface, err := daemonutils.GetInterfaceByPreferString(config.NodeVxlanIfName)
 	if err != nil {
 		return fmt.Errorf("failed to get vxlan node interface: %v", err)
 	}
 	// To update prefer result interface.
 	config.NodeVxlanIfName = vxlanNodeInterface.Name
 
-	bgpNodeInterface, err := containernetwork.GetInterfaceByPreferString(config.NodeBGPIfName)
+	bgpNodeInterface, err := daemonutils.GetInterfaceByPreferString(config.NodeBGPIfName)
 	if err != nil {
 		return fmt.Errorf("failed to get vxlan node interface: %v", err)
 	}

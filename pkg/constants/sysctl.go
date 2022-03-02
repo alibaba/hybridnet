@@ -14,18 +14,9 @@
  limitations under the License.
 */
 
-package containernetwork
+package constants
 
 const (
-	DockerNetnsDir     = "/var/run/docker/netns"
-	ContainerdNetnsDir = "/var/run/netns/"
-
-	ContainerHostLinkPrefix = "hybr"
-	ContainerHostLinkMac    = "ee:ee:ee:ee:ee:ee"
-	ContainerInitLinkSuffix = "_c"
-	VxlanLinkInfix          = ".vxlan"
-	ContainerNicName        = "eth0"
-
 	ProxyArpSysctl       = "/proc/sys/net/ipv4/conf/%s/proxy_arp"
 	ProxyDelaySysctl     = "/proc/sys/net/ipv4/neigh/%s/proxy_delay"
 	RouteLocalNetSysctl  = "/proc/sys/net/ipv4/conf/%s/route_localnet"
@@ -55,10 +46,4 @@ const (
 
 	IPv6DisableModuleParameter = "/sys/module/ipv6/parameters/disable"
 	IPv6DisableSysctl          = "/proc/sys/net/ipv6/conf/%s/disable_ipv6"
-
-	DefaultIP4Mask = "255.255.255.255"
-	DefaultIP6Mask = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"
-
-	PodVirtualV4DefaultGateway = "169.254.1.1"
-	PodVirtualV6DefaultGateway = "fe80::ecee:eeff:feee:eeee"
 )
