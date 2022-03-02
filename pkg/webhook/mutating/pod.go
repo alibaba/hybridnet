@@ -103,7 +103,7 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 	// priority level 1
 	// if stateful pods have allocated ips and no need to be reallocated, just
 	// reuse the existing network
-	if strategy.OwnByStatelessWorkload(pod) {
+	if strategy.OwnByStatefulWorkload(pod) {
 		var shouldReuse = utils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], strategy.DefaultIPRetain)
 		if shouldReuse {
 			ipList := &networkingv1.IPInstanceList{}
