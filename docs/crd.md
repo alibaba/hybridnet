@@ -8,14 +8,14 @@ a three-tier model:
 ## Network
 
 A Network in Hybridnet is a "Pod Scheduling Domain", which refer to a series of Kubernetes Nodes with the same network
-properties (e.g., attached to the same vlan, downlink of the same ASW). It means if a pod with a specific ip can be
+properties (e.g., attached to the same VLAN, downlink of the same ASW). It means if a pod with a specific ip can be
 scheduled to Node *A*, it can be scheduled to any Node belongs to the same Network with Node *A*.
 
 Network is extremely important if you need an underlay container network, as taking care of Node's network environment
-is always needed. For Hybridnet, which only provides a vlan type container network for now, a Network usually refers to a
-series of Nodes with the same ASW or TOR. A Node can only exist in one underlay Network at the same time.
+is always needed. Hybridnet provides both BGP and VLAN mode underlay container networks now, a Network usually refers
+to a series of Nodes with the same ASW or TOR. A Node can only exist in one Underlay type Network at the same time.
 
-Here is a yaml of a Network CR for underlay container network:
+Here is a yaml of a Network CR for underlay VLAN container network:
 
 ```yaml
 apiVersion: networking.alibaba.com/v1
@@ -24,20 +24,44 @@ metadata:
   name: network1
 spec:
   netID: 0                      # Optional.
-                                # For Underlay type, netID refers to vlan id and can be empty.
+                                # For Underlay VLAN network, netID refers to VLAN id and can be empty.
                                 # If netID is empty, it means the subnets belong to this 
                                 # network can have any netID but not empty. 
                                 # If netID is not empty, all the subnets belong to this network
                                 # can only has an empty or the same netID. 
                                 
-  type: Underlay                # Required. Underlay or Overlay
+  type: Underlay                # Required. Underlay or Overlay.
+  mode: VLAN                    # Optional. VLAN is the default mode for Underlay network.
   
   nodeSelector:                 # Required only for underlay Network.
-    network: "s1"               # Label to select target Nodes, which means every node blongs to 
+    network: "s1"               # Label to select target Nodes, which means every node belongs to 
                                 # this network should be patched with this label.
 ```
 
-But if you just need a overlay container network, things get easier. Because we don't even care about how the Node's
+A BGP underlay network should be like this:
+```yaml
+---
+apiVersion: networking.alibaba.com/v1
+kind: Network
+metadata:
+  name: network1
+spec:
+  nodeSelector:
+    network: network1
+  type: Underlay
+  mode: BGP                     # Required.
+  netID: 100                    # Required.
+                                # For Underlay BGP network, netID refers to the AS number used by hybridnet
+                                # nodes which belongs to this network.
+  config:
+    bgpPeers:                         # Required. Only one BGP peer is supported now.
+      - asn: 200                      # Required. The AS number for remote BGP peer.
+        address: 192.168.56.254       # Required. The IP address for remote BGP peer.
+        gracefulRestartSeconds: 600   # Optional.
+        password: "12345"             # Optional.
+```
+
+If you just need an overlay container network, things get easier. Because we don't even care about how the Node's
 network going on, every node seems to get the same network properties. For such an overlay Network, every Node of the
 Kubernetes cluster will be added to it automatically, and you don't need to configure it like applying an underlay
 Network.
@@ -82,7 +106,7 @@ spec:
   network: network1                                   # Required. The Network which this Subnet belongs to.
                                
   netID: 0                                            # Optional. Depends on the Network's configuration.
-                                                      # If the Network's netID is emply, it should not be empty.
+                                                      # If the Network's netID is empty, it should not be empty.
                                                       # If the Network's netID is not empty, it can only be
                                                       # empty or the same netID of Network.
                                                       # For an Overlay Network, this field must be empty.
@@ -93,7 +117,7 @@ spec:
     cidr: "192.168.56.0/24"                           # Required.
     
     gateway: "192.168.56.1"                           # Optional. 
-                                                      # For Underlay vlan Network, it refers to ASW gateway ip.
+                                                      # For Underlay VLAN Network, it refers to ASW gateway ip.
                                                       # Gateway address will never be allocated to pods.
                                 
     start: "192.168.56.100"                           # Optional. The first usable ip of cidr.

@@ -1,0 +1,28 @@
+---
+apiVersion: networking.alibaba.com/v1
+kind: Network
+metadata:
+  name: underlay-network1
+spec:
+  nodeSelector:
+    network: network1
+  type: Underlay
+  mode: BGP
+  netID: 100
+  config:
+    bgpPeers:
+      - asn: 200
+        address: 192.168.56.254
+        gracefulRestartSeconds: 600
+        password: "12345"
+
+---
+apiVersion: networking.alibaba.com/v1
+kind: Subnet
+metadata:
+  name: underlay-subnet1
+spec:
+  network: underlay-network1
+  range:
+    version: "4"
+    cidr: "69.57.56.0/24"
