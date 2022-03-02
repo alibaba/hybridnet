@@ -266,16 +266,8 @@ func (m *Manager) SyncSubnetInfos() error {
 
 	// Sync subnet paths.
 	existSubnetPathMap := map[string]*net.IPNet{}
-	listPathFunc := generatePathListFunc(existSubnetPathMap, nil, m.logger)
-
-	if err := m.bgpServer.ListPath(context.Background(),
-		&api.ListPathRequest{Family: v4Family}, listPathFunc); err != nil {
-		return fmt.Errorf("failed to list ipv4 path: %v", err)
-	}
-
-	if err := m.bgpServer.ListPath(context.Background(),
-		&api.ListPathRequest{Family: v6Family}, listPathFunc); err != nil {
-		return fmt.Errorf("failed to list ipv6 path: %v", err)
+	if err := m.listExistPath(existSubnetPathMap, nil); err != nil {
+		return fmt.Errorf("failed to list exist subnet paths: %v", err)
 	}
 
 	// Ensure paths for subnets
@@ -331,11 +323,8 @@ func (m *Manager) SyncIPInfos() error {
 	}
 
 	existIPPathMap := map[string]net.IP{}
-	listPathFunc := generatePathListFunc(nil, existIPPathMap, m.logger)
-
-	if err := m.bgpServer.ListPath(context.Background(),
-		&api.ListPathRequest{Family: v4Family}, listPathFunc); err != nil {
-		return fmt.Errorf("failed to list ipv4 path: %v", err)
+	if err := m.listExistPath(nil, existIPPathMap); err != nil {
+		return fmt.Errorf("failed to list exist ip paths: %v", err)
 	}
 
 	// Ensure paths for ip instances
@@ -376,6 +365,16 @@ func (m *Manager) SyncIPInfos() error {
 	return nil
 }
 
+func (m *Manager) CheckIfIPInfoPathAdded(ipAddr net.IP) (bool, error) {
+	existIPPathMap := map[string]net.IP{}
+	if err := m.listExistPath(nil, existIPPathMap); err != nil {
+		return false, fmt.Errorf("failed to list exist ip paths: %v", err)
+	}
+
+	_, exist := existIPPathMap[ipAddr.String()]
+	return exist, nil
+}
+
 func (m *Manager) getNextHopAddressByIP(ipAddr net.IP) (net.IP, error) {
 	if ipAddr.To4() == nil {
 		if m.routerV6Address == nil {
@@ -388,4 +387,17 @@ func (m *Manager) getNextHopAddressByIP(ipAddr net.IP) (net.IP, error) {
 		return nil, fmt.Errorf("router has no valid v4 nexthop address")
 	}
 	return m.routerV4Address, nil
+}
+
+func (m *Manager) listExistPath(existSubnetPathMap map[string]*net.IPNet, existIPPathMap map[string]net.IP) error {
+	listPathFunc := generatePathListFunc(existSubnetPathMap, existIPPathMap, m.logger)
+	if err := m.bgpServer.ListPath(context.Background(),
+		&api.ListPathRequest{Family: v4Family}, listPathFunc); err != nil {
+		return fmt.Errorf("failed to list ipv4 path: %v", err)
+	}
+	if err := m.bgpServer.ListPath(context.Background(),
+		&api.ListPathRequest{Family: v6Family}, listPathFunc); err != nil {
+		return fmt.Errorf("failed to list ipv6 path: %v", err)
+	}
+	return nil
 }

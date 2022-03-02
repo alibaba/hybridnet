@@ -27,6 +27,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/constants"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 	"github.com/vishvananda/netlink"
 )
@@ -114,7 +115,7 @@ func EnsureRpFilterConfigs(containerHostIf string) error {
 }
 
 func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex int, family int,
-	networkMode networkingv1.NetworkMode) error {
+	networkMode networkingv1.NetworkMode, bgpManager *bgp.Manager) error {
 
 	backOffBase := 100 * time.Microsecond
 	retries := 5
@@ -153,6 +154,8 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 			}
 
 			defaultRouteExist := false
+			bgpPathExist := false
+
 			if ruleExist {
 				defaultRouteExist, err = daemonutils.CheckDefaultRouteExist(table, family)
 				if err != nil {
@@ -160,8 +163,14 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 				}
 
 				if defaultRouteExist {
-					// ready
-					return nil
+					if bgpPathExist, err = bgpManager.CheckIfIPInfoPathAdded(podIP); err != nil {
+						return fmt.Errorf("failed to check bgp path for pod ip %v: %v", podIP.String(), err)
+					}
+
+					if bgpPathExist {
+						// ready
+						return nil
+					}
 				}
 			}
 
@@ -172,6 +181,10 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 
 				if !defaultRouteExist {
 					return fmt.Errorf("default route for %v is not created, waiting for daemon to create it", podCidr)
+				}
+
+				if !bgpPathExist {
+					return fmt.Errorf("bgp path for pod ip %v ist not added, waiting for daemon to add it", podIP)
 				}
 			}
 		default:

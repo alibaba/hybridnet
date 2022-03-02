@@ -235,6 +235,10 @@ func (c *CtrlHub) GetMgrAPIReader() client.Reader {
 	return c.mgr.GetAPIReader()
 }
 
+func (c *CtrlHub) GetBGPManager() *bgp.Manager {
+	return c.bgpManager
+}
+
 func (c *CtrlHub) setupSubnetController() error {
 	subnetController, err := controller.New("subnet", c.mgr, controller.Options{
 		Reconciler: &subnetReconciler{

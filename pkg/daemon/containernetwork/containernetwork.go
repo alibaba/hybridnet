@@ -21,8 +21,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/alibaba/hybridnet/pkg/constants"
-
 	"github.com/containernetworking/plugins/pkg/ns"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
@@ -31,7 +29,9 @@ import (
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/vishvananda/netlink"
 
+	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/arp"
+	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
 	"github.com/alibaba/hybridnet/pkg/daemon/ndp"
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 )
@@ -155,7 +155,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*d
 
 func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, allocatedIPs map[networkingv1.IPVersion]*daemonutils.IPInfo,
 	macAddr net.HardwareAddr, netID *int32, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration,
-	networkMode networkingv1.NetworkMode, neighGCThresh1, neighGCThresh2, neighGCThresh3 int) error {
+	networkMode networkingv1.NetworkMode, neighGCThresh1, neighGCThresh2, neighGCThresh3 int, bgpManager *bgp.Manager) error {
 
 	var defaultRouteNets []*types.Route
 	var ipConfigs []*current.IPConfig
@@ -228,7 +228,8 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 			}
 		}
 
-		if err := checkPodNetConfigReady(podIP, podCidr, forwardNodeIf.Index, netlink.FAMILY_V4, networkMode); err != nil {
+		if err := checkPodNetConfigReady(podIP, podCidr, forwardNodeIf.Index, netlink.FAMILY_V4,
+			networkMode, bgpManager); err != nil {
 			return fmt.Errorf("failed to check pod ip %v network configuration: %v", podIP, err)
 		}
 	}
@@ -273,7 +274,8 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 			}
 		}
 
-		if err := checkPodNetConfigReady(podIP, podCidr, forwardNodeIf.Index, netlink.FAMILY_V6, networkMode); err != nil {
+		if err := checkPodNetConfigReady(podIP, podCidr, forwardNodeIf.Index, netlink.FAMILY_V6,
+			networkMode, bgpManager); err != nil {
 			return fmt.Errorf("failed to check pod ip %v network configuration: %v", podIP, err)
 		}
 	}

@@ -25,6 +25,8 @@ import (
 
 	"github.com/alibaba/hybridnet/pkg/daemon/utils"
 
+	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
+
 	"github.com/go-logr/logr"
 
 	corev1 "k8s.io/api/core/v1"
@@ -46,6 +48,7 @@ type cniDaemonHandler struct {
 	config       *daemonconfig.Configuration
 	mgrClient    client.Client
 	mgrAPIReader client.Reader
+	bgpManager   *bgp.Manager
 
 	logger logr.Logger
 }
@@ -56,6 +59,7 @@ func createCniDaemonHandler(ctx context.Context, config *daemonconfig.Configurat
 		config:       config,
 		mgrClient:    ctrlRef.GetMgrClient(),
 		mgrAPIReader: ctrlRef.GetMgrAPIReader(),
+		bgpManager:   ctrlRef.GetBGPManager(),
 		logger:       logger,
 	}
 
