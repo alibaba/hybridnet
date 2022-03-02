@@ -85,12 +85,16 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 
 	switch networkingv1.GetNetworkMode(network) {
 	case networkingv1.NetworkModeBGP:
+		if networkType != networkingv1.NetworkTypeUnderlay {
+			return admission.Denied("BGP mode can only be used for underlay network")
+		}
+
 		// check net id
 		if network.Spec.NetID == nil {
 			return admission.Denied("must assign net ID for bgp network")
 		}
 
-		if len(network.Spec.Config.BGPPeers) != 1 {
+		if network.Spec.Config == nil || len(network.Spec.Config.BGPPeers) != 1 {
 			return admission.Denied("one and only one bgp router need to be set")
 		}
 
@@ -98,10 +102,10 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 			if net.ParseIP(peer.Address) == nil {
 				return admission.Denied(fmt.Sprintf("invalid bgp peer ip address %v", peer.Address))
 			}
-		}
 
-		if networkType != networkingv1.NetworkTypeUnderlay {
-			return admission.Denied("BGP mode can only be used for underlay network")
+			if peer.ASN == 0 {
+				return admission.Denied(fmt.Sprintf("bgp peer %v's AS number need to be set", peer.Address))
+			}
 		}
 	case networkingv1.NetworkModeVlan:
 		if networkType != networkingv1.NetworkTypeUnderlay {
