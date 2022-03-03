@@ -223,11 +223,10 @@ func (m *Manager) SyncPeerInfos() error {
 	// Sync peers configuration.
 	// Because now UpdatePeer will reset bgp session causing a network fluctuation, we will never update an exist bgp peer.
 	existPeerMap := map[string]struct{}{}
-	if err := m.bgpServer.ListPeer(context.Background(), &api.ListPeerRequest{EnableAdvertised: true},
-		func(peer *api.Peer) {
-			existPeerMap[peer.Conf.NeighborAddress] = struct{}{}
-		}); err != nil {
-		return fmt.Errorf("failed to list bgp peers: %v", err)
+	if err := m.listRemoteBGPPeers(existPeerMap, func(peer *api.Peer) bool {
+		return true
+	}); err != nil {
+		return fmt.Errorf("failed to list all bgp peers: %v", err)
 	}
 
 	// Don't do any thing if local AS number has not been set.
@@ -375,6 +374,20 @@ func (m *Manager) CheckIfIPInfoPathAdded(ipAddr net.IP) (bool, error) {
 	return exist, nil
 }
 
+func (m *Manager) CheckEstablishedRemotePeerExists() (bool, error) {
+	establishedPeerMap := map[string]struct{}{}
+	if err := m.listRemoteBGPPeers(establishedPeerMap, func(peer *api.Peer) bool {
+		return peer.State.SessionState == api.PeerState_ESTABLISHED
+	}); err != nil {
+		return false, fmt.Errorf("failed to list all the established bgp peers: %v", err)
+	}
+
+	if len(establishedPeerMap) == 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
 func (m *Manager) getNextHopAddressByIP(ipAddr net.IP) (net.IP, error) {
 	if ipAddr.To4() == nil {
 		if m.routerV6Address == nil {
@@ -398,6 +411,18 @@ func (m *Manager) listExistPath(existSubnetPathMap map[string]*net.IPNet, existI
 	if err := m.bgpServer.ListPath(context.Background(),
 		&api.ListPathRequest{Family: v6Family}, listPathFunc); err != nil {
 		return fmt.Errorf("failed to list ipv6 path: %v", err)
+	}
+	return nil
+}
+
+func (m *Manager) listRemoteBGPPeers(existPeerMap map[string]struct{}, filterFunc func(peer *api.Peer) bool) error {
+	if err := m.bgpServer.ListPeer(context.Background(), &api.ListPeerRequest{EnableAdvertised: true},
+		func(peer *api.Peer) {
+			if filterFunc(peer) {
+				existPeerMap[peer.Conf.NeighborAddress] = struct{}{}
+			}
+		}); err != nil {
+		return fmt.Errorf("failed to list bgp peers: %v", err)
 	}
 	return nil
 }

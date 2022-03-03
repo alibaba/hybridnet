@@ -63,7 +63,7 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 	}
 
 	if err = containernetwork.ConfigureHostNic(hostNicName, allocatedIPs, cdh.config.LocalDirectTableNum); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to configure host nic for %v.%v: %v", podName, podNamespace, err)
 	}
 
 	if err = containernetwork.ConfigureContainerNic(containerNicName, hostNicName, nodeIfName,
@@ -122,8 +122,9 @@ func initContainerNic(podName, podNamespace, netns string, mtu int) (string, str
 
 	hostNS, err := ns.GetCurrentNS()
 	if err != nil {
-		return "", "", nil, fmt.Errorf("failed to open current namespace: %v", err)
+		return "", "", nil, fmt.Errorf("failed to get host namespace: %v", err)
 	}
+	defer hostNS.Close()
 
 	hostNicName, containerNicName := containernetwork.GenerateContainerVethPair(podNamespace, podName)
 
@@ -145,7 +146,7 @@ func initContainerNic(podName, podNamespace, netns string, mtu int) (string, str
 		}
 
 		if err = netlink.LinkSetNsFd(containerHostLink, int(hostNS.Fd())); err != nil {
-			return fmt.Errorf("failed to link netns %v", err)
+			return fmt.Errorf("failed to set link to host netns: %v", err)
 		}
 
 		return nil
