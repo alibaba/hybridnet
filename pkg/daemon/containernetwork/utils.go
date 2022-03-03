@@ -154,24 +154,25 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 			}
 
 			defaultRouteExist := false
-			bgpPathExist := false
-
 			if ruleExist {
 				defaultRouteExist, err = daemonutils.CheckDefaultRouteExist(table, family)
 				if err != nil {
 					return fmt.Errorf("failed to check cidr %v default route exist: %v", podCidr, err)
 				}
+			}
 
-				if defaultRouteExist {
-					if bgpPathExist, err = bgpManager.CheckIfIPInfoPathAdded(podIP); err != nil {
-						return fmt.Errorf("failed to check bgp path for pod ip %v: %v", podIP.String(), err)
-					}
+			bgpPathExist, err := bgpManager.CheckIfIPInfoPathAdded(podIP)
+			if err != nil {
+				return fmt.Errorf("failed to check bgp path for pod ip %v: %v", podIP.String(), err)
+			}
+			establishedPeerExists, err := bgpManager.CheckEstablishedRemotePeerExists()
+			if err != nil {
+				return fmt.Errorf("failed to check established peer eixst: %v", err)
+			}
 
-					if bgpPathExist {
-						// ready
-						return nil
-					}
-				}
+			if ruleExist && defaultRouteExist && bgpPathExist && establishedPeerExists {
+				// ready
+				return nil
 			}
 
 			if i == retries-1 {
@@ -185,6 +186,10 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 
 				if !bgpPathExist {
 					return fmt.Errorf("bgp path for pod ip %v ist not added, waiting for daemon to add it", podIP)
+				}
+
+				if !establishedPeerExists {
+					return fmt.Errorf("none of the remote bgp peers is established, no bgp pod will be running")
 				}
 			}
 		default:
