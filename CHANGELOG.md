@@ -76,3 +76,20 @@ All notable changes to this project will be documented in this file.
 ### Fixed Issues
 - Fix ipv6 address range calculation error
 - Fix nil point dereference error while creating a vlan interface
+
+## v0.4.0
+### New features
+- Support BGP mode for an Underlay type Network
+- Support specifying namespace with network/subnet/network-type/ip-family
+- Introduce Felix for NetworkPolicy
+
+### Improvements
+- Refactor daemon/manager/webhook with controller-runtime
+- Deny the creation of /32 or /128 Subnets in webhook
+- Only IPv4 feature valid if DualStack feature-gate is false
+- Specify subnet without a specified Network
+- Gateway field becomes optional for VXLAN/BGP Subnets
+
+### Fixed Issues
+- Fix specifying subnets error for DualStack pod
+- Fix updating failure of nodes' vxlan fdb for a new node
