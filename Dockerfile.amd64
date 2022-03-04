@@ -53,10 +53,7 @@ RUN cd /go/src/github.com/projectcalico/felix && \
     -X github.com/projectcalico/felix/buildinfo.BuildDate=$(date -u +'%FT%T%z') \
     -X github.com/projectcalico/felix/buildinfo.GitRevision=${GIT_COMMIT} \
     -B 0x${GIT_COMMIT}" "github.com/projectcalico/felix/cmd/calico-felix" && \
-    ( ldd bin/calico-felix 2>&1 | grep -q -e "Not a valid dynamic program" \
-    -e "not a dynamic executable" || \
-    ( echo "Error: bin/calico-felix was not statically linked"; false ) ) \
-    && chmod +x /go/src/github.com/projectcalico/felix/bin/calico-felix
+    chmod +x /go/src/github.com/projectcalico/felix/bin/calico-felix
 
 FROM alpine:3.14
 
