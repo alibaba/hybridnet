@@ -103,6 +103,15 @@ rules:
       - get
       - list
       - watch
+  - apiGroups:
+      - "coordination.k8s.io"
+    resources:
+      - leases
+    verbs:
+      - create
+      - get
+      - list
+      - update
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -3043,7 +3052,7 @@ spec:
     - jsonPath: .spec.range.gateway
       name: Gateway
       type: string
-    - jsonPath: .spec.range.networkType
+    - jsonPath: .spec.networkType
       name: NetworkType
       type: string
     - jsonPath: .spec.clusterName
@@ -3193,8 +3202,10 @@ spec:
                   type: string
                 type: array
               ip:
+                description: IP is the IP address of this VTEP.
                 type: string
               mac:
+                description: MAC is the MAC address of this VTEP.
                 type: string
               nodeName:
                 description: NodeName is the name of corresponding node in remote

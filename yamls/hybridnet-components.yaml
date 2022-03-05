@@ -179,6 +179,10 @@ spec:
           env:
             - name: DEFAULT_NETWORK_TYPE
               value: Overlay
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
       nodeSelector:
         node-role.kubernetes.io/master: ""
 
