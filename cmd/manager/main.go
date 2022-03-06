@@ -74,9 +74,12 @@ func main() {
 	signalContext := ctrl.SetupSignalHandler()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		Logger:             ctrl.Log.WithName("manager"),
-		MetricsBindAddress: fmt.Sprintf(":%d", metricsPort),
+		Scheme:                  scheme,
+		Logger:                  ctrl.Log.WithName("manager"),
+		MetricsBindAddress:      fmt.Sprintf(":%d", metricsPort),
+		LeaderElection:          true,
+		LeaderElectionID:        "hybridnet-manager-election",
+		LeaderElectionNamespace: os.Getenv("NAMESPACE"),
 	})
 	if err != nil {
 		entryLog.Error(err, "unable to start manager")
