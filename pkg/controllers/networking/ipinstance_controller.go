@@ -20,9 +20,9 @@ import (
 	"context"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
@@ -49,19 +49,15 @@ type IPInstanceReconciler struct {
 //+kubebuilder:rbac:groups=networking.alibaba.com,resources=ipinstances/finalizers,verbs=update
 
 func (r *IPInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := ctrllog.FromContext(ctx)
-
 	var err error
 	var ip networkingv1.IPInstance
 	if err = r.Get(ctx, req.NamespacedName, &ip); err != nil {
-		log.Error(err, "unable to fetch IPInstance")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		return ctrl.Result{}, wrapError("unable to fetch IPInstance", client.IgnoreNotFound(err))
 	}
 
 	if !ip.DeletionTimestamp.IsZero() {
 		if err = r.releaseIP(&ip); err != nil {
-			log.Error(err, "unable to release IPInstance")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, wrapError("unable to release IPInstance", err)
 		}
 	}
 
@@ -99,9 +95,10 @@ func (r *IPInstanceReconciler) releaseIP(ipInstance *networkingv1.IPInstance) (e
 func (r *IPInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerIPInstance).
-		For(&networkingv1.IPInstance{}).
-		WithEventFilter(utils.IgnoreDeletePredicate{}).
-		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
+		For(&networkingv1.IPInstance{}, builder.WithPredicates(
+			&utils.IgnoreDeletePredicate{},
+			&predicate.ResourceVersionChangedPredicate{},
+		)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.Max(),
 		}).
