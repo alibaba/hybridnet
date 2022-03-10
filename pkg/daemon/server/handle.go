@@ -277,6 +277,12 @@ func (cdh *cniDaemonHandler) handleDel(req *restful.Request, resp *restful.Respo
 		cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
 		return
 	}
+
+	cdh.logger.Info("Delete container",
+		"podName", podRequest.PodName,
+		"podNamespace", podRequest.PodNamespace,
+	)
+
 	cdh.logger.V(5).Info("handle del request", "content", podRequest)
 
 	err = cdh.deleteNic(podRequest.NetNs)
@@ -286,6 +292,12 @@ func (cdh *cniDaemonHandler) handleDel(req *restful.Request, resp *restful.Respo
 		cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
 		return
 	}
+
+	cdh.logger.Info("Container deleted",
+		"podName", podRequest.PodName,
+		"podNamespace", podRequest.PodNamespace,
+	)
+
 	resp.WriteHeader(http.StatusNoContent)
 }
 

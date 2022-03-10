@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/containernetworking/plugins/pkg/ip"
+
 	"github.com/alibaba/hybridnet/pkg/constants"
 
 	"github.com/alibaba/hybridnet/pkg/daemon/utils"
@@ -62,6 +64,13 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 		return "", fmt.Errorf("failed to init container nic for pod %v: %v", podName, err)
 	}
 
+	defer func() {
+		if err != nil {
+			// clean the veth pair
+			_ = deleteContainerNic(netns)
+		}
+	}()
+
 	if err = containernetwork.ConfigureHostNic(hostNicName, allocatedIPs, cdh.config.LocalDirectTableNum); err != nil {
 		return "", fmt.Errorf("failed to configure host nic for %v.%v: %v", podName, podNamespace, err)
 	}
@@ -76,39 +85,19 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 }
 
 func (cdh cniDaemonHandler) deleteNic(netns string) error {
-	if netns == "" {
-		return nil
-	}
+	return deleteContainerNic(netns)
+}
 
+func deleteContainerNic(netns string) error {
 	nsHandler, err := ns.GetNS(netns)
 	if err != nil {
 		return fmt.Errorf("get ns error: %v", err)
 	}
+	defer nsHandler.Close()
 
 	return nsHandler.Do(func(netNS ns.NetNS) error {
-		containerLink, err := netlink.LinkByName(constants.ContainerNicName)
-		// return nil if eth0 not found.
-		if err != nil {
-			return nil
-		}
-
-		addrList, err := netlink.AddrList(containerLink, netlink.FAMILY_ALL)
-		if err != nil {
-			return fmt.Errorf("list addrs container nic %s error: %v", constants.ContainerNicName, err)
-		}
-
-		if len(addrList) == 0 {
-			return nil
-		}
-
-		if err := netlink.LinkSetDown(containerLink); err != nil {
-			return fmt.Errorf("set delete ns %v %v error: %v", netns, constants.ContainerNicName, err)
-		}
-
-		for _, addr := range addrList {
-			if err := netlink.AddrDel(containerLink, &addr); err != nil {
-				return fmt.Errorf("delete ns %v %v addr %v error: %v", netns, constants.ContainerNicName, addr.IP, err)
-			}
+		if err := ip.DelLinkByName(constants.ContainerNicName); err != nil && err != ip.ErrLinkNotFound {
+			return err
 		}
 		return nil
 	})
@@ -119,6 +108,7 @@ func initContainerNic(podName, podNamespace, netns string, mtu int) (string, str
 	if err != nil {
 		return "", "", nil, fmt.Errorf("failed to open netns %q: %v", netns, err)
 	}
+	defer podNS.Close()
 
 	hostNS, err := ns.GetCurrentNS()
 	if err != nil {
@@ -146,7 +136,7 @@ func initContainerNic(podName, podNamespace, netns string, mtu int) (string, str
 		}
 
 		if err = netlink.LinkSetNsFd(containerHostLink, int(hostNS.Fd())); err != nil {
-			return fmt.Errorf("failed to set link to host netns: %v", err)
+			return fmt.Errorf("failed to set link %v to host netns: %v", hostNicName, err)
 		}
 
 		return nil

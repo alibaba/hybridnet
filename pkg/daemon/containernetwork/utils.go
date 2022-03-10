@@ -38,8 +38,7 @@ func GenerateContainerVethPair(podNamespace, podName string) (string, string) {
 	h := sha1.New()
 	h.Write([]byte(fmt.Sprintf("%s.%s", podNamespace, podName)))
 
-	return fmt.Sprintf("%s%s", constants.ContainerHostLinkPrefix, hex.EncodeToString(h.Sum(nil))[:11]),
-		fmt.Sprintf("%s%s", hex.EncodeToString(h.Sum(nil))[:11], constants.ContainerInitLinkSuffix)
+	return fmt.Sprintf("%s%s", constants.ContainerHostLinkPrefix, hex.EncodeToString(h.Sum(nil))[:11]), constants.ContainerNicName
 }
 
 func CheckIfContainerNetworkLink(linkName string) bool {
@@ -47,7 +46,6 @@ func CheckIfContainerNetworkLink(linkName string) bool {
 	return strings.HasSuffix(linkName, "_h") ||
 		strings.HasPrefix(linkName, "h_") ||
 		strings.HasPrefix(linkName, constants.ContainerHostLinkPrefix) ||
-		strings.HasSuffix(linkName, constants.ContainerInitLinkSuffix) ||
 		strings.HasPrefix(linkName, "veth") ||
 		strings.HasPrefix(linkName, "docker")
 }
