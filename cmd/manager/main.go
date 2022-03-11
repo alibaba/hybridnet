@@ -55,11 +55,15 @@ func init() {
 func main() {
 	var (
 		controllerConcurrency map[string]int
+		clientQPS             float32
+		clientBurst           int
 		metricsPort           int
 	)
 
 	// register flags
 	pflag.StringToIntVar(&controllerConcurrency, "controller-concurrency", map[string]int{}, "The specified concurrency of different controllers.")
+	pflag.Float32Var(&clientQPS, "kube-client-qps", 300, "The QPS limit of apiserver client.")
+	pflag.IntVar(&clientBurst, "kube-client-burst", 600, "The Burst limit of apiserver client.")
 	pflag.IntVar(&metricsPort, "metrics-port", 9899, "The port to listen on for prometheus metrics.")
 
 	// parse flags
@@ -69,11 +73,18 @@ func main() {
 	ctrllog.SetLogger(zapinit.NewZapLogger())
 
 	var entryLog = ctrllog.Log.WithName("entry")
-	entryLog.Info("starting hybridnet manager", "known-features", feature.KnownFeatures(), "commit-id", gitCommit)
+	entryLog.Info("starting hybridnet manager",
+		"known-features", feature.KnownFeatures(),
+		"commit-id", gitCommit,
+		"controller-concurrency", controllerConcurrency)
 
 	signalContext := ctrl.SetupSignalHandler()
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	clientConfig := ctrl.GetConfigOrDie()
+	clientConfig.QPS = clientQPS
+	clientConfig.Burst = clientBurst
+
+	mgr, err := ctrl.NewManager(clientConfig, ctrl.Options{
 		Scheme:                  scheme,
 		Logger:                  ctrl.Log.WithName("manager"),
 		MetricsBindAddress:      fmt.Sprintf(":%d", metricsPort),
