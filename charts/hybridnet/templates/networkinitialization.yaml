@@ -1,0 +1,21 @@
+apiVersion: networking.alibaba.com/v1
+kind: Network
+metadata:
+  name: init
+spec:
+  netID: {{ .Values.initNetworkConfig.vxlanID }}
+  type: Overlay
+
+---
+apiVersion: networking.alibaba.com/v1
+kind: Subnet
+metadata:
+  name: init
+spec:
+  config:
+    autoNatOutgoing: true
+  network: init
+  range:
+    cidr: {{ .Values.initNetworkConfig.cidr }}
+    version: "{{ .Values.initNetworkConfig.ipVersion }}"
+

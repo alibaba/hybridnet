@@ -1,0 +1,35 @@
+images:
+  hybridnet:
+    image: hybridnetdev/hybridnet
+    tag: v0.4.1
+  registryURL: "docker.io"
+
+# -- It's always encouraged to use an overlay network to finish some general jobs in hybridnet. This
+# chart will always create an "init" overlay Network/Subnet to initialize the K8s cluster.
+initNetworkConfig:
+  # -- CIDR of "init" Subnet.
+  cidr: 100.64.0.0/16
+
+  # -- IP version of the init subnet. "4" for ipv4, "6" for ipv6
+  ipVersion: "4"
+
+  # -- VNI of the default overlay vxlan Network.
+  vxlanID: 4
+
+  # -- The physical interfaces on node to transmit vlan/vxlan/bgp packets, which should be confirmed
+  # before network config is actually applied, or you might have to face the risk of rebooting the machine.
+  # An interface name list string using commons as separator is valid, daemon will always use the first
+  # available interface.
+  preferVxlanInterfaces: ""
+  preferVlanInterfaces: ""
+  preferBGPInterfaces: ""
+
+advancedSettings:
+  # -- The default value when pod's network type is unspecified. Overlay or Underlay
+  defualtNetworkType: Overlay
+
+  # -- Enable the MultiCluster feature. true or false
+  multiCluster: false
+
+  # -- Enable the DualStack feature. IPv6 is disabled when is dualStack is not enable. true or false
+  dualStack: false

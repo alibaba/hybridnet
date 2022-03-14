@@ -5,9 +5,7 @@ RELEASE_TAG?=release
 GOOS=`go env GOOS`
 GOARCH=`go env GOARCH`
 
-INIT_YAML_FILE=yamls/hybridnet-init.yaml
-RBAC_YAML_FILE=yamls/rbac/rbac.yaml
-CRD_YAML_DIR=yamls/crd
+CRD_YAML_DIR=charts/hybridnet/crds
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
@@ -27,14 +25,8 @@ release:
 code-gen:
 	cd hack && chmod u+x ./update-codegen.sh && ./update-codegen.sh
 
-
-init-yaml: crd-yamls
-	cat ${RBAC_YAML_FILE} > ${INIT_YAML_FILE}
-	@for f in $(shell ls ${CRD_YAML_DIR}); do cat ${CRD_YAML_DIR}/$${f} >> ${INIT_YAML_FILE}; done
-
-
 crd-yamls: controller-gen ## Generate CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=hybridnet webhook paths="./..." output:crd:artifacts:config=${CRD_YAML_DIR}
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=hybridnet webhook paths="./..." output:crd:artifacts:config=${CRD_YAML_DIR} && rm -rf ./config
 
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
