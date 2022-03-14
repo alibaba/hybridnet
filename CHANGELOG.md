@@ -93,3 +93,11 @@ All notable changes to this project will be documented in this file.
 ### Fixed Issues
 - Fix specifying subnets error for DualStack pod
 - Fix updating failure of nodes' vxlan fdb for a new node
+
+## v0.4.1
+### Improvements
+- Adjust client QPS and Burst configuration of manager
+- Mute useless logs of manager
+
+### Fixed Issues
+- Fix "file exists" error while creating pod
