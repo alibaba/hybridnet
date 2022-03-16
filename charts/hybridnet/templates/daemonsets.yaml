@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: hybridnet-daemon
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: hybridnet-daemon
+  template:
+    metadata:
+      labels:
+        app: hybridnet-daemon
+    spec:
+      tolerations:
+        - operator: Exists
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+      priorityClassName: system-cluster-critical
+      serviceAccountName: hybridnet
+      hostNetwork: true
+      hostPID: true
+      initContainers:
+        - name: install-cni
+          image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
+          imagePullPolicy: IfNotPresent
+          command: ["/hybridnet/install-cni.sh"]
+          securityContext:
+            runAsUser: 0
+            privileged: true
+          volumeMounts:
+            - mountPath: /etc/cni/net.d
+              name: cni-conf
+            - mountPath: /opt/cni/bin
+              name: cni-bin
+      containers:
+        - name: cni-daemon
+          image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - /hybridnet/start-daemon.sh
+          args:
+            {{ if (ne .Values.initNetworkConfig.preferVxlanInterfaces "") }}
+            - --prefer-vxlan-interfaces={{ .Values.initNetworkConfig.preferVxlanInterfaces }}
+            {{ end }}
+            {{ if ne .Values.initNetworkConfig.preferVlanInterfaces "" }}
+            - --prefer-vlan-interfaces={{ .Values.initNetworkConfig.preferVlanInterfaces }}
+            {{ end }}
+            {{ if ne .Values.initNetworkConfig.preferBGPInterfaces "" }}
+            - --prefer-bgp-interfaces={{ .Values.initNetworkConfig.preferBGPInterfaces }}
+            {{ end }}
+            - --feature-gates=MultiCluster={{ .Values.advancedSettings.multiCluster }},DualStack={{ .Values.advancedSettings.dualStack }}
+          securityContext:
+            runAsUser: 0
+            privileged: true
+          env:
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 11021
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+            failureThreshold: 1
+          volumeMounts:
+            - mountPath: /run/cni
+              name: host-run-cni
+            - mountPath: /lib/modules
+              name: host-modules
+            - mountPath: /run/xtables.lock
+              name: xtables-lock
+            - mountPath: /var/run/netns
+              mountPropagation: HostToContainer
+              name: host-var-run-netns
+            - mountPath: /var/run/docker/netns
+              mountPropagation: HostToContainer
+              name: host-var-docker-netns
+            - mountPath: /run/netns
+              mountPropagation: HostToContainer
+              name: host-run-netns
+            - mountPath: /run/docker/netns
+              mountPropagation: HostToContainer
+              name: host-docker-netns
+          # TODO: add liveness probe
+        - name: policy
+          image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /hybridnet/policyinit.sh
+          env:
+            - name: NODENAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: 250m
+          securityContext:
+            privileged: true
+            runAsUser: 0
+      nodeSelector:
+        kubernetes.io/os: "linux"
+      volumes:
+        - name: host-modules
+          hostPath:
+            path: /lib/modules
+        - name: host-run-cni
+          hostPath:
+            path: /run/cni
+        - name: cni-conf
+          hostPath:
+            path: /etc/cni/net.d
+        - name: cni-bin
+          hostPath:
+            path: /opt/cni/bin
+        - name: xtables-lock
+          hostPath:
+            path: /run/xtables.lock
+            type: FileOrCreate
+        - name: host-run-netns
+          hostPath:
+            path: /run/netns
+        - name: host-docker-netns
+          hostPath:
+            path: /run/docker/netns
+        - name: host-var-run-netns
+          hostPath:
+            path: /var/run/netns
+        - name: host-var-docker-netns
+          hostPath:
+            path: /var/run/docker/netns
