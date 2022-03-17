@@ -122,6 +122,11 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 	r.ctrlHubRef.bgpManager.ResetIPInfos()
 
 	for _, ipInstance := range ipInstanceList.Items {
+		// if this ip instance is not actually being used, ignore
+		if ipInstance.Status.Phase != networkingv1.IPPhaseUsing {
+			continue
+		}
+
 		netID := ipInstance.Spec.Address.NetID
 		if netID == nil {
 			return reconcile.Result{Requeue: true}, fmt.Errorf("NetID of ip instance %v should not be nil", ipInstance.Name)
@@ -210,7 +215,6 @@ func (r *ipInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := ipInstanceController.Watch(&source.Kind{Type: &networkingv1.IPInstance{}},
 		&fixedKeyHandler{key: ActionReconcileIPInstance},
 		&predicate.ResourceVersionChangedPredicate{},
-		&predicate.LabelChangedPredicate{},
 		&predicate.Funcs{
 			CreateFunc: func(createEvent event.CreateEvent) bool {
 				ipInstance := createEvent.Object.(*networkingv1.IPInstance)
@@ -224,14 +228,11 @@ func (r *ipInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				oldIPInstance := updateEvent.ObjectOld.(*networkingv1.IPInstance)
 				newIPInstance := updateEvent.ObjectNew.(*networkingv1.IPInstance)
 
-				if newIPInstance.GetLabels()[constants.LabelNode] != r.ctrlHubRef.config.NodeName ||
-					oldIPInstance.GetLabels()[constants.LabelNode] != r.ctrlHubRef.config.NodeName {
-					return false
-				}
-
-				if oldIPInstance.Labels[constants.LabelNode] != newIPInstance.Labels[constants.LabelNode] {
+				if newIPInstance.GetLabels()[constants.LabelNode] == r.ctrlHubRef.config.NodeName ||
+					oldIPInstance.GetLabels()[constants.LabelNode] == r.ctrlHubRef.config.NodeName {
 					return true
 				}
+
 				return false
 			},
 			GenericFunc: func(genericEvent event.GenericEvent) bool {

@@ -534,7 +534,7 @@ func (c *CtrlHub) iptablesSyncLoop() {
 		}
 
 		for _, ipInstance := range ipInstanceList.Items {
-			// if this ip instance is not actually being using, ignore
+			// if this ip instance is not actually being used, ignore
 			if ipInstance.Status.Phase != networkingv1.IPPhaseUsing {
 				continue
 			}
