@@ -2,15 +2,17 @@ apiVersion: v2
 name: hybridnet
 # When the version is modified, make sure the artifacthub.io/changes list is updated
 # Also update CHANGELOG.md
-version: 0.1.0
-appVersion: 0.4.1
+version: 0.1.1
+appVersion: 0.4.2
 home: https://github.com/alibaba/hybridnet
 description: A container networking solution aiming at hybrid clouds.
 keywords:
-  - containernetworking
+  - network
   - vlan
   - bgp
   - vxlan
+  - cni
+  - kubernetes
 sources:
   - https://github.com/alibaba/hybridnet
 type: application

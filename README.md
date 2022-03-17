@@ -3,8 +3,9 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/alibaba/hybridnet)](https://goreportcard.com/report/github.com/alibaba/hybridnet)
 [![Github All Releases](https://img.shields.io/docker/pulls/hybridnetdev/hybridnet.svg)](https://hub.docker.com/r/hybridnetdev/hybridnet/tags)
 [![Version](https://img.shields.io/github/v/release/alibaba/hybridnet)](https://github.com/alibaba/hybridnet/releases)
-[![codecov](https://codecov.io/gh/alibaba/hybridnet/branch/main/graphs/badge.svg)](https://codecov.io/gh/alibaba/hybridnet)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/hybridnet)](https://artifacthub.io/packages/search?repo=hybridnet)
 [![License](https://img.shields.io/github/license/alibaba/hybridnet)](https://www.apache.org/licenses/LICENSE-2.0.html)
+[![codecov](https://codecov.io/gh/alibaba/hybridnet/branch/main/graphs/badge.svg)](https://codecov.io/gh/alibaba/hybridnet)
 ![workflow check](https://github.com/alibaba/hybridnet/actions/workflows/check.yml/badge.svg)
 ![workflow build](https://github.com/alibaba/hybridnet/actions/workflows/build.yml/badge.svg)
 
@@ -30,7 +31,7 @@ Hybridnet focus on productive large-scale, user friendliness and heterogeneous i
 
 ## How-To-Use
 
-Directions is maintained on [wiki](https://github.com/alibaba/hybridnet/wiki).
+See documents on [wiki](https://github.com/alibaba/hybridnet/wiki).
 
 ## Contributing
 
