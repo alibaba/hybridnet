@@ -56,6 +56,11 @@ const (
 	ReasonIPReserveSucceed    = "IPReserveSucceed"
 )
 
+const (
+	indexerFieldNode = "node"
+	overlayNodeName  = "c3e6699d28e7"
+)
+
 // PodReconciler reconciles a Pod object
 type PodReconciler struct {
 	APIReader client.Reader
@@ -73,15 +78,6 @@ type PodReconciler struct {
 //+kubebuilder:rbac:groups="",resources=pods/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups="",resources=pods/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Pod object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := ctrllog.FromContext(ctx)
 
@@ -190,8 +186,19 @@ func (r *PodReconciler) selectNetwork(pod *corev1.Pod) (string, error) {
 	var networkType = types.ParseNetworkTypeFromString(globalutils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType]))
 	switch networkType {
 	case types.Underlay:
-		underlayNetworkName, err := utils.FindUnderlayNetworkForNodeName(r, pod.Spec.NodeName)
-		if err != nil {
+		// try to get underlay network by node indexer
+		var networkList *networkingv1.NetworkList
+		var err error
+		if networkList, err = utils.ListNetworks(r, client.MatchingFields{indexerFieldNode: pod.Spec.NodeName}); err != nil {
+			return "", fmt.Errorf("unable to list underlay network by indexer node: %v", err)
+		}
+		if len(networkList.Items) >= 1 {
+			return networkList.Items[0].GetName(), nil
+		}
+
+		// fall back to find underlay network by label selector
+		var underlayNetworkName string
+		if underlayNetworkName, err = utils.FindUnderlayNetworkForNodeName(r, pod.Spec.NodeName); err != nil {
 			return "", fmt.Errorf("unable to find underlay network for node %s", pod.Spec.NodeName)
 		}
 		if len(underlayNetworkName) == 0 {
@@ -202,8 +209,19 @@ func (r *PodReconciler) selectNetwork(pod *corev1.Pod) (string, error) {
 		}
 		return underlayNetworkName, nil
 	case types.Overlay:
-		overlayNetworkName, err := utils.FindOverlayNetwork(r)
-		if err != nil {
+		// try to get overlay network by special node name
+		var networkList *networkingv1.NetworkList
+		var err error
+		if networkList, err = utils.ListNetworks(r, client.MatchingFields{indexerFieldNode: overlayNodeName}); err != nil {
+			return "", fmt.Errorf("unable to list overlay network by indexer node: %v", err)
+		}
+		if len(networkList.Items) >= 1 {
+			return networkList.Items[0].GetName(), nil
+		}
+
+		// fall back to find overlay network in client cache
+		var overlayNetworkName string
+		if overlayNetworkName, err = utils.FindOverlayNetwork(r); err != nil {
 			return "", fmt.Errorf("unable to find overlay network")
 		}
 		if len(overlayNetworkName) == 0 {
@@ -498,7 +516,26 @@ func squashIPSliceToSubnets(ips []*types.IP) (ret []string) {
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
+	// init node indexer for networks
+	if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Network{}, indexerFieldNode, func(obj client.Object) []string {
+		network, ok := obj.(*networkingv1.Network)
+		if !ok {
+			return nil
+		}
+
+		switch networkingv1.GetNetworkType(network) {
+		case networkingv1.NetworkTypeUnderlay:
+			return network.Status.NodeList
+		case networkingv1.NetworkTypeOverlay:
+			return []string{overlayNodeName}
+		default:
+			return nil
+		}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerPod).
 		For(&corev1.Pod{},
