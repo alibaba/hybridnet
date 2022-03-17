@@ -159,7 +159,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 			if _, exist := existEnhancedAddrMap[forwardNodeIfName]; exist {
 				// subnet enhanced address already exists
 				if _, exist := existEnhancedAddrMap[forwardNodeIfName][subnetString]; exist {
-					// if forward node if has exist enhanced address which is in the same subnet with target pod ip
+					// if forward node interface has exist enhanced address which is in the same subnet with target pod ip
 					if enhancedAddr, exist := existEnhancedAddrMap[forwardNodeIfName][subnetString]; exist {
 						// enhanced address attempt to add is the same as origin
 						if enhancedAddr.IP.Equal(podIP) {

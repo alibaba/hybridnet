@@ -25,6 +25,13 @@ import (
 	"strings"
 	"time"
 
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+
 	"github.com/go-logr/logr"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -115,6 +122,11 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 	r.ctrlHubRef.bgpManager.ResetIPInfos()
 
 	for _, ipInstance := range ipInstanceList.Items {
+		// if this ip instance is not actually being used, ignore
+		if ipInstance.Status.Phase != networkingv1.IPPhaseUsing {
+			continue
+		}
+
 		netID := ipInstance.Spec.Address.NetID
 		if netID == nil {
 			return reconcile.Result{Requeue: true}, fmt.Errorf("NetID of ip instance %v should not be nil", ipInstance.Name)
@@ -192,6 +204,50 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 	r.ctrlHubRef.iptablesSyncTrigger()
 
 	return reconcile.Result{}, nil
+}
+
+func (r *ipInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ipInstanceController, err := controller.New("ip-instance", mgr, controller.Options{Reconciler: r})
+	if err != nil {
+		return fmt.Errorf("failed to create ip instance controller: %v", err)
+	}
+
+	if err := ipInstanceController.Watch(&source.Kind{Type: &networkingv1.IPInstance{}},
+		&fixedKeyHandler{key: ActionReconcileIPInstance},
+		&predicate.ResourceVersionChangedPredicate{},
+		&predicate.Funcs{
+			CreateFunc: func(createEvent event.CreateEvent) bool {
+				ipInstance := createEvent.Object.(*networkingv1.IPInstance)
+				return ipInstance.GetLabels()[constants.LabelNode] == r.ctrlHubRef.config.NodeName
+			},
+			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
+				ipInstance := deleteEvent.Object.(*networkingv1.IPInstance)
+				return ipInstance.GetLabels()[constants.LabelNode] == r.ctrlHubRef.config.NodeName
+			},
+			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+				oldIPInstance := updateEvent.ObjectOld.(*networkingv1.IPInstance)
+				newIPInstance := updateEvent.ObjectNew.(*networkingv1.IPInstance)
+
+				if newIPInstance.GetLabels()[constants.LabelNode] == r.ctrlHubRef.config.NodeName ||
+					oldIPInstance.GetLabels()[constants.LabelNode] == r.ctrlHubRef.config.NodeName {
+					return true
+				}
+
+				return false
+			},
+			GenericFunc: func(genericEvent event.GenericEvent) bool {
+				ipInstance := genericEvent.Object.(*networkingv1.IPInstance)
+				return ipInstance.GetLabels()[constants.LabelNode] == r.ctrlHubRef.config.NodeName
+			},
+		}); err != nil {
+		return fmt.Errorf("failed to watch networkingv1.IPInstance for ip instance controller: %v", err)
+	}
+
+	if err := ipInstanceController.Watch(r.ctrlHubRef.ipInstanceControllerTriggerSource, &handler.Funcs{}); err != nil {
+		return fmt.Errorf("failed to watch ipInstanceControllerTriggerSource for ip instance controller: %v", err)
+	}
+
+	return nil
 }
 
 // TODO: update logic, need to be removed further
