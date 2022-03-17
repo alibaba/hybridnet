@@ -183,7 +183,7 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 				}
 
 				if !bgpPathExist {
-					return fmt.Errorf("bgp path for pod ip %v ist not added, waiting for daemon to add it", podIP)
+					return fmt.Errorf("bgp path for pod ip %v is not added, waiting for daemon to add it", podIP)
 				}
 
 				if !establishedPeerExists {

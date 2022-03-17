@@ -21,6 +21,12 @@ import (
 	"fmt"
 	"net"
 
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 
 	"github.com/alibaba/hybridnet/pkg/daemon/utils"
@@ -287,4 +293,72 @@ func checkNodeUpdate(updateEvent event.UpdateEvent) bool {
 		return true
 	}
 	return false
+}
+
+func (r *nodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	nodeController, err := controller.New("node", mgr, controller.Options{Reconciler: r})
+	if err != nil {
+		return fmt.Errorf("failed to create node controller: %v", err)
+	}
+
+	if err := nodeController.Watch(&source.Kind{Type: &corev1.Node{}},
+		&fixedKeyHandler{key: ActionReconcileNode},
+		&predicate.ResourceVersionChangedPredicate{},
+		&predicate.LabelChangedPredicate{},
+		&predicate.Funcs{
+			UpdateFunc: checkNodeUpdate,
+		},
+	); err != nil {
+		return fmt.Errorf("failed to watch corev1.Node for node controller: %v", err)
+	}
+
+	if err := nodeController.Watch(&source.Kind{Type: &networkingv1.Network{}},
+		&fixedKeyHandler{key: ActionReconcileNode},
+		predicate.Funcs{
+			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+				return false
+			},
+			CreateFunc: func(createEvent event.CreateEvent) bool {
+				network := createEvent.Object.(*networkingv1.Network)
+				return networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay
+			},
+			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
+				network := deleteEvent.Object.(*networkingv1.Network)
+				return networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay
+			},
+			GenericFunc: func(genericEvent event.GenericEvent) bool {
+				return false
+			},
+		},
+	); err != nil {
+		return fmt.Errorf("failed to watch networkingv1.Network for node controller: %v", err)
+	}
+
+	if err := nodeController.Watch(r.ctrlHubRef.nodeControllerTriggerSource, &handler.Funcs{}); err != nil {
+		return fmt.Errorf("failed to watch nodeControllerTriggerSource for node controller: %v", err)
+	}
+
+	if feature.MultiClusterEnabled() {
+		if err := nodeController.Watch(&source.Kind{Type: &multiclusterv1.RemoteVtep{}},
+			&fixedKeyHandler{key: ActionReconcileNode},
+			predicate.Funcs{
+				UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+					oldRemoteVtep := updateEvent.ObjectOld.(*multiclusterv1.RemoteVtep)
+					newRemoteVtep := updateEvent.ObjectNew.(*multiclusterv1.RemoteVtep)
+
+					if oldRemoteVtep.Spec.VTEPInfo.IP != newRemoteVtep.Spec.VTEPInfo.IP ||
+						oldRemoteVtep.Spec.VTEPInfo.MAC != newRemoteVtep.Spec.VTEPInfo.MAC ||
+						oldRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] != newRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] ||
+						!isIPListEqual(oldRemoteVtep.Spec.EndpointIPList, newRemoteVtep.Spec.EndpointIPList) {
+						return true
+					}
+					return false
+				},
+			},
+		); err != nil {
+			return fmt.Errorf("failed to watch multiclusterv1.RemoteVtep for node controller: %v", err)
+		}
+	}
+
+	return nil
 }
