@@ -19,6 +19,7 @@ package types
 import (
 	"os"
 	"strings"
+	"sync"
 )
 
 type IPFamilyMode string
@@ -56,13 +57,24 @@ func ParseNetworkTypeFromString(in string) NetworkType {
 	case strings.ToLower(string(Overlay)):
 		return Overlay
 	case "":
-		return ParseNetworkTypeFromEnv()
+		return ParseNetworkTypeFromEnvOnce()
 	default:
 		return NetworkType(in)
 	}
 }
 
-// TODO: remove this defaulting logic if overlay become the general option for more users
+var networkTypeFromEnv NetworkType
+var networkTypeFromEnvOnce sync.Once
+
+func ParseNetworkTypeFromEnvOnce() NetworkType {
+	networkTypeFromEnvOnce.Do(
+		func() {
+			networkTypeFromEnv = ParseNetworkTypeFromEnv()
+		},
+	)
+	return networkTypeFromEnv
+}
+
 func ParseNetworkTypeFromEnv() NetworkType {
 	networkTypeEnv := os.Getenv("DEFAULT_NETWORK_TYPE")
 	switch strings.ToLower(networkTypeEnv) {
