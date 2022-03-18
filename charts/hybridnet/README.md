@@ -56,4 +56,4 @@ helm upgrade hybridnet hybridnet/hybridnet -n kube-system --set advancedSettings
 ```
 
 Of course, if you want to change your container network to use Underlay as default network type, you should
-apply some Underlay _Network/Subnet_ CR resources first.
+apply some Underlay _Network/Subnet_ CR resources firstly.
