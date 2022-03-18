@@ -184,9 +184,9 @@ func updateUsageMetrics(networkName string, networkStatus *networkingv1.NetworkS
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 	// init network indexer for Subnets
-	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Subnet{}, indexerFieldNetwork, func(obj client.Object) []string {
+	if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Subnet{}, indexerFieldNetwork, func(obj client.Object) []string {
 		subnet, ok := obj.(*networkingv1.Subnet)
 		if !ok {
 			return nil
