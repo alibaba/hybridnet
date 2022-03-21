@@ -101,3 +101,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed Issues
 - Fix "file exists" error while creating pod
+
+## v0.4.2
+### Fixed Issues
+- Fix creating ip-retained sts pod error when it is recreated and rescheduled to another node
