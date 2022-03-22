@@ -3,6 +3,31 @@ entries:
   hybridnet:
   - annotations:
       artifacthub.io/changes: |
+        - "add defualtIPRetain parameter"
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: 0.4.2
+    created: "2022-03-22T11:36:37.137597882Z"
+    description: A container networking solution aiming at hybrid clouds.
+    digest: d1740f5336d4f6bcdde1b0b75d802e20db5c1291619104b1b62766b8f4e41077
+    home: https://github.com/alibaba/hybridnet
+    keywords:
+    - network
+    - vlan
+    - bgp
+    - vxlan
+    - cni
+    - kubernetes
+    kubeVersion: '>=1.16.0-0'
+    name: hybridnet
+    sources:
+    - https://github.com/alibaba/hybridnet
+    type: application
+    urls:
+    - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.1.2/hybridnet-0.1.2.tgz
+    version: 0.1.2
+  - annotations:
+      artifacthub.io/changes: |
         - "#197 adjust client qps and burst "
         - "#194 mute uselss logging"
         - "#192 fix file exists error while creating pod"
@@ -28,4 +53,4 @@ entries:
     urls:
     - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.1.1/hybridnet-0.1.1.tgz
     version: 0.1.1
-generated: "2022-03-18T06:44:02.30125462Z"
+generated: "2022-03-22T11:36:37.137607782Z"
