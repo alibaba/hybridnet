@@ -25,6 +25,9 @@ initNetworkConfig:
   preferBGPInterfaces: ""
 
 advancedSettings:
+  # -- Whether pod IP of stateful workloads will be retained by default. true or false
+  defualtIPRetain: true
+
   # -- The default value when pod's network type is unspecified. Overlay or Underlay
   defualtNetworkType: Overlay
 

@@ -34,6 +34,7 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - /hybridnet/hybridnet-manager
+            - --default-ip-retain={{ .Values.advancedSettings.defualtIPRetain }}
             - --feature-gates=MultiCluster={{ .Values.advancedSettings.multiCluster }},DualStack={{ .Values.advancedSettings.dualStack }}
           env:
             - name: DEFAULT_NETWORK_TYPE
@@ -78,6 +79,7 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - /hybridnet/hybridnet-webhook
+            - --default-ip-retain={{ .Values.advancedSettings.defualtIPRetain }}
             - --feature-gates=MultiCluster={{ .Values.advancedSettings.multiCluster }},DualStack={{ .Values.advancedSettings.dualStack }}
           args:
             - --port=9898
