@@ -23,15 +23,12 @@ import (
 	"os"
 	"time"
 
-	globalutils "github.com/alibaba/hybridnet/pkg/utils"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
@@ -42,7 +39,9 @@ import (
 	"github.com/alibaba/hybridnet/pkg/controllers/networking"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/ipam/store"
 	"github.com/alibaba/hybridnet/pkg/managerruntime"
+	globalutils "github.com/alibaba/hybridnet/pkg/utils"
 	zapinit "github.com/alibaba/hybridnet/pkg/zap"
 )
 
@@ -288,6 +287,18 @@ func initIndexers(mgr ctrl.Manager) (err error) {
 			default:
 				return nil
 			}
+		}); err != nil {
+		return err
+	}
+
+	// Init mac indexer for IPInstances
+	if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.IPInstance{},
+		store.IndexerFieldMac, func(obj client.Object) []string {
+			ipInstance, ok := obj.(*networkingv1.IPInstance)
+			if !ok {
+				return nil
+			}
+			return []string{ipInstance.Spec.Address.MAC}
 		}); err != nil {
 		return err
 	}

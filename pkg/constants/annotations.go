@@ -25,6 +25,7 @@ const (
 
 	AnnotationSpecifiedNetwork = "networking.alibaba.com/specified-network"
 	AnnotationSpecifiedSubnet  = "networking.alibaba.com/specified-subnet"
+	AnnotationSpecifiedMAC     = "networking.alibaba.com/specified-mac"
 
 	AnnotationNetworkType = "networking.alibaba.com/network-type"
 

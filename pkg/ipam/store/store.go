@@ -34,7 +34,10 @@ import (
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
-	"github.com/alibaba/hybridnet/pkg/utils/mac"
+)
+
+const (
+	IndexerFieldMac = "mac"
 )
 
 type Worker struct {
@@ -256,10 +259,29 @@ func (w *Worker) updateIPStatus(ip *networkingv1.IPInstance, nodeName, podName, 
 }
 
 func (w *Worker) createIP(pod *corev1.Pod, ip *ipamtypes.IP) (ipIns *networkingv1.IPInstance, err error) {
-	return w.createIPWithMAC(pod, ip, mac.GenerateMAC().String())
+	return w.createIPWithMAC(pod, ip, getSpecifiedMacOrGenerateOne(pod))
 }
 
 func (w *Worker) createIPWithMAC(pod *corev1.Pod, ip *ipamtypes.IP, macAddr string) (ipIns *networkingv1.IPInstance, err error) {
+	// Check whether the mac address is in conflict with existing IPInstances.
+	var (
+		specifiedMAC   = pod.GetAnnotations()[constants.AnnotationSpecifiedMAC]
+		ipInstanceList = &networkingv1.IPInstanceList{}
+	)
+	if len(specifiedMAC) > 0 {
+		if err = w.List(context.TODO(), ipInstanceList, client.MatchingFields{IndexerFieldMac: specifiedMAC}); err != nil {
+			return nil, fmt.Errorf("unable to list ip instances by indexer MAC %s: %v", specifiedMAC, err)
+		}
+		for _, ipInstance := range ipInstanceList.Items {
+			if ipInstance.DeletionTimestamp.IsZero() {
+				continue
+			}
+			if ipInstance.Status.PodNamespace != pod.Namespace || ipInstance.Status.PodName != pod.Name {
+				return nil, fmt.Errorf("specified mac %s is in conflict with existing ip instance %s/%s", specifiedMAC, ipInstance.Namespace, ipInstance.Name)
+			}
+		}
+	}
+
 	owner := strategy.GetKnownOwnReference(pod)
 	if owner == nil {
 		owner = newControllerRef(pod, corev1.SchemeGroupVersion.WithKind("Pod"))

@@ -58,7 +58,7 @@ func (d *DualStackWorker) Couple(pod *v1.Pod, IPs []*types.IP) (err error) {
 		}
 	}()
 
-	var globalMac = mac.GenerateMAC().String()
+	var globalMac = getSpecifiedMacOrGenerateOne(pod)
 	for _, ip := range IPs {
 		var ipIns *networkingv1.IPInstance
 		if ipIns, err = d.worker.createIPWithMAC(pod, ip, globalMac); err != nil {
@@ -86,7 +86,7 @@ func (d *DualStackWorker) ReCouple(pod *v1.Pod, IPs []*types.IP) (err error) {
 	var ipInstances []*networkingv1.IPInstance
 	var missingIPs []*types.IP
 
-	var globalMac = mac.GenerateMAC().String()
+	var globalMac = getSpecifiedMacOrGenerateOne(pod)
 	for _, ip := range IPs {
 		var ipIns *networkingv1.IPInstance
 		if ipIns, err = d.worker.getIP(pod.Namespace, ip); err != nil {
@@ -197,4 +197,12 @@ func (d *DualStackWorker) patchIPsToPod(pod *v1.Pod, IPs []*types.IP) error {
 func marshalIPs(IPs []*types.IP) string {
 	bytes, _ := json.Marshal(IPs)
 	return string(bytes)
+}
+
+func getSpecifiedMacOrGenerateOne(pod *v1.Pod) string {
+	if len(pod.Annotations[constants.AnnotationSpecifiedMAC]) > 0 {
+		return pod.Annotations[constants.AnnotationSpecifiedMAC]
+	}
+
+	return mac.GenerateMAC().String()
 }

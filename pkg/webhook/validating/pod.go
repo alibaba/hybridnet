@@ -37,6 +37,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/feature"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/utils"
+	macutils "github.com/alibaba/hybridnet/pkg/utils/mac"
 )
 
 var podGVK = gvkConverter(corev1.SchemeGroupVersion.WithKind("Pod"))
@@ -132,6 +133,14 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 			if utils.NormalizedIP(ip) != ip {
 				return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("ip pool has invalid ip %s", ip), logger)
 			}
+		}
+	}
+
+	// Mac address validation
+	var mac string
+	if mac = pod.Annotations[constants.AnnotationSpecifiedMAC]; len(mac) > 0 {
+		if len(macutils.NormalizeMAC(mac)) == 0 {
+			return webhookutils.AdmissionDeniedWithLog("specified mac address is not valid", logger)
 		}
 	}
 
