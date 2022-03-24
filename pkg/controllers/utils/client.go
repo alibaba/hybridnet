@@ -69,6 +69,14 @@ func ListIPInstances(client client.Client, opts ...client.ListOption) (*networki
 	return &ipList, nil
 }
 
+func ListIPInstancesByReader(client client.Reader, opts ...client.ListOption) (*networkingv1.IPInstanceList, error) {
+	var ipList = networkingv1.IPInstanceList{}
+	if err := client.List(context.TODO(), &ipList, opts...); err != nil {
+		return nil, err
+	}
+	return &ipList, nil
+}
+
 func ListNodesToNames(client client.Client, opts ...client.ListOption) ([]string, error) {
 	var nodeList = corev1.NodeList{}
 	if err := client.List(context.TODO(), &nodeList, opts...); err != nil {
@@ -201,9 +209,9 @@ func DetectNetworkAttachmentOfNode(client client.Client, node *corev1.Node) (und
 	return underlayNetworkName != "", overlayNetworkName != "", nil
 }
 
-func ListAllocatedIPInstancesOfPod(c client.Client, pod *corev1.Pod) (ips []*networkingv1.IPInstance, err error) {
+func ListAllocatedIPInstancesOfPod(c client.Reader, pod *corev1.Pod) (ips []*networkingv1.IPInstance, err error) {
 	var ipList *networkingv1.IPInstanceList
-	if ipList, err = ListIPInstances(c, client.InNamespace(pod.Namespace)); err != nil {
+	if ipList, err = ListIPInstancesByReader(c, client.InNamespace(pod.Namespace)); err != nil {
 		return
 	}
 	for i := range ipList.Items {
@@ -216,8 +224,8 @@ func ListAllocatedIPInstancesOfPod(c client.Client, pod *corev1.Pod) (ips []*net
 	return
 }
 
-func GetIPOfPod(c client.Client, pod *corev1.Pod) (string, error) {
-	ipList, err := ListIPInstances(c, client.InNamespace(pod.Namespace))
+func GetIPOfPod(c client.Reader, pod *corev1.Pod) (string, error) {
+	ipList, err := ListIPInstancesByReader(c, client.InNamespace(pod.Namespace))
 	if err != nil {
 		return "", err
 	}
@@ -232,8 +240,8 @@ func GetIPOfPod(c client.Client, pod *corev1.Pod) (string, error) {
 	return "", nil
 }
 
-func ListIPsOfPod(c client.Client, pod *corev1.Pod) ([]string, error) {
-	ipList, err := ListIPInstances(c, client.InNamespace(pod.Namespace))
+func ListIPsOfPod(c client.Reader, pod *corev1.Pod) ([]string, error) {
+	ipList, err := ListIPInstancesByReader(c, client.InNamespace(pod.Namespace))
 	if err != nil {
 		return nil, err
 	}
