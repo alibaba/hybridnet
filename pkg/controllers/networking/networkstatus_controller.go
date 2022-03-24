@@ -46,7 +46,7 @@ import (
 
 const (
 	ControllerNetworkStatus = "NetworkStatus"
-	indexerFieldNetwork     = "network"
+	IndexerFieldNetwork     = "network"
 )
 
 // NetworkStatusReconciler reconciles status of network objects
@@ -91,7 +91,7 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// update subnet list
 	if networkStatus.SubnetList, err = utils.ListSubnetsToNames(r,
 		client.MatchingFields{
-			indexerFieldNetwork: network.GetName(),
+			IndexerFieldNetwork: network.GetName(),
 		},
 	); err != nil {
 		return ctrl.Result{}, wrapError("unable to update subnet list", err)
@@ -185,22 +185,6 @@ func updateUsageMetrics(networkName string, networkStatus *networkingv1.NetworkS
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
-	// init network indexer for Subnets
-	if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Subnet{}, indexerFieldNetwork, func(obj client.Object) []string {
-		subnet, ok := obj.(*networkingv1.Subnet)
-		if !ok {
-			return nil
-		}
-
-		networkName := subnet.Spec.Network
-		if len(networkName) > 0 {
-			return []string{networkName}
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerNetworkStatus).
 		For(&networkingv1.Network{},

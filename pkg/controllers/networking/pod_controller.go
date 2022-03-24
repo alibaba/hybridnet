@@ -57,8 +57,8 @@ const (
 )
 
 const (
-	indexerFieldNode = "node"
-	overlayNodeName  = "c3e6699d28e7"
+	IndexerFieldNode = "node"
+	OverlayNodeName  = "c3e6699d28e7"
 )
 
 // PodReconciler reconciles a Pod object
@@ -189,7 +189,7 @@ func (r *PodReconciler) selectNetwork(pod *corev1.Pod) (string, error) {
 		// try to get underlay network by node indexer
 		var networkList *networkingv1.NetworkList
 		var err error
-		if networkList, err = utils.ListNetworks(r, client.MatchingFields{indexerFieldNode: pod.Spec.NodeName}); err != nil {
+		if networkList, err = utils.ListNetworks(r, client.MatchingFields{IndexerFieldNode: pod.Spec.NodeName}); err != nil {
 			return "", fmt.Errorf("unable to list underlay network by indexer node: %v", err)
 		}
 		if len(networkList.Items) >= 1 {
@@ -212,7 +212,7 @@ func (r *PodReconciler) selectNetwork(pod *corev1.Pod) (string, error) {
 		// try to get overlay network by special node name
 		var networkList *networkingv1.NetworkList
 		var err error
-		if networkList, err = utils.ListNetworks(r, client.MatchingFields{indexerFieldNode: overlayNodeName}); err != nil {
+		if networkList, err = utils.ListNetworks(r, client.MatchingFields{IndexerFieldNode: OverlayNodeName}); err != nil {
 			return "", fmt.Errorf("unable to list overlay network by indexer node: %v", err)
 		}
 		if len(networkList.Items) >= 1 {
@@ -517,25 +517,6 @@ func squashIPSliceToSubnets(ips []*types.IP) (ret []string) {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
-	// init node indexer for networks
-	if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Network{}, indexerFieldNode, func(obj client.Object) []string {
-		network, ok := obj.(*networkingv1.Network)
-		if !ok {
-			return nil
-		}
-
-		switch networkingv1.GetNetworkType(network) {
-		case networkingv1.NetworkTypeUnderlay:
-			return network.Status.NodeList
-		case networkingv1.NetworkTypeOverlay:
-			return []string{overlayNodeName}
-		default:
-			return nil
-		}
-	}); err != nil {
-		return err
-	}
-
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerPod).
 		For(&corev1.Pod{},

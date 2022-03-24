@@ -17,10 +17,15 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/alibaba/hybridnet/pkg/constants"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -97,6 +102,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// indexers need to be injected be for informer is running
+	if err = initIndexers(mgr); err != nil {
+		entryLog.Error(err, "unable to init indexers")
+		os.Exit(1)
+	}
+
+	go func() {
+		if err := mgr.Start(signalContext); err != nil {
+			entryLog.Error(err, "manager exit unexpectedly")
+			os.Exit(1)
+		}
+	}()
+
+	mgr.GetCache().WaitForCacheSync(signalContext)
 	ipamManager, err := networking.NewIPAMManager(mgr.GetClient())
 	if err != nil {
 		entryLog.Error(err, "unable to create IPAM manager")
@@ -226,10 +245,7 @@ func main() {
 		}
 	}
 
-	if err = mgr.Start(signalContext); err != nil {
-		entryLog.Error(err, "manager exit unexpectedly")
-		os.Exit(1)
-	}
+	<-signalContext.Done()
 }
 
 func initClusterStatusChecker(mgr ctrl.Manager) (clusterchecker.Checker, error) {
@@ -253,4 +269,59 @@ func initClusterStatusChecker(mgr ctrl.Manager) (clusterchecker.Checker, error) 
 		return nil, err
 	}
 	return checker, nil
+}
+
+func initIndexers(mgr ctrl.Manager) (err error) {
+	// init node indexer for networks
+	if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Network{},
+		networking.IndexerFieldNode, func(obj client.Object) []string {
+			network, ok := obj.(*networkingv1.Network)
+			if !ok {
+				return nil
+			}
+
+			switch networkingv1.GetNetworkType(network) {
+			case networkingv1.NetworkTypeUnderlay:
+				return network.Status.NodeList
+			case networkingv1.NetworkTypeOverlay:
+				return []string{networking.OverlayNodeName}
+			default:
+				return nil
+			}
+		}); err != nil {
+		return err
+	}
+
+	// init network indexer for Subnets
+	if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Subnet{},
+		networking.IndexerFieldNetwork, func(obj client.Object) []string {
+			subnet, ok := obj.(*networkingv1.Subnet)
+			if !ok {
+				return nil
+			}
+
+			networkName := subnet.Spec.Network
+			if len(networkName) > 0 {
+				return []string{networkName}
+			}
+			return nil
+		}); err != nil {
+		return err
+	}
+
+	if feature.MultiClusterEnabled() {
+		// init node indexer for IP instances
+		if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.IPInstance{},
+			multicluster.IndexerFieldNode, func(obj client.Object) []string {
+				nodeName := obj.GetLabels()[constants.LabelNode]
+				if len(nodeName) > 0 {
+					return []string{nodeName}
+				}
+				return nil
+			}); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

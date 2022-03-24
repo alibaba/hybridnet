@@ -48,7 +48,7 @@ import (
 )
 
 const ControllerRemoteVTEP = "RemoteVTEP"
-const indexerFieldNode = "node"
+const IndexerFieldNode = "node"
 
 //+kubebuilder:rbac:groups=multicluster.alibaba.com,resources=remotevteps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=multicluster.alibaba.com,resources=remotevteps/status,verbs=get;update;patch
@@ -162,7 +162,7 @@ func (r *RemoteVtepReconciler) cleanVTEPForNode(ctx context.Context, nodeName st
 }
 
 func (r *RemoteVtepReconciler) pickEndpointIPListForNode(ctx context.Context, nodeName string) ([]string, error) {
-	ipInstanceList, err := utils.ListIPInstances(r, client.MatchingFields{indexerFieldNode: nodeName})
+	ipInstanceList, err := utils.ListIPInstances(r, client.MatchingFields{IndexerFieldNode: nodeName})
 	if err != nil {
 		return nil, err
 	}
@@ -217,17 +217,6 @@ func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 		r,
 	)
 	if err = mgr.Add(gc); err != nil {
-		return err
-	}
-
-	// init node indexer for IP instances
-	if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.IPInstance{}, indexerFieldNode, func(obj client.Object) []string {
-		nodeName := obj.GetLabels()[constants.LabelNode]
-		if len(nodeName) > 0 {
-			return []string{nodeName}
-		}
-		return nil
-	}); err != nil {
 		return err
 	}
 
