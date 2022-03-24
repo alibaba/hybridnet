@@ -526,7 +526,7 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 
 		switch networkingv1.GetNetworkType(network) {
 		case networkingv1.NetworkTypeUnderlay:
-			return network.Status.NodeList
+			return globalutils.DeepCopyStringSlice(network.Status.NodeList)
 		case networkingv1.NetworkTypeOverlay:
 			return []string{overlayNodeName}
 		default:

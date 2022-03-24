@@ -43,3 +43,7 @@ func DeepEqualStringSlice(a []string, b []string) bool {
 	}
 	return true
 }
+
+func DeepCopyStringSlice(in []string) []string {
+	return append(in[:0:0], in...)
+}
