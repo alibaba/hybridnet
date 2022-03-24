@@ -37,7 +37,7 @@ func (o *OverlayNetID) Check(clusterManager ctrl.Manager, opts ...Option) CheckR
 		return NewResult(fmt.Errorf("unable to find overlay net ID of local cluster: %v", err))
 	}
 
-	remoteOverlayNetID, err := utils.FindOverlayNetworkNetID(clusterManager.GetAPIReader())
+	remoteOverlayNetID, err := utils.FindOverlayNetworkNetID(clusterManager.GetClient())
 	if err != nil {
 		return NewResult(fmt.Errorf("unable to find overlay net ID of remote cluster: %v", err))
 	}

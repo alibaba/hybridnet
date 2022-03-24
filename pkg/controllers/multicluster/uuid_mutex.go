@@ -103,7 +103,7 @@ func NewUUIDMutex() UUIDMutex {
 	}
 }
 
-func NewUUIDMutexFromClient(c client.Reader) (UUIDMutex, error) {
+func NewUUIDMutexFromClient(c client.Client) (UUIDMutex, error) {
 	mutex := NewUUIDMutex()
 	localUUID, err := utils.GetClusterUUID(c)
 	if err != nil {

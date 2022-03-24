@@ -32,7 +32,7 @@ type Bidirection struct {
 }
 
 func (b *Bidirection) Check(clusterManager ctrl.Manager, opts ...Option) CheckResult {
-	remoteClusterList, err := utils.ListRemoteClusters(clusterManager.GetAPIReader())
+	remoteClusterList, err := utils.ListRemoteClusters(clusterManager.GetClient())
 	if err != nil {
 		return NewResult(err)
 	}

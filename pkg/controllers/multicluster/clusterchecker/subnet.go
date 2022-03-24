@@ -36,7 +36,7 @@ type Subnet struct {
 func (o *Subnet) Check(clusterManager ctrl.Manager, opts ...Option) CheckResult {
 	options := ToOptions(opts...)
 
-	subnetsOfCluster, err := clientutils.ListSubnets(clusterManager.GetAPIReader())
+	subnetsOfCluster, err := clientutils.ListSubnets(clusterManager.GetClient())
 	if err != nil {
 		return NewResult(err)
 	}

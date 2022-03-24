@@ -35,7 +35,7 @@ type IPAMManager interface {
 	DualStack() ipam.DualStackInterface
 }
 
-func NewIPAMManager(c client.Reader) (IPAMManager, error) {
+func NewIPAMManager(c client.Client) (IPAMManager, error) {
 	networkList, err := utils.ListNetworks(c)
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func NewIPAMManager(c client.Reader) (IPAMManager, error) {
 	return manager, nil
 }
 
-func NetworkGetter(c client.Reader) allocator.NetworkGetter {
+func NetworkGetter(c client.Client) allocator.NetworkGetter {
 	return func(networkName string) (*types.Network, error) {
 		network, err := utils.GetNetwork(c, networkName)
 		if err != nil {
@@ -73,7 +73,7 @@ func NetworkGetter(c client.Reader) allocator.NetworkGetter {
 	}
 }
 
-func SubnetGetter(c client.Reader) allocator.SubnetGetter {
+func SubnetGetter(c client.Client) allocator.SubnetGetter {
 	return func(networkName string) ([]*types.Subnet, error) {
 		subnetList, err := utils.ListSubnets(c)
 		if err != nil {
@@ -91,7 +91,7 @@ func SubnetGetter(c client.Reader) allocator.SubnetGetter {
 	}
 }
 
-func IPSetGetter(c client.Reader) allocator.IPSetGetter {
+func IPSetGetter(c client.Client) allocator.IPSetGetter {
 	return func(subnetName string) (ipamtypes.IPSet, error) {
 		ipList, err := utils.ListIPInstances(c, client.MatchingLabels{
 			constants.LabelSubnet: subnetName,
