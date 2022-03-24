@@ -20,6 +20,3 @@ bin
 vendor/
 
 /config/
-
-# only for kubebuilder
-main.go
