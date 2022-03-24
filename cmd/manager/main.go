@@ -23,6 +23,8 @@ import (
 	"os"
 	"time"
 
+	globalutils "github.com/alibaba/hybridnet/pkg/utils"
+
 	"github.com/alibaba/hybridnet/pkg/constants"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -282,7 +284,7 @@ func initIndexers(mgr ctrl.Manager) (err error) {
 
 			switch networkingv1.GetNetworkType(network) {
 			case networkingv1.NetworkTypeUnderlay:
-				return network.Status.NodeList
+				return globalutils.DeepCopyStringSlice(network.Status.NodeList)
 			case networkingv1.NetworkTypeOverlay:
 				return []string{networking.OverlayNodeName}
 			default:

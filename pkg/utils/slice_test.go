@@ -113,3 +113,34 @@ func TestDeepEqualStringSlice(t *testing.T) {
 		})
 	}
 }
+
+func TestDeepCopyStringSlice(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []string
+		out  []string
+	}{
+		{
+			"nil",
+			nil,
+			nil,
+		},
+		{
+			"empty",
+			[]string{},
+			[]string{},
+		},
+		{
+			"normal",
+			[]string{"a", "b"},
+			[]string{"a", "b"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if !reflect.DeepEqual(DeepCopyStringSlice(test.in), test.out) {
+				t.Errorf("test %s fails", test.name)
+			}
+		})
+	}
+}
