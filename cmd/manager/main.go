@@ -25,8 +25,6 @@ import (
 
 	globalutils "github.com/alibaba/hybridnet/pkg/utils"
 
-	"github.com/alibaba/hybridnet/pkg/constants"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/spf13/pflag"
@@ -295,7 +293,7 @@ func initIndexers(mgr ctrl.Manager) (err error) {
 	}
 
 	// init network indexer for Subnets
-	if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Subnet{},
+	return mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Subnet{},
 		networking.IndexerFieldNetwork, func(obj client.Object) []string {
 			subnet, ok := obj.(*networkingv1.Subnet)
 			if !ok {
@@ -307,23 +305,5 @@ func initIndexers(mgr ctrl.Manager) (err error) {
 				return []string{networkName}
 			}
 			return nil
-		}); err != nil {
-		return err
-	}
-
-	if feature.MultiClusterEnabled() {
-		// init node indexer for IP instances
-		if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.IPInstance{},
-			multicluster.IndexerFieldNode, func(obj client.Object) []string {
-				nodeName := obj.GetLabels()[constants.LabelNode]
-				if len(nodeName) > 0 {
-					return []string{nodeName}
-				}
-				return nil
-			}); err != nil {
-			return err
-		}
-	}
-
-	return nil
+		})
 }
