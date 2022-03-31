@@ -175,7 +175,7 @@ func (r *RemoteVtepReconciler) pickEndpointIPListForNode(ctx context.Context, no
 			continue
 		}
 		// only using IP will be valid endpoint
-		if ipInstance == nil || ipInstance.Status.Phase != networkingv1.IPPhaseUsing {
+		if ipInstance == nil || networkingv1.GetPhaseOfIPInstance(ipInstance) != networkingv1.IPPhaseUsing {
 			continue
 		}
 		endpointIP, _, _ := net.ParseCIDR(ipInstance.Spec.Address.IP)
@@ -271,16 +271,16 @@ func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 					if !ok {
 						return false
 					}
-					return len(ipInstance.Status.Phase) > 0
+					return len(networkingv1.GetPhaseOfIPInstance(ipInstance)) > 0
 				}),
 				// if node or phase of IP instance change, node will be processed
 				predicate.Or(
 					&utils.SpecifiedLabelChangedPredicate{
 						LabelKeys: []string{
 							constants.LabelNode,
+							constants.LabelIPPhase,
 						},
 					},
-					&utils.IPInstancePhaseChangePredicate{},
 				),
 			),
 		).

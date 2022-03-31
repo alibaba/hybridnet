@@ -163,6 +163,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := (&networking.IPInstanceStatusReconciler{
+		Client:                mgr.GetClient(),
+		Recorder:              mgr.GetEventRecorderFor(networking.ControllerIPInstanceStatus + "Controller"),
+		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerIPInstanceStatus]),
+	}).SetupWithManager(mgr); err != nil {
+		entryLog.Error(err, "unable to inject controller", "controller", networking.ControllerIPInstanceStatus)
+		os.Exit(1)
+	}
+
 	if err = (&networking.NetworkStatusReconciler{
 		Client:                mgr.GetClient(),
 		IPAMManager:           ipamManager,

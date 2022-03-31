@@ -123,7 +123,7 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 
 	for _, ipInstance := range ipInstanceList.Items {
 		// if this ip instance is not actually being used, ignore
-		if ipInstance.Status.Phase != networkingv1.IPPhaseUsing {
+		if networkingv1.GetPhaseOfIPInstance(&ipInstance) != networkingv1.IPPhaseUsing {
 			continue
 		}
 

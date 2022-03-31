@@ -133,7 +133,8 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	var networkName string
 	for _, ipInstance := range ipInstanceList.Items {
 		// IPv4 and IPv6 ip will exist at the same time
-		if ipInstance.Status.PodName == podRequest.PodName && ipInstance.Status.PodNamespace == podRequest.PodNamespace {
+		if networkingv1.GetPodOfIPInstance(&ipInstance) == podRequest.PodName &&
+			ipInstance.Namespace == podRequest.PodNamespace {
 
 			if netID == nil && macAddr == "" {
 				netID = ipInstance.Spec.Address.NetID

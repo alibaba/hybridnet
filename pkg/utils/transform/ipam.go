@@ -57,9 +57,9 @@ func TransferIPInstanceForIPAM(in *v1.IPInstance) *ipamtypes.IP {
 		NetID:        int32pToUint32p(in.Spec.Address.NetID),
 		Subnet:       in.Spec.Subnet,
 		Network:      in.Spec.Network,
-		PodName:      in.Status.PodName,
-		PodNamespace: in.Status.PodNamespace,
-		Status:       string(in.Status.Phase),
+		PodName:      v1.GetPodOfIPInstance(in),
+		PodNamespace: in.Namespace,
+		Status:       string(v1.GetPhaseOfIPInstance(in)),
 	}
 }
 

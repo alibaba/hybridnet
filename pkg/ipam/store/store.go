@@ -61,10 +61,6 @@ func (w *Worker) Couple(pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
 		}
 	}()
 
-	if err = w.updateIPStatus(ipInstance, pod.Spec.NodeName, pod.Name, pod.Namespace, string(networkingv1.IPPhaseUsing)); err != nil {
-		return err
-	}
-
 	defer func() {
 		if err != nil {
 			_ = w.releaseIPFromPod(pod)
@@ -85,11 +81,7 @@ func (w *Worker) ReCouple(pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
 		return
 	}
 
-	if err = w.patchIPLabels(ipInstance, pod.Name, pod.Spec.NodeName); err != nil {
-		return err
-	}
-
-	if err = w.updateIPStatus(ipInstance, pod.Spec.NodeName, pod.Name, pod.Namespace, string(networkingv1.IPPhaseUsing)); err != nil {
+	if err = w.patchIPLabels(ipInstance, pod.Name, pod.Spec.NodeName, networkingv1.IPPhaseUsing); err != nil {
 		return err
 	}
 
@@ -138,7 +130,7 @@ func (w *Worker) IPReserve(pod *corev1.Pod) (err error) {
 	}
 
 	for i := range ipInstanceList.Items {
-		if err = w.updateIPStatus(&ipInstanceList.Items[i], "", pod.Name, pod.Namespace, string(networkingv1.IPPhaseReserved)); err != nil {
+		if err = w.patchIPLabels(&ipInstanceList.Items[i], pod.Name, "", networkingv1.IPPhaseReserved); err != nil {
 			return err
 		}
 	}
@@ -237,24 +229,6 @@ func (w *Worker) SyncSubnetUsage(name string, usage *ipamtypes.Usage) (err error
 	})
 }
 
-func (w *Worker) updateIPStatus(ip *networkingv1.IPInstance, nodeName, podName, podNamespace, phase string) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		return w.Status().Patch(context.TODO(),
-			ip,
-			client.RawPatch(
-				types.MergePatchType,
-				[]byte(fmt.Sprintf(
-					`{"status":{"podName":%q,"podNamespace":%q,"nodeName":%q,"phase":%q}}`,
-					podName,
-					podNamespace,
-					nodeName,
-					phase,
-				)),
-			),
-		)
-	})
-}
-
 func (w *Worker) createIP(pod *corev1.Pod, ip *ipamtypes.IP) (ipIns *networkingv1.IPInstance, err error) {
 	return w.createIPWithMAC(pod, ip, mac.GenerateMAC().String())
 }
@@ -275,6 +249,7 @@ func (w *Worker) createIPWithMAC(pod *corev1.Pod, ip *ipamtypes.IP, macAddr stri
 				constants.LabelNetwork: ip.Network,
 				constants.LabelNode:    pod.Spec.NodeName,
 				constants.LabelPod:     pod.Name,
+				constants.LabelIPPhase: string(networkingv1.IPPhaseUsing),
 			},
 			OwnerReferences: []metav1.OwnerReference{*owner},
 		},
@@ -350,18 +325,20 @@ func (w *Worker) releaseIPFromPod(pod *corev1.Pod) error {
 	})
 }
 
-func (w *Worker) patchIPLabels(ip *networkingv1.IPInstance, podName, nodeName string) error {
+func (w *Worker) patchIPLabels(ip *networkingv1.IPInstance, podName, nodeName string, ipPhase networkingv1.IPPhase) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		return w.Patch(context.TODO(),
 			ip,
 			client.RawPatch(
 				types.MergePatchType,
 				[]byte(fmt.Sprintf(
-					`{"metadata":{"labels":{"%s":%q,"%s":%q}}}`,
+					`{"metadata":{"labels":{"%s":%q,"%s":%q,"%s":%q}}}`,
 					constants.LabelNode,
 					nodeName,
 					constants.LabelPod,
 					podName,
+					constants.LabelIPPhase,
+					string(ipPhase),
 				)),
 			),
 		)

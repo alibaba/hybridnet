@@ -68,7 +68,7 @@ func (d *DualStackWorker) Couple(pod *v1.Pod, IPs []*types.IP) (err error) {
 	}
 
 	for _, ipi := range ipInstances {
-		if err = d.worker.updateIPStatus(ipi, pod.Spec.NodeName, pod.Name, pod.Namespace, string(networkingv1.IPPhaseUsing)); err != nil {
+		if err = d.worker.patchIPLabels(ipi, pod.Name, pod.Spec.NodeName, networkingv1.IPPhaseUsing); err != nil {
 			return err
 		}
 	}
@@ -113,13 +113,7 @@ func (d *DualStackWorker) ReCouple(pod *v1.Pod, IPs []*types.IP) (err error) {
 	}
 
 	for _, ipi := range ipInstances {
-		if err = d.worker.patchIPLabels(ipi, pod.Name, pod.Spec.NodeName); err != nil {
-			return err
-		}
-	}
-
-	for _, ipi := range ipInstances {
-		if err = d.worker.updateIPStatus(ipi, pod.Spec.NodeName, pod.Name, pod.Namespace, string(networkingv1.IPPhaseUsing)); err != nil {
+		if err = d.worker.patchIPLabels(ipi, pod.Name, pod.Spec.NodeName, networkingv1.IPPhaseUsing); err != nil {
 			return err
 		}
 	}

@@ -209,7 +209,7 @@ func ListAllocatedIPInstancesOfPod(c client.Reader, pod *corev1.Pod) (ips []*net
 	for i := range ipList.Items {
 		var ip = &ipList.Items[i]
 		// terminating ip should not be picked ip
-		if ip.Status.PodName == pod.Name && ip.DeletionTimestamp == nil {
+		if networkingv1.GetPodOfIPInstance(ip) == pod.Name && ip.DeletionTimestamp == nil {
 			ips = append(ips, ip.DeepCopy())
 		}
 	}
@@ -225,7 +225,7 @@ func GetIPOfPod(c client.Reader, pod *corev1.Pod) (string, error) {
 	for i := range ipList.Items {
 		var ip = &ipList.Items[i]
 		// terminating ip should not be picked ip
-		if ip.Status.PodName == pod.Name && ip.DeletionTimestamp == nil {
+		if networkingv1.GetPodOfIPInstance(ip) == pod.Name && ip.DeletionTimestamp == nil {
 			return ToIPFormat(ip.Name), nil
 		}
 	}
@@ -242,7 +242,7 @@ func ListIPsOfPod(c client.Reader, pod *corev1.Pod) ([]string, error) {
 	for i := range ipList.Items {
 		var ip = &ipList.Items[i]
 		// terminating ip should not be picked ip
-		if ip.Status.PodName == pod.Name && ip.DeletionTimestamp == nil {
+		if networkingv1.GetPodOfIPInstance(ip) == pod.Name && ip.DeletionTimestamp == nil {
 			ipStr, isIPv6 := ToIPFormatWithFamily(ip.Name)
 			if isIPv6 {
 				v6 = append(v6, ipStr)

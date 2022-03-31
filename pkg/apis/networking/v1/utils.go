@@ -22,6 +22,8 @@ import (
 	"math/big"
 	"net"
 
+	"github.com/alibaba/hybridnet/pkg/constants"
+
 	"github.com/containernetworking/plugins/pkg/ip"
 )
 
@@ -70,6 +72,30 @@ func GetNetworkMode(networkObj *Network) NetworkMode {
 	}
 
 	return networkObj.Spec.Mode
+}
+
+func GetPodOfIPInstance(ipInstanceObj *IPInstance) string {
+	podName := ipInstanceObj.GetLabels()[constants.LabelPod]
+	if len(podName) != 0 {
+		return podName
+	}
+	return ipInstanceObj.Status.PodName
+}
+
+func GetNodeOfIPInstance(ipInstanceObj *IPInstance) string {
+	nodeName := ipInstanceObj.GetLabels()[constants.LabelNode]
+	if len(nodeName) != 0 {
+		return nodeName
+	}
+	return ipInstanceObj.Status.NodeName
+}
+
+func GetPhaseOfIPInstance(ipInstanceObj *IPInstance) IPPhase {
+	phase := ipInstanceObj.GetLabels()[constants.LabelIPPhase]
+	if len(phase) != 0 {
+		return IPPhase(phase)
+	}
+	return ipInstanceObj.Status.Phase
 }
 
 func IsIPv6IPInstance(ip *IPInstance) bool {
