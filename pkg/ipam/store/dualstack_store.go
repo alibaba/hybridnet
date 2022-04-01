@@ -18,7 +18,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -169,9 +168,4 @@ func (d *DualStackWorker) SyncSubnetUsage(name string, usage *types.Usage) (err 
 
 func (d *DualStackWorker) SyncNetworkStatus(name, nodes, subnets string) (err error) {
 	return d.worker.SyncNetworkStatus(name, nodes, subnets)
-}
-
-func marshalIPs(IPs []*types.IP) string {
-	bytes, _ := json.Marshal(IPs)
-	return string(bytes)
 }

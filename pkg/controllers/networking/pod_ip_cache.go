@@ -30,13 +30,13 @@ import (
 )
 
 type PodIPCache interface {
-	Record(podUid types.UID, podName, namespace string, ipInstanceNames []string)
-	Release(podName, namespace, ipInstanceName string) error
+	Record(podUID types.UID, podName, namespace string, ipInstanceNames []string)
+	Release(ipInstanceName, namespace string) error
 	Get(podName, namespace string) (bool, types.UID, []string)
 }
 
 type podAllocatedInfo struct {
-	podUid          types.UID
+	podUID          types.UID
 	ipInstanceNames []string
 }
 
@@ -65,7 +65,7 @@ func NewPodIPCache(c client.Reader) (PodIPCache, error) {
 	for _, ip := range ipList.Items {
 		podName := ip.GetLabels()[constants.LabelPod]
 		if len(podName) != 0 {
-			var podUid types.UID
+			var podUID types.UID
 			pod, err := utils.GetPod(c, podName, ip.Namespace)
 			if err != nil {
 				if err = client.IgnoreNotFound(err); err != nil {
@@ -74,7 +74,7 @@ func NewPodIPCache(c client.Reader) (PodIPCache, error) {
 			}
 
 			if pod != nil {
-				podUid = pod.UID
+				podUID = pod.UID
 			}
 
 			var recordedIPInstances []string
@@ -86,7 +86,7 @@ func NewPodIPCache(c client.Reader) (PodIPCache, error) {
 
 			// this is different from a normal Record action
 			cache.podToIP[namespacedKey(podName, ip.Namespace)] = &podAllocatedInfo{
-				podUid:          podUid,
+				podUID:          podUID,
 				ipInstanceNames: append(recordedIPInstances, ip.Name),
 			}
 
@@ -97,13 +97,13 @@ func NewPodIPCache(c client.Reader) (PodIPCache, error) {
 	return cache, nil
 }
 
-func (c *podIPCache) Record(podUid types.UID, podName, namespace string, ipInstanceNames []string) {
+func (c *podIPCache) Record(podUID types.UID, podName, namespace string, ipInstanceNames []string) {
 	c.Lock()
 	defer c.Unlock()
 
 	// don't check if the pod exist, just overwrite it
 	c.podToIP[namespacedKey(podName, namespace)] = &podAllocatedInfo{
-		podUid:          podUid,
+		podUID:          podUID,
 		ipInstanceNames: ipInstanceNames,
 	}
 
@@ -112,7 +112,7 @@ func (c *podIPCache) Record(podUid types.UID, podName, namespace string, ipInsta
 	}
 }
 
-func (c *podIPCache) Release(podName, namespace, ipInstanceName string) error {
+func (c *podIPCache) Release(ipInstanceName, namespace string) error {
 	c.Lock()
 	defer c.Unlock()
 
@@ -147,7 +147,7 @@ func (c *podIPCache) Get(podName, namespace string) (bool, types.UID, []string) 
 		return false, "", nil
 	}
 
-	return true, info.podUid, info.ipInstanceNames
+	return true, info.podUID, info.ipInstanceNames
 }
 
 func namespacedKey(name, namespace string) string {

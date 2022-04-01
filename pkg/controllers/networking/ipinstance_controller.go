@@ -64,7 +64,7 @@ func (r *IPInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, wrapError("cannot release an IPInstance without pod label", err)
 		}
 
-		if err = r.PodIPCache.Release(podName, ip.Namespace, ip.Name); err != nil {
+		if err = r.PodIPCache.Release(ip.Name, ip.Namespace); err != nil {
 			return ctrl.Result{}, wrapError("unable to release IPInstance in pod ip cache", err)
 		}
 

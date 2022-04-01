@@ -18,7 +18,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/alibaba/hybridnet/pkg/utils"
@@ -319,11 +318,6 @@ func (w *Worker) patchIPLabels(ip *networkingv1.IPInstance, podName, nodeName st
 			),
 		)
 	})
-}
-
-func marshal(ip *ipamtypes.IP) string {
-	bytes, _ := json.Marshal(ip)
-	return string(bytes)
 }
 
 func toDNSLabelFormat(ip *ipamtypes.IP) string {
