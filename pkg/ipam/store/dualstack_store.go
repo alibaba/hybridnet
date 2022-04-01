@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/utils/mac"
 )
@@ -73,13 +72,7 @@ func (d *DualStackWorker) Couple(pod *v1.Pod, IPs []*types.IP) (err error) {
 		}
 	}
 
-	defer func() {
-		if err != nil {
-			_ = d.worker.releaseIPFromPod(pod)
-		}
-	}()
-
-	return d.patchIPsToPod(pod, IPs)
+	return nil
 }
 
 func (d *DualStackWorker) ReCouple(pod *v1.Pod, IPs []*types.IP) (err error) {
@@ -124,7 +117,7 @@ func (d *DualStackWorker) ReCouple(pod *v1.Pod, IPs []*types.IP) (err error) {
 		}
 	}
 
-	return d.patchIPsToPod(pod, IPs)
+	return nil
 }
 
 func (d *DualStackWorker) DeCouple(pod *v1.Pod) (err error) {
@@ -176,22 +169,6 @@ func (d *DualStackWorker) SyncSubnetUsage(name string, usage *types.Usage) (err 
 
 func (d *DualStackWorker) SyncNetworkStatus(name, nodes, subnets string) (err error) {
 	return d.worker.SyncNetworkStatus(name, nodes, subnets)
-}
-
-func (d *DualStackWorker) patchIPsToPod(pod *v1.Pod, IPs []*types.IP) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		return d.Patch(context.TODO(),
-			pod,
-			client.RawPatch(
-				apitypes.MergePatchType,
-				[]byte(fmt.Sprintf(
-					`{"metadata":{"annotations":{%q:%q}}}`,
-					constants.AnnotationIP,
-					marshalIPs(IPs),
-				)),
-			),
-		)
-	})
 }
 
 func marshalIPs(IPs []*types.IP) string {

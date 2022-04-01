@@ -23,13 +23,14 @@ import (
 	"net/http"
 	"time"
 
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/alibaba/hybridnet/pkg/daemon/utils"
 
 	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
 
 	"github.com/go-logr/logr"
-
-	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -90,6 +91,17 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	}
 
 	var returnIPAddress []request.IPAddress
+	var ipInstanceList []networkingv1.IPInstance
+
+	pod := &corev1.Pod{}
+	if err := cdh.mgrAPIReader.Get(context.TODO(), types.NamespacedName{
+		Name:      podRequest.PodName,
+		Namespace: podRequest.PodNamespace,
+	}, pod); err != nil {
+		errMsg := fmt.Errorf("failed to get pod %v/%v: %v", podRequest.PodName, podRequest.PodNamespace, err)
+		cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
+		return
+	}
 
 	backOffBase := 5 * time.Microsecond
 	retries := 11
@@ -98,21 +110,24 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 		time.Sleep(backOffBase)
 		backOffBase = backOffBase * 2
 
-		pod := &corev1.Pod{}
-		if err := cdh.mgrAPIReader.Get(context.TODO(), types.NamespacedName{
-			Name:      podRequest.PodName,
-			Namespace: podRequest.PodNamespace,
-		}, pod); err != nil {
-			errMsg := fmt.Errorf("failed to get pod %v/%v: %v", podRequest.PodName, podRequest.PodNamespace, err)
+		ipFamily := ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
+
+		if ipInstanceList, err = cdh.listIPInstanceOfPod(podRequest.PodName, podRequest.PodNamespace); err != nil {
+			errMsg := fmt.Errorf("failed to list ip instances for pod %v/%v: %v",
+				podRequest.PodName, podRequest.PodNamespace, err)
 			cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
 			return
 		}
 
-		// wait for ip instance to be coupled
-		annotation := pod.GetAnnotations()
-		_, exist := annotation[constants.AnnotationIP]
-		if exist {
-			break
+		if len(ipInstanceList) == 1 && (ipFamily == ipamtypes.IPv4Only || ipFamily == ipamtypes.IPv6Only) {
+			if ipInstanceList[0].Status.NodeName == cdh.config.NodeName {
+				break
+			}
+		} else if len(ipInstanceList) == 2 && ipFamily == ipamtypes.DualStack {
+			if ipInstanceList[0].Status.NodeName == cdh.config.NodeName &&
+				ipInstanceList[1].Status.NodeName == cdh.config.NodeName {
+				break
+			}
 		} else if i == retries-1 {
 			errMsg := fmt.Errorf("failed to wait for pod %v/%v be coupled with ip: %v", podRequest.PodName, podRequest.PodNamespace, err)
 			cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
@@ -120,18 +135,8 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 		}
 	}
 
-	ipInstanceList := &networkingv1.IPInstanceList{}
-	if err := cdh.mgrClient.List(context.TODO(), ipInstanceList, client.MatchingLabels{
-		constants.LabelNode: cdh.config.NodeName,
-		constants.LabelPod:  podRequest.PodName,
-	}); err != nil {
-		errMsg := fmt.Errorf("failed to list ip instance for pod %v: %v", cdh.config.NodeName, err)
-		cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
-		return
-	}
-
 	var networkName string
-	for _, ipInstance := range ipInstanceList.Items {
+	for _, ipInstance := range ipInstanceList {
 		// IPv4 and IPv6 ip will exist at the same time
 		if ipInstance.Status.PodName == podRequest.PodName && ipInstance.Status.PodNamespace == podRequest.PodNamespace {
 
@@ -306,6 +311,18 @@ func (cdh *cniDaemonHandler) errorWrapper(err error, status int, resp *restful.R
 	_ = resp.WriteHeaderAndEntity(status, request.PodResponse{
 		Err: err.Error(),
 	})
+}
+
+func (cdh *cniDaemonHandler) listIPInstanceOfPod(podName, podNamespace string) ([]networkingv1.IPInstance, error) {
+	ipInstanceList := &networkingv1.IPInstanceList{}
+	if err := cdh.mgrClient.List(context.TODO(), ipInstanceList, client.InNamespace(podNamespace), client.MatchingLabels{
+		constants.LabelNode: cdh.config.NodeName,
+		constants.LabelPod:  podName,
+	}); err != nil {
+		return nil, err
+	}
+
+	return ipInstanceList.Items, nil
 }
 
 func printAllocatedIPs(allocatedIPs map[networkingv1.IPVersion]*utils.IPInfo) string {

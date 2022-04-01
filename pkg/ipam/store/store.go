@@ -20,8 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
+	"github.com/alibaba/hybridnet/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -65,13 +65,7 @@ func (w *Worker) Couple(pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
 		return err
 	}
 
-	defer func() {
-		if err != nil {
-			_ = w.releaseIPFromPod(pod)
-		}
-	}()
-
-	return w.patchIPtoPod(pod, ip)
+	return nil
 }
 
 func (w *Worker) ReCouple(pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
@@ -93,14 +87,10 @@ func (w *Worker) ReCouple(pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
 		return err
 	}
 
-	return w.patchIPtoPod(pod, ip)
+	return nil
 }
 
 func (w *Worker) DeCouple(pod *corev1.Pod) (err error) {
-	if len(pod.Annotations[constants.AnnotationIP]) == 0 {
-		return
-	}
-
 	var ipInstanceList = &networkingv1.IPInstanceList{}
 	if err = w.List(context.TODO(),
 		ipInstanceList,
@@ -118,14 +108,10 @@ func (w *Worker) DeCouple(pod *corev1.Pod) (err error) {
 		}
 	}
 
-	return w.releaseIPFromPod(pod)
+	return nil
 }
 
 func (w *Worker) IPReserve(pod *corev1.Pod) (err error) {
-	if len(pod.Annotations[constants.AnnotationIP]) == 0 {
-		return
-	}
-
 	var ipInstanceList = &networkingv1.IPInstanceList{}
 	if err = w.List(context.TODO(),
 		ipInstanceList,
@@ -142,7 +128,7 @@ func (w *Worker) IPReserve(pod *corev1.Pod) (err error) {
 			return err
 		}
 	}
-	return w.releaseIPFromPod(pod)
+	return nil
 }
 
 func (w *Worker) IPRecycle(namespace string, ip *ipamtypes.IP) (err error) {
@@ -317,39 +303,6 @@ func (w *Worker) getIP(namespace string, ip *ipamtypes.IP) (*networkingv1.IPInst
 	return ipInstance, nil
 }
 
-// patchIPtoPod will patch a specified IP annotation into pod
-func (w *Worker) patchIPtoPod(pod *corev1.Pod, ip *ipamtypes.IP) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		return w.Patch(context.TODO(),
-			pod,
-			client.RawPatch(
-				types.MergePatchType,
-				[]byte(fmt.Sprintf(
-					`{"metadata":{"annotations":{%q:%q}}}`,
-					constants.AnnotationIP,
-					marshal(ip),
-				)),
-			),
-		)
-	})
-}
-
-// releaseIPFromPod will remove the specified IP annotation from pod
-func (w *Worker) releaseIPFromPod(pod *corev1.Pod) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		return w.Patch(context.TODO(),
-			pod,
-			client.RawPatch(
-				types.MergePatchType,
-				[]byte(fmt.Sprintf(
-					`{"metadata":{"annotations":{%q:null}}}`,
-					constants.AnnotationIP,
-				)),
-			),
-		)
-	})
-}
-
 func (w *Worker) patchIPLabels(ip *networkingv1.IPInstance, podName, nodeName string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		return w.Patch(context.TODO(),
@@ -374,11 +327,7 @@ func marshal(ip *ipamtypes.IP) string {
 }
 
 func toDNSLabelFormat(ip *ipamtypes.IP) string {
-	if !ip.IsIPv6() {
-		return strings.ReplaceAll(ip.Address.IP.String(), ".", "-")
-	}
-
-	return strings.ReplaceAll(unifyIPv6AddressString(ip.Address.IP.String()), ":", "-")
+	return utils.ToDNSFormat(ip.Address.IP)
 }
 
 func newControllerRef(owner metav1.Object, gvk schema.GroupVersionKind) *metav1.OwnerReference {
@@ -399,20 +348,4 @@ func extractIPVersion(ip *ipamtypes.IP) networkingv1.IPVersion {
 		return networkingv1.IPv6
 	}
 	return networkingv1.IPv4
-}
-
-// unifyIPv6AddressString will help to extend the squashed sections in IPv6 address string,
-// eg, 234e:0:4567::5f will be unified to 234e:0:4567:0:0:0:0:5f
-func unifyIPv6AddressString(ip string) string {
-	const maxSectionCount = 8
-
-	if sectionCount := strings.Count(ip, ":") + 1; sectionCount < maxSectionCount {
-		var separators = []string{":", ":"}
-		for ; sectionCount < maxSectionCount; sectionCount++ {
-			separators = append(separators, ":")
-		}
-		return strings.ReplaceAll(ip, "::", strings.Join(separators, "0"))
-	}
-
-	return ip
 }

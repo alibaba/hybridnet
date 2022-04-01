@@ -45,6 +45,17 @@ func GetNetwork(client client.Reader, name string) (*networkingv1.Network, error
 	return &network, nil
 }
 
+func GetPod(client client.Reader, name, namespace string) (*corev1.Pod, error) {
+	var pod = corev1.Pod{}
+	if err := client.Get(context.TODO(), types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}, &pod); err != nil {
+		return nil, err
+	}
+	return &pod, nil
+}
+
 func ListSubnets(client client.Reader, opts ...client.ListOption) (*networkingv1.SubnetList, error) {
 	var subnetList = networkingv1.SubnetList{}
 	if err := client.List(context.TODO(), &subnetList, opts...); err != nil {

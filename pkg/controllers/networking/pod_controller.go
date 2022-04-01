@@ -19,12 +19,12 @@ package networking
 import (
 	"context"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -68,6 +68,7 @@ type PodReconciler struct {
 
 	Recorder record.EventRecorder
 
+	PodIPCache  PodIPCache
 	IPAMStore   IPAMStore
 	IPAMManager IPAMManager
 
@@ -95,7 +96,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		}
 	}()
 
-	if err = r.APIReader.Get(ctx, req.NamespacedName, pod); err != nil {
+	if err = r.Get(ctx, req.NamespacedName, pod); err != nil {
 		if err = client.IgnoreNotFound(err); err != nil {
 			return ctrl.Result{}, fmt.Errorf("unable to fetch Pod: %v", err)
 		}
@@ -117,9 +118,9 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		return ctrl.Result{}, wrapError("unable to decouple pod", r.decouple(pod))
 	}
 
-	// To avoid IP duplicate allocation in high-frequent pod updates scenario because of
-	// the fucking *delay* of informer
-	if metav1.HasAnnotation(pod.ObjectMeta, constants.AnnotationIP) {
+	cacheExist, uid, _ := r.PodIPCache.Get(pod.Name, pod.Namespace)
+	// To avoid IP duplicate allocation
+	if cacheExist && uid == pod.UID {
 		return ctrl.Result{}, nil
 	}
 
@@ -140,7 +141,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	return ctrl.Result{}, wrapError("unable to allocate", r.allocate(ctx, pod, networkName))
 }
 
-// dedouple will unbind IP instance with Pod
+// decouple will unbind IP instance with Pod
 func (r *PodReconciler) decouple(pod *corev1.Pod) (err error) {
 	var decoupleFunc func(pod *corev1.Pod) (err error)
 	if feature.DualStackEnabled() {
@@ -311,6 +312,13 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 				shouldObserve = false
 				return wrapError("unable to allocate", r.allocate(ctx, pod, networkName))
 			}
+
+			var ipInstanceNames []string
+			for _, candidate := range ipCandidates {
+				ipInstanceNames = append(ipInstanceNames, utils.ToDNSFormat(net.ParseIP(candidate)))
+			}
+			// update pod uid
+			r.PodIPCache.Record(pod.UID, pod.Name, pod.Namespace, ipInstanceNames)
 		}
 
 		// forced assign for using reserved ips
@@ -356,6 +364,9 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 			return wrapError("unable to allocate", r.allocate(ctx, pod, networkName))
 		}
 
+		ipInstanceNames := []string{utils.ToDNSFormat(net.ParseIP(ipCandidate))}
+		// update pod uid
+		r.PodIPCache.Record(pod.UID, pod.Name, pod.Namespace, ipInstanceNames)
 	}
 
 	// forced assign for using reserved ip
@@ -412,6 +423,12 @@ func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkNa
 			return fmt.Errorf("unable to couple IPs with pod: %v", err)
 		}
 
+		var ipInstanceNames []string
+		for _, ip := range ips {
+			ipInstanceNames = append(ipInstanceNames, utils.ToDNSFormat(ip.Address.IP))
+		}
+		r.PodIPCache.Record(pod.UID, pod.Name, pod.Namespace, ipInstanceNames)
+
 		r.Recorder.Eventf(pod, corev1.EventTypeNormal, ReasonIPAllocationSucceed, "allocate IPs %v successfully", squashIPSliceToIPs(ips))
 		return nil
 	}
@@ -432,6 +449,9 @@ func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkNa
 	if err = r.IPAMStore.Couple(pod, ip); err != nil {
 		return fmt.Errorf("unable to couple ip with pod: %v", err)
 	}
+
+	ipInstanceNames := []string{utils.ToDNSFormat(ip.Address.IP)}
+	r.PodIPCache.Record(pod.UID, pod.Name, pod.Namespace, ipInstanceNames)
 
 	r.Recorder.Eventf(pod, corev1.EventTypeNormal, ReasonIPAllocationSucceed, "allocate IP %s successfully", ip.String())
 	return nil
@@ -534,8 +554,8 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 					}
 
 					if pod.DeletionTimestamp.IsZero() {
-						// only pod after scheduling and before IP-allocation should be processed
-						return len(pod.Spec.NodeName) > 0 && !metav1.HasAnnotation(pod.ObjectMeta, constants.AnnotationIP)
+						// only pod after scheduling should be processed
+						return len(pod.Spec.NodeName) > 0
 					}
 
 					// terminating pods owned by stateful workloads should be processed for IP reservation

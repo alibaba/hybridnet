@@ -19,6 +19,8 @@ package networking
 import (
 	"context"
 
+	"github.com/alibaba/hybridnet/pkg/constants"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,6 +40,7 @@ type IPInstanceReconciler struct {
 	client.Client
 
 	// TODO: construct
+	PodIPCache  PodIPCache
 	IPAMManager IPAMManager
 	IPAMStore   IPAMStore
 
@@ -56,6 +59,15 @@ func (r *IPInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if !ip.DeletionTimestamp.IsZero() {
+		podName := ip.GetLabels()[constants.LabelPod]
+		if len(podName) == 0 {
+			return ctrl.Result{}, wrapError("cannot release an IPInstance without pod label", err)
+		}
+
+		if err = r.PodIPCache.Release(podName, ip.Namespace, ip.Name); err != nil {
+			return ctrl.Result{}, wrapError("unable to release IPInstance in pod ip cache", err)
+		}
+
 		if err = r.releaseIP(&ip); err != nil {
 			return ctrl.Result{}, wrapError("unable to release IPInstance", err)
 		}

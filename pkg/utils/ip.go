@@ -18,6 +18,7 @@ package utils
 
 import (
 	"net"
+	"strings"
 
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/gogf/gf/container/gset"
@@ -37,6 +38,13 @@ func NormalizedIP(ip string) string {
 		return ip
 	}
 	return ""
+}
+
+func ToDNSFormat(ip net.IP) string {
+	if ip.To4() == nil {
+		return strings.ReplaceAll(unifyIPv6AddressString(ip.String()), ":", "-")
+	}
+	return strings.ReplaceAll(ip.String(), ".", "-")
 }
 
 // Intersect returns if ip address range of rangeA is overlapped with rangeB.
@@ -105,4 +113,20 @@ func LastIP(subnet *net.IPNet) net.IP {
 	}
 
 	return end
+}
+
+// unifyIPv6AddressString will help to extend the squashed sections in IPv6 address string,
+// eg, 234e:0:4567::5f will be unified to 234e:0:4567:0:0:0:0:5f
+func unifyIPv6AddressString(ip string) string {
+	const maxSectionCount = 8
+
+	if sectionCount := strings.Count(ip, ":") + 1; sectionCount < maxSectionCount {
+		var separators = []string{":", ":"}
+		for ; sectionCount < maxSectionCount; sectionCount++ {
+			separators = append(separators, ":")
+		}
+		return strings.ReplaceAll(ip, "::", strings.Join(separators, "0"))
+	}
+
+	return ip
 }
