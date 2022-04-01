@@ -19,7 +19,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -258,11 +257,7 @@ func (w *Worker) getIP(namespace string, ip *ipamtypes.IP) (*networkingv1.IPInst
 }
 
 func toDNSLabelFormat(ip *ipamtypes.IP) string {
-	if !ip.IsIPv6() {
-		return strings.ReplaceAll(ip.Address.IP.String(), ".", "-")
-	}
-
-	return strings.ReplaceAll(unifyIPv6AddressString(ip.Address.IP.String()), ":", "-")
+	return utils.ToDNSFormat(ip.Address.IP)
 }
 
 func newControllerRef(owner metav1.Object, gvk schema.GroupVersionKind) *metav1.OwnerReference {
@@ -283,22 +278,6 @@ func extractIPVersion(ip *ipamtypes.IP) networkingv1.IPVersion {
 		return networkingv1.IPv6
 	}
 	return networkingv1.IPv4
-}
-
-// unifyIPv6AddressString will help to extend the squashed sections in IPv6 address string,
-// eg, 234e:0:4567::5f will be unified to 234e:0:4567:0:0:0:0:5f
-func unifyIPv6AddressString(ip string) string {
-	const maxSectionCount = 8
-
-	if sectionCount := strings.Count(ip, ":") + 1; sectionCount < maxSectionCount {
-		var separators = []string{":", ":"}
-		for ; sectionCount < maxSectionCount; sectionCount++ {
-			separators = append(separators, ":")
-		}
-		return strings.ReplaceAll(ip, "::", strings.Join(separators, "0"))
-	}
-
-	return ip
 }
 
 func uint32PtoInt32P(in *uint32) *int32 {

@@ -139,6 +139,13 @@ func main() {
 		entryLog.Error(err, "unable to create IPAM manager")
 		os.Exit(1)
 	}
+
+	podIPCache, err := networking.NewPodIPCache(mgr.GetClient(), ctrllog.Log.WithName("pod-ip-cache"))
+	if err != nil {
+		entryLog.Error(err, "unable to create Pod IP cache")
+		os.Exit(1)
+	}
+
 	ipamStore := networking.NewIPAMStore(mgr.GetClient())
 
 	// setup controllers
@@ -153,6 +160,7 @@ func main() {
 
 	if err = (&networking.IPInstanceReconciler{
 		Client:                mgr.GetClient(),
+		PodIPCache:            podIPCache,
 		IPAMManager:           ipamManager,
 		IPAMStore:             ipamStore,
 		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerIPInstance]),
@@ -173,6 +181,7 @@ func main() {
 		APIReader:             mgr.GetAPIReader(),
 		Client:                mgr.GetClient(),
 		Recorder:              mgr.GetEventRecorderFor(networking.ControllerPod + "Controller"),
+		PodIPCache:            podIPCache,
 		IPAMStore:             ipamStore,
 		IPAMManager:           ipamManager,
 		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerPod]),

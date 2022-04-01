@@ -19,12 +19,12 @@ package networking
 import (
 	"context"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -42,6 +42,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/metrics"
 	globalutils "github.com/alibaba/hybridnet/pkg/utils"
 	"github.com/alibaba/hybridnet/pkg/utils/transform"
@@ -68,6 +69,7 @@ type PodReconciler struct {
 
 	Recorder record.EventRecorder
 
+	PodIPCache  PodIPCache
 	IPAMStore   IPAMStore
 	IPAMManager IPAMManager
 
@@ -95,7 +97,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		}
 	}()
 
-	if err = r.APIReader.Get(ctx, req.NamespacedName, pod); err != nil {
+	if err = r.Get(ctx, req.NamespacedName, pod); err != nil {
 		if err = client.IgnoreNotFound(err); err != nil {
 			return ctrl.Result{}, fmt.Errorf("unable to fetch Pod: %v", err)
 		}
@@ -117,10 +119,15 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		return ctrl.Result{}, wrapError("unable to decouple pod", r.decouple(pod))
 	}
 
-	// To avoid IP duplicate allocation in high-frequent pod updates scenario because of
-	// the fucking *delay* of informer
-	if metav1.HasAnnotation(pod.ObjectMeta, constants.AnnotationIP) {
-		return ctrl.Result{}, nil
+	cacheExist, uid, ipInstanceList := r.PodIPCache.Get(pod.Name, pod.Namespace)
+	// To avoid IP duplicate allocation
+	if cacheExist && uid == pod.UID {
+		ipFamily := ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
+
+		if (len(ipInstanceList) == 1 && (ipFamily == ipamtypes.IPv4Only || ipFamily == ipamtypes.IPv6Only)) ||
+			(len(ipInstanceList) == 2 && ipFamily == ipamtypes.DualStack) {
+			return ctrl.Result{}, nil
+		}
 	}
 
 	networkName, err = r.selectNetwork(pod)
@@ -136,7 +143,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	return ctrl.Result{}, wrapError("unable to allocate", r.allocate(ctx, pod, networkName))
 }
 
-// dedouple will unbind IP instance with Pod
+// decouple will unbind IP instance with Pod
 func (r *PodReconciler) decouple(pod *corev1.Pod) (err error) {
 	var decoupleFunc func(pod *corev1.Pod) (err error)
 	if feature.DualStackEnabled() {
@@ -351,7 +358,6 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 			shouldObserve = false
 			return wrapError("unable to allocate", r.allocate(ctx, pod, networkName))
 		}
-
 	}
 
 	// forced assign for using reserved ip
@@ -408,6 +414,14 @@ func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkNa
 			return fmt.Errorf("unable to couple IPs with pod: %v", err)
 		}
 
+		var ipInstanceNames []string
+		for _, ip := range ips {
+			ipInstanceNames = append(ipInstanceNames, utils.ToDNSFormat(ip.Address.IP))
+		}
+
+		// Always keep updating pod ip cache the final step.
+		r.PodIPCache.Record(pod.UID, pod.Name, pod.Namespace, ipInstanceNames)
+
 		r.Recorder.Eventf(pod, corev1.EventTypeNormal, ReasonIPAllocationSucceed, "allocate IPs %v successfully", squashIPSliceToIPs(ips))
 		return nil
 	}
@@ -429,6 +443,11 @@ func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkNa
 		return fmt.Errorf("unable to couple ip with pod: %v", err)
 	}
 
+	ipInstanceNames := []string{utils.ToDNSFormat(ip.Address.IP)}
+
+	// Always keep updating pod ip cache the final step.
+	r.PodIPCache.Record(pod.UID, pod.Name, pod.Namespace, ipInstanceNames)
+
 	r.Recorder.Eventf(pod, corev1.EventTypeNormal, ReasonIPAllocationSucceed, "allocate IP %s successfully", ip.String())
 	return nil
 }
@@ -449,6 +468,9 @@ func (r *PodReconciler) assign(ctx context.Context, pod *corev1.Pod, networkName
 		return fmt.Errorf("unable to force-couple ip with pod: %v", err)
 	}
 
+	// Always keep updating pod ip cache the final step.
+	r.PodIPCache.Record(pod.UID, pod.Name, pod.Namespace, []string{utils.ToDNSFormat(net.ParseIP(ipCandidate))})
+
 	r.Recorder.Eventf(pod, corev1.EventTypeNormal, ReasonIPAllocationSucceed, "assign IP %s successfully", ip.String())
 	return nil
 }
@@ -468,6 +490,13 @@ func (r *PodReconciler) multiAssign(ctx context.Context, pod *corev1.Pod, networ
 	if err = r.IPAMStore.DualStack().ReCouple(pod, IPs); err != nil {
 		return fmt.Errorf("fail to force-couple ips %+v with pod: %v", IPs, err)
 	}
+
+	// Always keep updating pod ip cache the final step.
+	var ipInstanceNames []string
+	for _, candidate := range ipCandidates {
+		ipInstanceNames = append(ipInstanceNames, utils.ToDNSFormat(net.ParseIP(candidate)))
+	}
+	r.PodIPCache.Record(pod.UID, pod.Name, pod.Namespace, ipInstanceNames)
 
 	r.Recorder.Eventf(pod, corev1.EventTypeNormal, ReasonIPAllocationSucceed, "assign IPs %v successfully", squashIPSliceToIPs(IPs))
 	return nil
@@ -530,8 +559,8 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 					}
 
 					if pod.DeletionTimestamp.IsZero() {
-						// only pod after scheduling and before IP-allocation should be processed
-						return len(pod.Spec.NodeName) > 0 && !metav1.HasAnnotation(pod.ObjectMeta, constants.AnnotationIP)
+						// only pod after scheduling should be processed
+						return len(pod.Spec.NodeName) > 0
 					}
 
 					// terminating pods owned by stateful workloads should be processed for IP reservation

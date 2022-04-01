@@ -20,41 +20,45 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/go-logr/logr"
+
 	"github.com/alibaba/hybridnet/pkg/utils"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	controllerutils "github.com/alibaba/hybridnet/pkg/controllers/utils"
-
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type PodIPCache interface {
-	Record(podUid types.UID, podName, namespace string, ipInstanceNames []string)
-	Release(podName, namespace, ipInstanceName string) error
+	Record(podUID types.UID, podName, namespace string, ipInstanceNames []string)
+	Release(ipInstanceName, namespace string)
 	Get(podName, namespace string) (bool, types.UID, []string)
 }
 
 type podAllocatedInfo struct {
-	podUid          types.UID
+	podUID          types.UID
 	ipInstanceNames []string
 }
 
 type podIPCache struct {
-	*sync.RWMutex
+	sync.RWMutex
 
 	// use "name/namespace" of ip instance as key
 	podToIP map[string]*podAllocatedInfo
 
 	// use "name/namespace" of ip instance as key and "name" of pod as value
 	ipToPod map[string]string
+
+	logger logr.Logger
 }
 
-func NewPodIPCache(c client.Reader) (PodIPCache, error) {
+func NewPodIPCache(c client.Reader, logger logr.Logger) (PodIPCache, error) {
 	cache := &podIPCache{
 		podToIP: map[string]*podAllocatedInfo{},
 		ipToPod: map[string]string{},
-		RWMutex: &sync.RWMutex{},
+		RWMutex: sync.RWMutex{},
+		logger:  logger,
 	}
 
 	ipList, err := controllerutils.ListIPInstances(c)
@@ -65,16 +69,22 @@ func NewPodIPCache(c client.Reader) (PodIPCache, error) {
 	for _, ip := range ipList.Items {
 		podName := networkingv1.FetchBindingPodName(&ip)
 		if len(podName) != 0 {
-			var podUid types.UID
-			pod, err := controllerutils.GetPod(c, podName, ip.Namespace)
-			if err != nil {
-				if err = client.IgnoreNotFound(err); err != nil {
-					return nil, fmt.Errorf("unable to get Pod %v for IPInstance %v: %v", podName, ip.Name, err)
-				}
-			}
+			var podUID types.UID
 
-			if pod != nil {
-				podUid = pod.UID
+			if len(ip.Spec.Binding.PodUID) != 0 {
+				podUID = ip.Spec.Binding.PodUID
+			} else if !networkingv1.IsReserved(&ip) {
+				// TODO: no longer need to get pod if all the ip instances is updated to the v1.2 version
+				pod, err := controllerutils.GetPod(c, podName, ip.Namespace)
+				if err != nil {
+					if err = client.IgnoreNotFound(err); err != nil {
+						return nil, fmt.Errorf("unable to get Pod %v for IPInstance %v: %v", podName, ip.Name, err)
+					}
+				}
+
+				if pod != nil {
+					podUID = pod.UID
+				}
 			}
 
 			var recordedIPInstances []string
@@ -86,7 +96,7 @@ func NewPodIPCache(c client.Reader) (PodIPCache, error) {
 
 			// this is different from a normal Record action
 			cache.podToIP[namespacedKey(podName, ip.Namespace)] = &podAllocatedInfo{
-				podUid:          podUid,
+				podUID:          podUID,
 				ipInstanceNames: append(recordedIPInstances, ip.Name),
 			}
 
@@ -94,36 +104,48 @@ func NewPodIPCache(c client.Reader) (PodIPCache, error) {
 		}
 	}
 
+	logger.V(1).Info("finish init", "ip to pod map", cache.ipToPod)
 	return cache, nil
 }
 
-func (c *podIPCache) Record(podUid types.UID, podName, namespace string, ipInstanceNames []string) {
+func (c *podIPCache) Record(podUID types.UID, podName, namespace string, ipInstanceNames []string) {
 	c.Lock()
 	defer c.Unlock()
 
 	// don't check if the pod exist, just overwrite it
 	c.podToIP[namespacedKey(podName, namespace)] = &podAllocatedInfo{
-		podUid:          podUid,
+		podUID:          podUID,
 		ipInstanceNames: ipInstanceNames,
 	}
 
 	for _, ipInstanceName := range ipInstanceNames {
 		c.ipToPod[namespacedKey(ipInstanceName, namespace)] = podName
 	}
+
+	c.logger.V(1).Info("record cache", "pod name", podName, "pod UID", podUID,
+		"ip instances", ipInstanceNames)
 }
 
-func (c *podIPCache) Release(podName, namespace, ipInstanceName string) error {
+func (c *podIPCache) Release(ipInstanceName, namespace string) {
 	c.Lock()
 	defer c.Unlock()
 
 	podName, exist := c.ipToPod[namespacedKey(ipInstanceName, namespace)]
 	if !exist {
-		return fmt.Errorf("ipToPod record not exist for ip instance %v", ipInstanceName)
+		c.logger.V(1).Info("skip deleting a no exist pod cache", "ip instance", ipInstanceName,
+			"namespace", namespace)
+		return
 	}
 
 	delete(c.ipToPod, namespacedKey(ipInstanceName, namespace))
 
-	info := c.podToIP[namespacedKey(podName, namespace)]
+	info, exist := c.podToIP[namespacedKey(podName, namespace)]
+	if !exist {
+		c.logger.V(1).Info("skip deleting a no exist ip instance cache", "ip instance", ipInstanceName,
+			"namespace", namespace, "pod name", podName)
+		return
+	}
+
 	for index, name := range info.ipInstanceNames {
 		if name == ipInstanceName {
 			info.ipInstanceNames = append(info.ipInstanceNames[:index], info.ipInstanceNames[index+1:]...)
@@ -135,7 +157,8 @@ func (c *podIPCache) Release(podName, namespace, ipInstanceName string) error {
 		delete(c.podToIP, namespacedKey(podName, namespace))
 	}
 
-	return nil
+	c.logger.V(1).Info("delete cache", "ip instance", ipInstanceName,
+		"namespace", namespace, "pod name", podName)
 }
 
 func (c *podIPCache) Get(podName, namespace string) (bool, types.UID, []string) {
@@ -147,7 +170,7 @@ func (c *podIPCache) Get(podName, namespace string) (bool, types.UID, []string) 
 		return false, "", nil
 	}
 
-	return true, info.podUid, utils.DeepCopyStringSlice(info.ipInstanceNames)
+	return true, info.podUID, utils.DeepCopyStringSlice(info.ipInstanceNames)
 }
 
 func namespacedKey(name, namespace string) string {
