@@ -4,6 +4,9 @@ images:
     tag: v0.4.2
   registryURL: "docker.io"
 
+# -- The replica count of deployments of webhook and manager.
+replicaCount: 3
+
 # -- It's always encouraged to use an overlay network to finish some general jobs in hybridnet. This
 # chart will always create an "init" overlay Network/Subnet to initialize the K8s cluster.
 initNetworkConfig:
