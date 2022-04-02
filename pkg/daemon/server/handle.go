@@ -91,7 +91,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	}
 
 	var returnIPAddress []request.IPAddress
-	var ipInstanceList []networkingv1.IPInstance
+	var ipInstanceList []*networkingv1.IPInstance
 
 	pod := &corev1.Pod{}
 	if err := cdh.mgrAPIReader.Get(context.TODO(), types.NamespacedName{
@@ -112,22 +112,16 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 
 		ipFamily := ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
 
-		if ipInstanceList, err = cdh.listIPInstanceOfPod(podRequest.PodName, podRequest.PodNamespace); err != nil {
+		if ipInstanceList, err = cdh.listAvailableIPInstanceOfPod(podRequest.PodName, podRequest.PodNamespace); err != nil {
 			errMsg := fmt.Errorf("failed to list ip instances for pod %v/%v: %v",
 				podRequest.PodName, podRequest.PodNamespace, err)
 			cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
 			return
 		}
 
-		if len(ipInstanceList) == 1 && (ipFamily == ipamtypes.IPv4Only || ipFamily == ipamtypes.IPv6Only) {
-			if ipInstanceList[0].Status.NodeName == cdh.config.NodeName {
-				break
-			}
-		} else if len(ipInstanceList) == 2 && ipFamily == ipamtypes.DualStack {
-			if ipInstanceList[0].Status.NodeName == cdh.config.NodeName &&
-				ipInstanceList[1].Status.NodeName == cdh.config.NodeName {
-				break
-			}
+		if (len(ipInstanceList) == 1 && (ipFamily == ipamtypes.IPv4Only || ipFamily == ipamtypes.IPv6Only)) ||
+			(len(ipInstanceList) == 2 && ipFamily == ipamtypes.DualStack) {
+			break
 		} else if i == retries-1 {
 			errMsg := fmt.Errorf("failed to wait for pod %v/%v be coupled with ip: %v", podRequest.PodName, podRequest.PodNamespace, err)
 			cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
@@ -213,7 +207,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 				Protocol: ipVersion,
 			})
 
-			affectedIPInstances = append(affectedIPInstances, &ipInstance)
+			affectedIPInstances = append(affectedIPInstances, ipInstance)
 		}
 	}
 
@@ -313,7 +307,7 @@ func (cdh *cniDaemonHandler) errorWrapper(err error, status int, resp *restful.R
 	})
 }
 
-func (cdh *cniDaemonHandler) listIPInstanceOfPod(podName, podNamespace string) ([]networkingv1.IPInstance, error) {
+func (cdh *cniDaemonHandler) listAvailableIPInstanceOfPod(podName, podNamespace string) ([]*networkingv1.IPInstance, error) {
 	ipInstanceList := &networkingv1.IPInstanceList{}
 	if err := cdh.mgrClient.List(context.TODO(), ipInstanceList, client.InNamespace(podNamespace), client.MatchingLabels{
 		constants.LabelNode: cdh.config.NodeName,
@@ -322,21 +316,29 @@ func (cdh *cniDaemonHandler) listIPInstanceOfPod(podName, podNamespace string) (
 		return nil, err
 	}
 
-	return ipInstanceList.Items, nil
+	var availableIPInstances []*networkingv1.IPInstance
+	for _, ip := range ipInstanceList.Items {
+		// TODO: add pod uid field in ip instance to identify ip instance
+		if ip.DeletionTimestamp.IsZero() && ip.Status.NodeName == cdh.config.NodeName {
+			availableIPInstances = append(availableIPInstances, &ip)
+		}
+	}
+
+	return availableIPInstances, nil
 }
 
 func printAllocatedIPs(allocatedIPs map[networkingv1.IPVersion]*utils.IPInfo) string {
-	ipAddresseString := ""
+	ipAddressString := ""
 	if allocatedIPs[networkingv1.IPv4] != nil && allocatedIPs[networkingv1.IPv4].Addr != nil {
-		ipAddresseString = ipAddresseString + allocatedIPs[networkingv1.IPv4].Addr.String()
+		ipAddressString = ipAddressString + allocatedIPs[networkingv1.IPv4].Addr.String()
 	}
 
 	if allocatedIPs[networkingv1.IPv6] != nil && allocatedIPs[networkingv1.IPv6].Addr != nil {
-		if ipAddresseString != "" {
-			ipAddresseString = ipAddresseString + "/"
+		if ipAddressString != "" {
+			ipAddressString = ipAddressString + "/"
 		}
-		ipAddresseString = ipAddresseString + allocatedIPs[networkingv1.IPv6].Addr.String()
+		ipAddressString = ipAddressString + allocatedIPs[networkingv1.IPv6].Addr.String()
 	}
 
-	return ipAddresseString
+	return ipAddressString
 }
