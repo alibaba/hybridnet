@@ -17,47 +17,29 @@
 package strategy
 
 import (
-	"strings"
+	"sync"
 
 	"github.com/spf13/pflag"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var (
-	statefulWorkloadKindVar  = "StatefulSet"
-	statelessWorkloadKindVar = ""
-	StatefulWorkloadKind     map[string]bool
-	StatelessWorkloadKind    map[string]bool
-	DefaultIPRetain          bool
+	StatefulWorkloadKinds []string
+	DefaultIPRetain       bool
+)
+
+var (
+	statefulOnce            sync.Once
+	statefulWorkloadKindSet sets.String
 )
 
 func init() {
-	logger := log.Log.WithName("strategy")
-
 	pflag.BoolVar(&DefaultIPRetain, "default-ip-retain", true, "Whether pod IP of stateful workloads will be retained by default.")
-	pflag.StringVar(&statefulWorkloadKindVar, "stateful-workload-kinds", statefulWorkloadKindVar, `stateful workload kinds to use strategic IP allocation,`+
+	pflag.StringSliceVar(&StatefulWorkloadKinds, "stateful-workload-kinds", []string{"StatefulSet"}, `stateful workload kinds to use strategic IP allocation,`+
 		`eg: "StatefulSet,AdvancedStatefulSet", default: "StatefulSet"`)
-	pflag.StringVar(&statelessWorkloadKindVar, "stateless-workload-kinds", statelessWorkloadKindVar, "stateless workload kinds to use strategic IP allocation,"+
-		`eg: "ReplicaSet", default: ""`)
-
-	StatefulWorkloadKind = make(map[string]bool)
-	StatelessWorkloadKind = make(map[string]bool)
-
-	for _, kind := range strings.Split(statefulWorkloadKindVar, ",") {
-		if len(kind) > 0 {
-			StatefulWorkloadKind[kind] = true
-			logger.Info("Adding kind to known stateful workloads", "kind", kind)
-		}
-	}
-
-	for _, kind := range strings.Split(statelessWorkloadKindVar, ",") {
-		if len(kind) > 0 {
-			StatelessWorkloadKind[kind] = true
-			logger.Info("Adding kind to known stateless workloads", "kind", kind)
-		}
-	}
 }
 
 func OwnByStatefulWorkload(pod *v1.Pod) bool {
@@ -66,16 +48,13 @@ func OwnByStatefulWorkload(pod *v1.Pod) bool {
 		return false
 	}
 
-	return StatefulWorkloadKind[ref.Kind]
-}
+	statefulOnce.Do(func() {
+		statefulWorkloadKindSet = sets.NewString(StatefulWorkloadKinds...)
+		logger := log.Log.WithName("strategy")
+		logger.Info("Adding known stateful workloads", "Kinds", StatefulWorkloadKinds)
+	})
 
-func OwnByStatelessWorkload(pod *v1.Pod) bool {
-	ref := metav1.GetControllerOf(pod)
-	if ref == nil {
-		return false
-	}
-
-	return StatelessWorkloadKind[ref.Kind]
+	return statefulWorkloadKindSet.Has(ref.Kind)
 }
 
 func GetKnownOwnReference(pod *v1.Pod) *metav1.OwnerReference {
