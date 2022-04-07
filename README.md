@@ -17,7 +17,7 @@ Hybridnet is an open source container networking solution designed for hybrid cl
 - AECP of Alibaba Cloud
 - SOFAStack of Ant Financial Co.
 
-Hybridnet focus on productive large-scale, user friendliness and heterogeneous infrastructure, now hundreds of clusters are running on hybridnet all over world.
+Hybridnet focuses on productive large-scale clusters, heterogeneous infrastructure and user-friendliness. Now hundreds of clusters are running hybridnet all over world.
 
 ## Features
 
@@ -42,7 +42,7 @@ If you want to contribute, please start with [CONTRIBUTING.md](CONTRIBUTING.md)
 
 For any questions about hybridnet, please reach us via:
 
-- Slack: #general on the [hybridnet slack](hybridnetworkspace.slack.com)
+- Slack: #general on the [hybridnet slack](https://hybridnetworkspace.slack.com)
 - DingTalk: Group No.35109308
 - E-mail: private or security issues should be reported via e-mail addresses listed in the [MAINTAINERS](MAINTAINERS) file
 
