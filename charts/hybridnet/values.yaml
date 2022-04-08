@@ -40,7 +40,14 @@ global:
   # -- Enable the DualStack feature. IPv6 is disabled when is dualStack is not enable. true or false
   dualStack: false
 
+manager:
+  # -- The number of manager pods
+  replicas: 3
+
 webhook:
   # -- Once a pod have one of the labels below, webhook will not block the creation of it.
   exceptPodLabels:
     - app: kube-proxy
+
+  # -- The number of webhook pods
+  replicas: 3

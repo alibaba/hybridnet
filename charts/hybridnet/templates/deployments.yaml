@@ -4,7 +4,7 @@ metadata:
   name: hybridnet-manager
   namespace: kube-system
 spec:
-  replicas: 3
+  replicas: {{ .Values.manager.replicas }}
   selector:
     matchLabels:
       app: hybridnet-manager
@@ -53,7 +53,7 @@ metadata:
   name: hybridnet-webhook
   namespace: kube-system
 spec:
-  replicas: 3
+  replicas: {{ .Values.webhook.replicas }}
   selector:
     matchLabels:
       app: hybridnet-webhook
