@@ -6,7 +6,7 @@ images:
 
 # -- It's always encouraged to use an overlay network to finish some general jobs in hybridnet. This
 # chart will always create an "init" overlay Network/Subnet to initialize the K8s cluster.
-initNetworkConfig:
+init:
   # -- CIDR of "init" Subnet.
   cidr: 100.64.0.0/16
 
@@ -24,7 +24,10 @@ initNetworkConfig:
   preferVlanInterfaces: ""
   preferBGPInterfaces: ""
 
-advancedSettings:
+  # -- Whether the "init" Subnet and Network should skip the validation of webhook. true or false
+  skipValidation: false
+
+global:
   # -- Whether pod IP of stateful workloads will be retained by default. true or false
   defualtIPRetain: true
 
@@ -37,7 +40,7 @@ advancedSettings:
   # -- Enable the DualStack feature. IPv6 is disabled when is dualStack is not enable. true or false
   dualStack: false
 
-
 webhook:
+  # -- Once a pod have one of the labels below, webhook will not block the creation of it.
   exceptPodLabels:
     - app: kube-proxy
