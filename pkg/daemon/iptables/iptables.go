@@ -213,25 +213,37 @@ func (mgr *Manager) SyncRules() error {
 	allIPNets = append(allIPNets, overlayIPNets...)
 	allIPNets = append(allIPNets, nodeIPs...)
 
-	ipsetInterface, err := ipset.New(mgr.protocol == ProtocolIpv6)
+	ipsetInterface, err := ipset.NewIPSet(mgr.protocol == ProtocolIpv6)
 	if err != nil {
 		return fmt.Errorf("failed to create ipset instance: %v", err)
 	}
 
-	if err := ipsetInterface.LoadData(); err != nil {
-		return fmt.Errorf("failed to load ipset data: %v", err)
+	var overlayNetSet, allIPSet, nodeIPSet, localBGPNetSet, localPodIPSet *ipset.Set
+
+	if overlayNetSet, err = createAndRefreshIPSet(ipsetInterface, HybridnetOverlayNetSetName, overlayIPNets,
+		ipset.TypeHashNet, ipset.OptionTimeout, "0"); err != nil {
+		return fmt.Errorf("failed to create and refresh ip set %v: %v", HybridnetOverlayNetSetName, err)
 	}
 
-	ipsetInterface.AddOrReplaceIPSet(generateIPSetNameByProtocol(HybridnetOverlayNetSetName, mgr.protocol),
-		overlayIPNets, ipset.TypeHashNet, ipset.OptionTimeout, "0")
-	ipsetInterface.AddOrReplaceIPSet(generateIPSetNameByProtocol(HybridnetAllIPSetName, mgr.protocol),
-		allIPNets, ipset.TypeHashNet, ipset.OptionTimeout, "0")
-	ipsetInterface.AddOrReplaceIPSet(generateIPSetNameByProtocol(HybridnetNodeIPSetName, mgr.protocol),
-		nodeIPs, ipset.TypeHashIP, ipset.OptionTimeout, "0")
-	ipsetInterface.AddOrReplaceIPSet(generateIPSetNameByProtocol(HybridnetLocalBGPNetSetName, mgr.protocol),
-		localBGPIPNets, ipset.TypeHashNet, ipset.OptionTimeout, "0")
-	ipsetInterface.AddOrReplaceIPSet(generateIPSetNameByProtocol(HybridnetLocalPodIPSetName, mgr.protocol),
-		localPodIPs, ipset.TypeHashIP, ipset.OptionTimeout, "0")
+	if allIPSet, err = createAndRefreshIPSet(ipsetInterface, HybridnetAllIPSetName, allIPNets,
+		ipset.TypeHashNet, ipset.OptionTimeout, "0"); err != nil {
+		return fmt.Errorf("failed to create and refresh ip set %v: %v", HybridnetAllIPSetName, err)
+	}
+
+	if nodeIPSet, err = createAndRefreshIPSet(ipsetInterface, HybridnetNodeIPSetName, nodeIPs,
+		ipset.TypeHashIP, ipset.OptionTimeout, "0"); err != nil {
+		return fmt.Errorf("failed to create and refresh ip set %v: %v", HybridnetNodeIPSetName, err)
+	}
+
+	if localBGPNetSet, err = createAndRefreshIPSet(ipsetInterface, HybridnetLocalBGPNetSetName, localBGPIPNets,
+		ipset.TypeHashNet, ipset.OptionTimeout, "0"); err != nil {
+		return fmt.Errorf("failed to create and refresh ip set %v: %v", HybridnetLocalBGPNetSetName, err)
+	}
+
+	if localPodIPSet, err = createAndRefreshIPSet(ipsetInterface, HybridnetLocalPodIPSetName, localPodIPs,
+		ipset.TypeHashIP, ipset.OptionTimeout, "0"); err != nil {
+		return fmt.Errorf("failed to create and refresh ip set %v: %v", HybridnetLocalPodIPSetName, err)
+	}
 
 	if err := mgr.ensureBasicRuleAndChains(); err != nil {
 		return fmt.Errorf("failed to ensure basic rules and chains: %v", err)
@@ -265,25 +277,23 @@ func (mgr *Manager) SyncRules() error {
 		// Append rules.
 		writeLine(natRules, generateSkipMasqueradeRuleSpec()...)
 		writeLine(natRules, generateOldSkipMasqueradeRuleSpec()...)
-		writeLine(natRules, generateMasqueradeRuleSpec(mgr.overlayIfName, mgr.protocol)...)
-		writeLine(filterRules, generateVxlanFilterRuleSpec(mgr.overlayIfName, mgr.protocol)...)
-		writeLine(mangleRules, generateVxlanPodToNodeReplyMarkRuleSpec(mgr.protocol)...)
-		writeLine(mangleRules, generateVxlanPodToNodeReplyRemoveMarkRuleSpec(mgr.protocol)...)
+		writeLine(natRules, generateMasqueradeRuleSpec(mgr.overlayIfName, overlayNetSet.GetNameWithProtocol())...)
+		writeLine(filterRules, generateVxlanFilterRuleSpec(mgr.overlayIfName, allIPSet.GetNameWithProtocol(), mgr.protocol)...)
+		writeLine(mangleRules, generateVxlanPodToNodeReplyMarkRuleSpec(overlayNetSet.GetNameWithProtocol(),
+			nodeIPSet.GetNameWithProtocol())...)
+		writeLine(mangleRules, generateVxlanPodToNodeReplyRemoveMarkRuleSpec(overlayNetSet.GetNameWithProtocol(),
+			nodeIPSet.GetNameWithProtocol())...)
 	}
 
 	if len(mgr.bgpIfName) != 0 {
-		writeLine(filterRules, generateBGPEndLoopRuleSpec(mgr.bgpIfName, mgr.protocol)...)
+		writeLine(filterRules, generateBGPEndLoopRuleSpec(mgr.bgpIfName, localPodIPSet.GetNameWithProtocol(),
+			localBGPNetSet.GetNameWithProtocol())...)
 	}
 
 	// Write the end-of-table markers
 	writeLine(natRules, "COMMIT")
 	writeLine(filterRules, "COMMIT")
 	writeLine(mangleRules, "COMMIT")
-
-	// Sync ipsets
-	if err := ipsetInterface.SyncOperations(); err != nil {
-		return fmt.Errorf("failed to execute sync ipset operations: %v", err)
-	}
 
 	// Sync rules
 	iptablesData.Write(natChains.Bytes())
@@ -354,11 +364,17 @@ func (mgr *Manager) ensureBasicRuleAndChains() error {
 	return nil
 }
 
-func generateIPSetNameByProtocol(setBaseName string, protocol Protocol) string {
-	if protocol == ProtocolIpv4 {
-		return setBaseName + "-V4"
+func createAndRefreshIPSet(ipsetInterface *ipset.IPSet, setName string, members []string, createOptions ...string) (*ipset.Set, error) {
+	set, err := ipsetInterface.Create(setName, createOptions...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ip set: %v", err)
 	}
-	return setBaseName + "-V6"
+
+	if err = set.Refresh(members); err != nil {
+		return nil, fmt.Errorf("failed to refresh ip set: %v", err)
+	}
+
+	return set, nil
 }
 
 func generateHybridnetPostRoutingBaseRuleSpec() []string {
@@ -373,10 +389,9 @@ func generateHybridnetPreRoutingBaseRuleSpec() []string {
 	return []string{"-m", "comment", "--comment", "hybridnet prerouting rules", "-j", ChainHybridnetPreRouting}
 }
 
-func generateMasqueradeRuleSpec(vxlanIf string, protocol Protocol) []string {
+func generateMasqueradeRuleSpec(vxlanIf, overlayNetSet string) []string {
 	return []string{"-A", ChainHybridnetPostRouting, "-m", "comment", "--comment", `"hybridnet overlay nat-outgoing masquerade rule"`,
-		"!", "-o", vxlanIf, "-m", "set", "--match-set", generateIPSetNameByProtocol(HybridnetOverlayNetSetName, protocol),
-		"src", "-j", "MASQUERADE"}
+		"!", "-o", vxlanIf, "-m", "set", "--match-set", overlayNetSet, "src", "-j", "MASQUERADE"}
 }
 
 func generateSkipMasqueradeRuleSpec() []string {
@@ -390,37 +405,36 @@ func generateOldSkipMasqueradeRuleSpec() []string {
 		"-o", "h_+", "-j", "RETURN"}
 }
 
-func generateVxlanFilterRuleSpec(vxlanIf string, protocol Protocol) []string {
+func generateVxlanFilterRuleSpec(vxlanIf, allIPSet string, protocol Protocol) []string {
 	return []string{"-A", ChainHybridnetForward, "-m", "comment", "--comment", `"hybridnet overlay vxlan if egress filter rule"`,
-		"-o", vxlanIf, "-m", "set", "!", "--match-set", generateIPSetNameByProtocol(HybridnetAllIPSetName, protocol),
-		"dst", "-j", "REJECT", "--reject-with", rejectWithOption(protocol)}
+		"-o", vxlanIf, "-m", "set", "!", "--match-set", allIPSet, "dst", "-j", "REJECT", "--reject-with", rejectWithOption(protocol)}
 }
 
-func generateVxlanPodToNodeReplyMarkRuleSpec(protocol Protocol) []string {
+func generateVxlanPodToNodeReplyMarkRuleSpec(overlayNetSet, nodeIPSet string) []string {
 	return []string{"-A", ChainHybridnetPreRouting, "-m", "comment", "--comment", `"mark overlay pod -> node back traffic"`,
 		"-m", "addrtype", "!", "--dst-type", "LOCAL",
-		"-m", "set", "--match-set", generateIPSetNameByProtocol(HybridnetOverlayNetSetName, protocol), "src",
-		"-m", "set", "--match-set", generateIPSetNameByProtocol(HybridnetNodeIPSetName, protocol), "dst",
+		"-m", "set", "--match-set", overlayNetSet, "src",
+		"-m", "set", "--match-set", nodeIPSet, "dst",
 		"-m", "conntrack", "!", "--ctstate", "NEW,INVALID,DNAT,SNAT",
 		"-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s", PodToNodeBackTrafficMarkString, PodToNodeBackTrafficMarkString),
 	}
 }
 
-func generateVxlanPodToNodeReplyRemoveMarkRuleSpec(protocol Protocol) []string {
+func generateVxlanPodToNodeReplyRemoveMarkRuleSpec(overlayNetSet, nodeIPSet string) []string {
 	return []string{"-A", ChainHybridnetPostRouting, "-m", "comment", "--comment", `"remove overlay pod -> node back traffic mark"`,
 		"-m", "addrtype", "!", "--dst-type", "LOCAL",
-		"-m", "set", "--match-set", generateIPSetNameByProtocol(HybridnetOverlayNetSetName, protocol), "src",
-		"-m", "set", "--match-set", generateIPSetNameByProtocol(HybridnetNodeIPSetName, protocol), "dst",
+		"-m", "set", "--match-set", overlayNetSet, "src",
+		"-m", "set", "--match-set", nodeIPSet, "dst",
 		"-m", "conntrack", "!", "--ctstate", "NEW,INVALID,DNAT,SNAT",
 		"-j", "MARK", "--set-xmark", fmt.Sprintf("0x0/%s", PodToNodeBackTrafficMarkString),
 	}
 }
 
-func generateBGPEndLoopRuleSpec(bgpIf string, protocol Protocol) []string {
+func generateBGPEndLoopRuleSpec(bgpIf, localPodIPSet, localBGPNetSet string) []string {
 	return []string{"-A", ChainHybridnetForward, "-m", "comment", "--comment", `"drop endless bgp traffic because of route loop"`,
 		"-i", bgpIf,
-		"-m", "set", "!", "--match-set", generateIPSetNameByProtocol(HybridnetLocalPodIPSetName, protocol), "dst",
-		"-m", "set", "--match-set", generateIPSetNameByProtocol(HybridnetLocalBGPNetSetName, protocol), "dst",
+		"-m", "set", "!", "--match-set", localPodIPSet, "dst",
+		"-m", "set", "--match-set", localBGPNetSet, "dst",
 		"-j", "DROP",
 	}
 }
