@@ -36,3 +36,8 @@ advancedSettings:
 
   # -- Enable the DualStack feature. IPv6 is disabled when is dualStack is not enable. true or false
   dualStack: false
+
+
+webhook:
+  exceptPodLabels:
+    - app: kube-proxy

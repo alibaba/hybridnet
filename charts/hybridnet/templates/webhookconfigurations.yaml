@@ -46,6 +46,13 @@ webhooks:
         - key: webhook.hybridnet.io/ignore
           operator: NotIn
           values: ["TRUE", "true"]
+        {{ range .Values.webhook.exceptPodLabels }}
+        {{ range $key,$val := . }}
+        - key: {{ $key }}
+          operator: NotIn
+          values: [ {{ $val | quote }} ]
+        {{ end }}
+        {{ end }}
     rules:
       - apiGroups: [""]
         apiVersions: ["v1"]
