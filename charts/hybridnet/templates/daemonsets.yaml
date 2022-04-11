@@ -50,7 +50,7 @@ spec:
             {{ if ne .Values.init.preferBGPInterfaces "" }}
             - --prefer-bgp-interfaces={{ .Values.init.preferBGPInterfaces }}
             {{ end }}
-            - --feature-gates=MultiCluster={{ .Values.global.multiCluster }},DualStack={{ .Values.global.dualStack }}
+            - --feature-gates=MultiCluster={{ .Values.multiCluster }},DualStack={{ .Values.dualStack }}
           securityContext:
             runAsUser: 0
             privileged: true
