@@ -14,11 +14,6 @@ webhooks:
     failurePolicy: Fail
     matchPolicy: Equivalent
     name: hybridnet-v1.validating.hybridnet
-    objectSelector:
-      matchExpressions:
-        - key: webhook.hybridnet.io/ignore
-          operator: NotIn
-          values: ["TRUE", "true"]
     rules:
       - apiGroups: ["networking.alibaba.com"]
         apiVersions: ["v1"]

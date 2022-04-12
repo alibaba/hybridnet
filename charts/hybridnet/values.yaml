@@ -24,9 +24,6 @@ init:
   preferVlanInterfaces: ""
   preferBGPInterfaces: ""
 
-  # -- Whether the "init" Subnet and Network should skip the validation of webhook. true or false
-  skipValidation: false
-
 manager:
   # -- The number of manager pods
   replicas: 3

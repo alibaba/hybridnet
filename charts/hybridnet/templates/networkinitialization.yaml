@@ -2,10 +2,6 @@ apiVersion: networking.alibaba.com/v1
 kind: Network
 metadata:
   name: init
-  {{ if .Values.init.skipValidation }}
-  labels:
-    webhook.hybridnet.io/ignore: "true"
-  {{ end }}
 spec:
   netID: {{ .Values.init.vxlanID }}
   type: Overlay
@@ -15,10 +11,6 @@ apiVersion: networking.alibaba.com/v1
 kind: Subnet
 metadata:
   name: init
-  {{ if .Values.init.skipValidation }}
-  labels:
-    webhook.hybridnet.io/ignore: "true"
-  {{ end }}
 spec:
   config:
     autoNatOutgoing: true
