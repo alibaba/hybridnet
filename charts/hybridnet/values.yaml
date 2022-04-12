@@ -30,9 +30,11 @@ manager:
   replicas: 3
 
 webhook:
-  # -- Once a pod have one of the labels below, webhook will not block the creation of it.
-  exceptPodLabels:
-    - app: kube-proxy
+  # -- Only the pods match the additionalPodMatchExpressions will be validate by hybridnet webhook.
+  additionalPodMatchExpressions:
+    - key: app
+      operator: NotIn
+      values: [ "kube-proxy" ]
 
   # -- The number of webhook pods
   replicas: 3
