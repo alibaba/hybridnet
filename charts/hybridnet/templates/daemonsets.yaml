@@ -41,14 +41,14 @@ spec:
             - sh
             - /hybridnet/start-daemon.sh
           args:
-            {{ if (ne .Values.init.preferVxlanInterfaces "") }}
-            - --prefer-vxlan-interfaces={{ .Values.init.preferVxlanInterfaces }}
+            {{ if (ne .Values.daemon.preferVxlanInterfaces "") }}
+            - --prefer-vxlan-interfaces={{ .Values.daemon.preferVxlanInterfaces }}
             {{ end }}
-            {{ if ne .Values.init.preferVlanInterfaces "" }}
-            - --prefer-vlan-interfaces={{ .Values.init.preferVlanInterfaces }}
+            {{ if ne .Values.daemon.preferVlanInterfaces "" }}
+            - --prefer-vlan-interfaces={{ .Values.daemon.preferVlanInterfaces }}
             {{ end }}
-            {{ if ne .Values.init.preferBGPInterfaces "" }}
-            - --prefer-bgp-interfaces={{ .Values.init.preferBGPInterfaces }}
+            {{ if ne .Values.daemon.preferBGPInterfaces "" }}
+            - --prefer-bgp-interfaces={{ .Values.daemon.preferBGPInterfaces }}
             {{ end }}
             - --feature-gates=MultiCluster={{ .Values.multiCluster }},DualStack={{ .Values.dualStack }}
           securityContext:

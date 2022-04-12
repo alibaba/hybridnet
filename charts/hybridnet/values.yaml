@@ -17,14 +17,6 @@ init:
   # -- VNI of the default overlay vxlan Network.
   vxlanID: 4
 
-  # -- The physical interfaces on node to transmit vlan/vxlan/bgp packets, which should be confirmed
-  # before network config is actually applied, or you might have to face the risk of rebooting the machine.
-  # An interface name list string using commons as separator is valid, daemon will always use the first
-  # available interface.
-  preferVxlanInterfaces: ""
-  preferVlanInterfaces: ""
-  preferBGPInterfaces: ""
-
 manager:
   # -- The number of manager pods
   replicas: 3
@@ -42,6 +34,15 @@ webhook:
 daemon:
   # -- Whether enable the NetworkPolicy functions of hybridnet.
   enableNetworkPolicy: true
+
+  # -- The physical interfaces on each node to transmit vlan/vxlan/bgp packets, which should be confirmed
+  # before network config is actually applied, or you might have to face the risk of rebooting the machine.
+  #
+  ## Each one of them is an interface name string list, using commons as separator. Daemon will always use
+  ## the first available interface name in each list. If empty, daemon will choose interface by default route.
+  preferVxlanInterfaces: ""
+  preferVlanInterfaces: ""
+  preferBGPInterfaces: ""
 
 # -- Whether pod IP of stateful workloads will be retained by default. true or false
 ## Ref: https://github.com/alibaba/hybridnet/wiki/Static-pod-ip-addresses-for-StatefulSet
