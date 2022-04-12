@@ -50,7 +50,7 @@ time with these commands:
 
 ```shell
 # Change default network type to Underlay
-helm upgrade hybridnet hybridnet/hybridnet -n kube-system --set global.defualtNetworkType=Underlay
+helm upgrade hybridnet hybridnet/hybridnet -n kube-system --set defualtNetworkType=Underlay
 ```
 
 Of course, if you want to change your container network to use Underlay as default network type, you should

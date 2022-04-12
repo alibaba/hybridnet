@@ -24,6 +24,7 @@ annotations:
   artifacthub.io/changes: |
     - "adjust names of some fields"
     - "make the pod creating validation of webhook configurable, to avoid block the creation of other components"
-    - "add skipValidation flag to make the init Subnet/Network be able to skip webhook validation"
+    - "make the init Subnet/Network be created only once while install the helm chart"
+    - "add enableNetworkPolicy variable for daemon"
     - "add replicas parameter for manager and webhook pods"
     - "remove badges in README"
