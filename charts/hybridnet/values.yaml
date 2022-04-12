@@ -39,6 +39,10 @@ webhook:
   # -- The number of webhook pods
   replicas: 3
 
+daemon:
+  # -- Whether enable the NetworkPolicy functions of hybridnet.
+  enableNetworkPolicy: true
+
 # -- Whether pod IP of stateful workloads will be retained by default. true or false
 ## Ref: https://github.com/alibaba/hybridnet/wiki/Static-pod-ip-addresses-for-StatefulSet
 defualtIPRetain: true
