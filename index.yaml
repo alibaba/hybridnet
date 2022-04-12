@@ -3,6 +3,36 @@ entries:
   hybridnet:
   - annotations:
       artifacthub.io/changes: |
+        - "adjust names of some fields"
+        - "make the pod creating validation of webhook configurable, to avoid block the creation of other components"
+        - "make the init Subnet/Network be created only once while install the helm chart"
+        - "add enableNetworkPolicy variable for daemon"
+        - "add replicas parameter for manager and webhook pods"
+        - "remove badges in README"
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: 0.4.2
+    created: "2022-04-12T12:45:31.500260496Z"
+    description: A container networking solution aiming at hybrid clouds.
+    digest: 3e00094baf2d8a50eb8b2e621c7092dc721bd94a81c6c708256559a6cf9b37c0
+    home: https://github.com/alibaba/hybridnet
+    keywords:
+    - network
+    - vlan
+    - bgp
+    - vxlan
+    - cni
+    - kubernetes
+    kubeVersion: '>=1.16.0-0'
+    name: hybridnet
+    sources:
+    - https://github.com/alibaba/hybridnet
+    type: application
+    urls:
+    - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.2.0/hybridnet-0.2.0.tgz
+    version: 0.2.0
+  - annotations:
+      artifacthub.io/changes: |
         - "add defualtIPRetain parameter"
       artifacthub.io/prerelease: "false"
     apiVersion: v2
@@ -53,4 +83,4 @@ entries:
     urls:
     - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.1.1/hybridnet-0.1.1.tgz
     version: 0.1.1
-generated: "2022-03-22T11:36:37.137607782Z"
+generated: "2022-04-12T12:45:31.500280597Z"
