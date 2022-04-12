@@ -41,16 +41,16 @@ spec:
             - sh
             - /hybridnet/start-daemon.sh
           args:
-            {{ if (ne .Values.initNetworkConfig.preferVxlanInterfaces "") }}
-            - --prefer-vxlan-interfaces={{ .Values.initNetworkConfig.preferVxlanInterfaces }}
+            {{ if (ne .Values.daemon.preferVxlanInterfaces "") }}
+            - --prefer-vxlan-interfaces={{ .Values.daemon.preferVxlanInterfaces }}
             {{ end }}
-            {{ if ne .Values.initNetworkConfig.preferVlanInterfaces "" }}
-            - --prefer-vlan-interfaces={{ .Values.initNetworkConfig.preferVlanInterfaces }}
+            {{ if ne .Values.daemon.preferVlanInterfaces "" }}
+            - --prefer-vlan-interfaces={{ .Values.daemon.preferVlanInterfaces }}
             {{ end }}
-            {{ if ne .Values.initNetworkConfig.preferBGPInterfaces "" }}
-            - --prefer-bgp-interfaces={{ .Values.initNetworkConfig.preferBGPInterfaces }}
+            {{ if ne .Values.daemon.preferBGPInterfaces "" }}
+            - --prefer-bgp-interfaces={{ .Values.daemon.preferBGPInterfaces }}
             {{ end }}
-            - --feature-gates=MultiCluster={{ .Values.advancedSettings.multiCluster }},DualStack={{ .Values.advancedSettings.dualStack }}
+            - --feature-gates=MultiCluster={{ .Values.multiCluster }},DualStack={{ .Values.dualStack }}
           securityContext:
             runAsUser: 0
             privileged: true
@@ -93,6 +93,7 @@ spec:
               mountPropagation: HostToContainer
               name: host-docker-netns
           # TODO: add liveness probe
+        {{ if .Values.daemon.enableNetworkPolicy }}
         - name: policy
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
           imagePullPolicy: IfNotPresent
@@ -110,6 +111,7 @@ spec:
           securityContext:
             privileged: true
             runAsUser: 0
+        {{ end }}
       nodeSelector:
         kubernetes.io/os: "linux"
       volumes:

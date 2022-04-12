@@ -1,9 +1,10 @@
+{{ if .Release.IsInstall }}
 apiVersion: networking.alibaba.com/v1
 kind: Network
 metadata:
   name: init
 spec:
-  netID: {{ .Values.initNetworkConfig.vxlanID }}
+  netID: {{ .Values.init.vxlanID }}
   type: Overlay
 
 ---
@@ -16,6 +17,7 @@ spec:
     autoNatOutgoing: true
   network: init
   range:
-    cidr: {{ .Values.initNetworkConfig.cidr }}
-    version: "{{ .Values.initNetworkConfig.ipVersion }}"
+    cidr: {{ .Values.init.cidr }}
+    version: "{{ .Values.init.ipVersion }}"
+{{ end }}
 

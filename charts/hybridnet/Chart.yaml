@@ -2,7 +2,7 @@ apiVersion: v2
 name: hybridnet
 # When the version is modified, make sure the artifacthub.io/changes list is updated
 # Also update CHANGELOG.md
-version: 0.1.2
+version: 0.2.0
 appVersion: 0.4.2
 home: https://github.com/alibaba/hybridnet
 description: A container networking solution aiming at hybrid clouds.
@@ -22,4 +22,9 @@ annotations:
   artifacthub.io/prerelease: "false"
   # List of changes for the release in artifacthub.io
   artifacthub.io/changes: |
-    - "add defualtIPRetain parameter"
+    - "adjust names of some fields"
+    - "make the pod creating validation of webhook configurable, to avoid block the creation of other components"
+    - "make the init Subnet/Network be created only once while install the helm chart"
+    - "add enableNetworkPolicy variable for daemon"
+    - "add replicas parameter for manager and webhook pods"
+    - "remove badges in README"
