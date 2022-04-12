@@ -5,7 +5,8 @@ images:
   registryURL: "docker.io"
 
 # -- It's always encouraged to use an overlay network to finish some general jobs in hybridnet. This
-# chart will always create an "init" overlay Network/Subnet to initialize the K8s cluster.
+# chart will always create an "init" overlay Network/Subnet to initialize the K8s cluster. "init" Network/Subnet
+# will only be created once.
 init:
   # -- CIDR of "init" Subnet.
   cidr: 100.64.0.0/16

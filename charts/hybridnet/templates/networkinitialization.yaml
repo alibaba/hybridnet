@@ -1,3 +1,4 @@
+{{ if .Release.IsInstall }}
 apiVersion: networking.alibaba.com/v1
 kind: Network
 metadata:
@@ -18,4 +19,5 @@ spec:
   range:
     cidr: {{ .Values.init.cidr }}
     version: "{{ .Values.init.ipVersion }}"
+{{ end }}
 
