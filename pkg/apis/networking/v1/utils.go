@@ -67,9 +67,21 @@ func GetNetworkMode(networkObj *Network) NetworkMode {
 		if len(networkObj.Spec.Mode) == 0 {
 			return NetworkModeVxlan
 		}
+	case NetworkTypeGlobalBGP:
+		if len(networkObj.Spec.Mode) == 0 {
+			return NetworkModeGlobalBGP
+		}
 	}
 
 	return networkObj.Spec.Mode
+}
+
+func IsGlobalNetwork(networkObj *Network) bool {
+	return IsGlobalNetworkType(GetNetworkType(networkObj))
+}
+
+func IsGlobalNetworkType(networkType NetworkType) bool {
+	return networkType == NetworkTypeOverlay || networkType == NetworkTypeGlobalBGP
 }
 
 func IsIPv6IPInstance(ip *IPInstance) bool {
