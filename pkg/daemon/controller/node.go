@@ -201,10 +201,13 @@ func (r *nodeReconciler) selectVtepAddressFromLink() (net.IP, net.HardwareAddr, 
 	}
 
 	var vtepIP net.IP
+existParentAddrLoop:
 	for _, addr := range existParentAddrList {
-		if addr.IP.IsGlobalUnicast() {
-			vtepIP = addr.IP
-			break
+		for _, cidr := range r.ctrlHubRef.config.VtepAddressCIDRs {
+			if cidr.Contains(addr.IP) {
+				vtepIP = addr.IP
+				break existParentAddrLoop
+			}
 		}
 	}
 
