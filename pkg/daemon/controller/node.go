@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"net"
 
+	"golang.org/x/sys/unix"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -42,8 +44,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/vxlan"
 	"github.com/alibaba/hybridnet/pkg/feature"
-
-	"golang.org/x/sys/unix"
 
 	"github.com/vishvananda/netlink"
 
@@ -78,86 +78,29 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
-	link, err := netlink.LinkByName(r.ctrlHubRef.config.NodeVxlanIfName)
+	vtepIP, vtepMac, err := r.selectVtepAddressFromLink()
 	if err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to get node vxlan interface %v: %v",
-			r.ctrlHubRef.config.NodeVxlanIfName, err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to select vtep address: %v", err)
 	}
-
-	// Use parent's valid ipv4 address first, try ipv6 address if no valid ipv4 address exist.
-	existParentAddrList, err := utils.ListAllAddress(link)
-	if err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list address for vxlan parent link %v: %v",
-			link.Attrs().Name, err)
-	}
-
-	if len(existParentAddrList) == 0 {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("there is no available ip for vxlan parent link %v",
-			link.Attrs().Name)
-	}
-
-	var vtepIP net.IP
-	for _, addr := range existParentAddrList {
-		if addr.IP.IsGlobalUnicast() {
-			vtepIP = addr.IP
-			break
-		}
-	}
-
-	thisNode := &corev1.Node{}
-	if err := r.Get(ctx, types.NamespacedName{Name: r.ctrlHubRef.config.NodeName}, thisNode); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to get this node %v object: %v",
-			r.ctrlHubRef.config.NodeName, err)
-	}
-
-	if vtepIP == nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("no availuable vtep ip can be used for link %v",
-			link.Attrs().Name)
-	}
-	vtepMac := link.Attrs().HardwareAddr
 
 	vxlanLinkName, err := utils.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, overlayNetID)
 	if err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan interface name: %v", err)
 	}
 
-	existAllAddrList, err := containernetwork.ListLocalAddressExceptLink(vxlanLinkName)
+	thisNode := &corev1.Node{}
+	if err := r.Get(ctx, types.NamespacedName{Name: r.ctrlHubRef.config.NodeName}, thisNode); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to get node %v object: %v",
+			r.ctrlHubRef.config.NodeName, err)
+	}
+
+	nodeLocalVxlanAddrs, err := r.selectNodeLocalVxlanAddrs(thisNode, vtepIP, vxlanLinkName)
 	if err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list address for all interfaces: %v", err)
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to select node local vxlan addresses: %v", err)
 	}
 
-	var nodeLocalVxlanAddr []netlink.Addr
-	for _, addr := range existAllAddrList {
-		// Add vtep ip and node object ip by default.
-		isNodeObjectAddr := false
-		for _, nodeObjectAddr := range thisNode.Status.Addresses {
-			if nodeObjectAddr.Address == addr.IP.String() {
-				isNodeObjectAddr = true
-				break
-			}
-		}
-
-		if isNodeObjectAddr || addr.IP.Equal(vtepIP) {
-			nodeLocalVxlanAddr = append(nodeLocalVxlanAddr, addr)
-			continue
-		}
-
-		// Add extra node local vxlan ip.
-		for _, cidr := range r.ctrlHubRef.config.ExtraNodeLocalVxlanIPCidrs {
-			if cidr.Contains(addr.IP) {
-				nodeLocalVxlanAddr = append(nodeLocalVxlanAddr, addr)
-			}
-		}
-	}
-
-	patchData := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s","%s":"%s","%s":"%s"}}}`,
-		constants.AnnotationNodeVtepIP, vtepIP.String(),
-		constants.AnnotationNodeVtepMac, vtepMac.String(),
-		constants.AnnotationNodeLocalVxlanIPList, utils.GenerateIPListString(nodeLocalVxlanAddr))
-
-	if err := r.ctrlHubRef.mgr.GetClient().Patch(context.TODO(),
-		thisNode, client.RawPatch(types.StrategicMergePatchType, []byte(patchData))); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("update node label error: %v", err)
+	if err := r.updateNodeVxlanAnnotations(thisNode, vtepIP, vtepMac, nodeLocalVxlanAddrs); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to update node vxlan annotations: %v", err)
 	}
 
 	nodeList := &corev1.NodeList{}
@@ -172,43 +115,9 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to create vxlan device %v: %v", vxlanLinkName, err)
 	}
 
-	nodeLocalVxlanAddrMap := map[string]bool{}
-	for _, addr := range nodeLocalVxlanAddr {
-		nodeLocalVxlanAddrMap[addr.IP.String()] = true
-	}
-
-	vxlanDevAddrList, err := utils.ListAllAddress(vxlanDev.Link())
-	if err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list address for vxlan interface %v: %v",
-			vxlanDev.Link().Name, err)
-	}
-
-	existVxlanDevAddrMap := map[string]bool{}
-	for _, addr := range vxlanDevAddrList {
-		existVxlanDevAddrMap[addr.IP.String()] = true
-	}
-
-	// Add all node local vxlan ip address to vxlan interface.
-	for _, addr := range nodeLocalVxlanAddr {
-		if _, exist := existVxlanDevAddrMap[addr.IP.String()]; !exist {
-			if err := netlink.AddrAdd(vxlanDev.Link(), &netlink.Addr{
-				IPNet: addr.IPNet,
-				Label: "",
-				Flags: unix.IFA_F_NOPREFIXROUTE,
-			}); err != nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to set addr %v to link %v: %v",
-					addr.IP.String(), vxlanDev.Link().Name, err)
-			}
-		}
-	}
-
-	// Delete invalid address.
-	for _, addr := range vxlanDevAddrList {
-		if _, exist := nodeLocalVxlanAddrMap[addr.IP.String()]; !exist {
-			if err := netlink.AddrDel(vxlanDev.Link(), &addr); err != nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to del addr %v for link %v: %v", addr.IP.String(), vxlanDev.Link().Name, err)
-			}
-		}
+	if err := ensureVxlanInterfaceAddresses(vxlanDev, nodeLocalVxlanAddrs); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to ensure addresses for vxlan device %v: %v",
+			vxlanLinkName, err)
 	}
 
 	for _, node := range nodeList.Items {
@@ -270,6 +179,134 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	r.ctrlHubRef.iptablesSyncTrigger()
 
 	return reconcile.Result{}, nil
+}
+
+func (r *nodeReconciler) selectVtepAddressFromLink() (net.IP, net.HardwareAddr, error) {
+	link, err := netlink.LinkByName(r.ctrlHubRef.config.NodeVxlanIfName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get node vxlan interface %v: %v",
+			r.ctrlHubRef.config.NodeVxlanIfName, err)
+	}
+
+	// Use parent's valid ipv4 address first, try ipv6 address if no valid ipv4 address exist.
+	existParentAddrList, err := utils.ListAllAddress(link)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list address for vxlan parent link %v: %v",
+			link.Attrs().Name, err)
+	}
+
+	if len(existParentAddrList) == 0 {
+		return nil, nil, fmt.Errorf("there is no available ip for vxlan parent link %v",
+			link.Attrs().Name)
+	}
+
+	var vtepIP net.IP
+	for _, addr := range existParentAddrList {
+		if addr.IP.IsGlobalUnicast() {
+			vtepIP = addr.IP
+			break
+		}
+	}
+
+	if vtepIP == nil {
+		return nil, nil, fmt.Errorf("no availuable vtep ip can be used for link %v",
+			link.Attrs().Name)
+	}
+
+	return vtepIP, link.Attrs().HardwareAddr, nil
+}
+
+func (r *nodeReconciler) selectNodeLocalVxlanAddrs(thisNode *corev1.Node, vtepIP net.IP,
+	vxlanLinkName string) ([]netlink.Addr, error) {
+	existAllAddrList, err := containernetwork.ListLocalAddressExceptLink(vxlanLinkName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list address for all interfaces: %v", err)
+	}
+
+	var nodeLocalVxlanAddr []netlink.Addr
+	for _, addr := range existAllAddrList {
+		// Add vtep ip and node object ip by default.
+		isNodeObjectAddr := false
+		for _, nodeObjectAddr := range thisNode.Status.Addresses {
+			if nodeObjectAddr.Address == addr.IP.String() {
+				isNodeObjectAddr = true
+				break
+			}
+		}
+
+		if isNodeObjectAddr || addr.IP.Equal(vtepIP) {
+			nodeLocalVxlanAddr = append(nodeLocalVxlanAddr, addr)
+			continue
+		}
+
+		// Add extra node local vxlan ip.
+		for _, cidr := range r.ctrlHubRef.config.ExtraNodeLocalVxlanIPCidrs {
+			if cidr.Contains(addr.IP) {
+				nodeLocalVxlanAddr = append(nodeLocalVxlanAddr, addr)
+			}
+		}
+	}
+
+	return nodeLocalVxlanAddr, nil
+}
+
+func (r *nodeReconciler) updateNodeVxlanAnnotations(thisNode *corev1.Node,
+	vtepIP net.IP, vtepMac net.HardwareAddr, nodeLocalVxlanAddr []netlink.Addr) error {
+	patchData := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s","%s":"%s","%s":"%s"}}}`,
+		constants.AnnotationNodeVtepIP, vtepIP.String(),
+		constants.AnnotationNodeVtepMac, vtepMac.String(),
+		constants.AnnotationNodeLocalVxlanIPList, utils.GenerateIPListString(nodeLocalVxlanAddr))
+
+	if err := r.ctrlHubRef.mgr.GetClient().Patch(context.TODO(),
+		thisNode, client.RawPatch(types.StrategicMergePatchType, []byte(patchData))); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ensureVxlanInterfaceAddresses(vxlanDev *vxlan.Device, addresses []netlink.Addr) error {
+	nodeLocalVxlanAddrMap := map[string]bool{}
+	for _, addr := range addresses {
+		nodeLocalVxlanAddrMap[addr.IP.String()] = true
+	}
+
+	vxlanDevAddrList, err := utils.ListAllAddress(vxlanDev.Link())
+	if err != nil {
+		return fmt.Errorf("failed to list address for vxlan interface %v: %v",
+			vxlanDev.Link().Name, err)
+	}
+
+	existVxlanDevAddrMap := map[string]bool{}
+	for _, addr := range vxlanDevAddrList {
+		existVxlanDevAddrMap[addr.IP.String()] = true
+	}
+
+	// Add all node local vxlan ip address to vxlan interface.
+	for _, addr := range addresses {
+		if _, exist := existVxlanDevAddrMap[addr.IP.String()]; !exist {
+			if err := netlink.AddrAdd(vxlanDev.Link(), &netlink.Addr{
+				IPNet: addr.IPNet,
+				Label: "",
+				Flags: unix.IFA_F_NOPREFIXROUTE,
+			}); err != nil {
+				return fmt.Errorf("failed to set addr %v to link %v: %v",
+					addr.IP.String(), vxlanDev.Link().Name, err)
+			}
+		}
+	}
+
+	// Delete invalid address.
+	for _, addr := range vxlanDevAddrList {
+		if _, exist := nodeLocalVxlanAddrMap[addr.IP.String()]; !exist {
+			if err := netlink.AddrDel(vxlanDev.Link(), &addr); err != nil {
+				return fmt.Errorf("failed to del addr %v for link %v: %v",
+					addr.IP.String(), vxlanDev.Link().Name, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 func checkNodeUpdate(updateEvent event.UpdateEvent) bool {
