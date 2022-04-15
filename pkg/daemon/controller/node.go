@@ -345,7 +345,7 @@ func (r *nodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := nodeController.Watch(&source.Kind{Type: &corev1.Node{}},
 		&fixedKeyHandler{key: ActionReconcileNode},
 		&predicate.ResourceVersionChangedPredicate{},
-		&predicate.LabelChangedPredicate{},
+		&predicate.AnnotationChangedPredicate{},
 		&predicate.Funcs{
 			UpdateFunc: checkNodeUpdate,
 		},
