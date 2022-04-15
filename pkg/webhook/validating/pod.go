@@ -54,6 +54,10 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
 	}
 
+	if pod.Spec.HostNetwork {
+		return admission.Allowed("skip validation on host-networking pod")
+	}
+
 	var (
 		networkTypeFromPod = utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType])
 		networkType        = ipamtypes.ParseNetworkTypeFromString(networkTypeFromPod)

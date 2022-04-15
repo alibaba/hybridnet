@@ -19,6 +19,9 @@ package types
 import (
 	"os"
 	"strings"
+	"sync"
+
+	"github.com/alibaba/hybridnet/pkg/feature"
 )
 
 type IPFamilyMode string
@@ -30,7 +33,15 @@ const (
 )
 
 func ParseIPFamilyFromString(in string) IPFamilyMode {
+	// if dual-stack not enabled, only ipv4 subnets will be
+	// recognized and promoted
+	if !feature.DualStackEnabled() {
+		return IPv4Only
+	}
+
 	switch strings.ToLower(in) {
+	case "":
+		return ParseIPFamilyFromEnvOnce()
 	case strings.ToLower(string(IPv4Only)):
 		return IPv4Only
 	case strings.ToLower(string(IPv6Only)):
@@ -39,6 +50,32 @@ func ParseIPFamilyFromString(in string) IPFamilyMode {
 		return DualStack
 	default:
 		return IPv4Only
+	}
+}
+
+var ipFamilyFromEnv IPFamilyMode
+var ipFamilyFromEnvOnce sync.Once
+
+func ParseIPFamilyFromEnvOnce() IPFamilyMode {
+	ipFamilyFromEnvOnce.Do(
+		func() {
+			ipFamilyFromEnv = ParseIPFamilyFromEnv()
+		},
+	)
+	return ipFamilyFromEnv
+}
+
+func ParseIPFamilyFromEnv() IPFamilyMode {
+	ipFamilyEnv := os.Getenv("DEFAULT_IP_FAMILY")
+	switch strings.ToLower(ipFamilyEnv) {
+	case strings.ToLower(string(IPv4Only)), "":
+		return IPv4Only
+	case strings.ToLower(string(IPv6Only)):
+		return IPv6Only
+	case strings.ToLower(string(DualStack)):
+		return DualStack
+	default:
+		return IPFamilyMode(ipFamilyEnv)
 	}
 }
 
