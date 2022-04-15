@@ -106,9 +106,9 @@ spec:
   network: network1                                   # Required. The Network which this Subnet belongs to.
                                
   netID: 0                                            # Optional. Depends on the Network's configuration.
-                                                      # If the Network's netID is empty, it should not be empty.
-                                                      # If the Network's netID is not empty, it can only be
-                                                      # empty or the same netID of Network.
+                                                      # If the Network's netID is empty, Subnet's netID must not be empty.
+                                                      # If the Network's netID is not empty, Subnet's netID must be
+                                                      # either empty or the same to the Network's netID.
                                                       # For an Overlay Network, this field must be empty.
                                                       
   range:
