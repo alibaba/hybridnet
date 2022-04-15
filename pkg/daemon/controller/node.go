@@ -110,17 +110,6 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 			r.ctrlHubRef.config.NodeName, err)
 	}
 
-	preVtepIP, exist := thisNode.Annotations[constants.AnnotationNodeVtepIP]
-	if exist {
-		// if vtep ip has been set and still exist on parent interface
-		for _, address := range existParentAddrList {
-			if address.IP.String() == preVtepIP {
-				vtepIP = address.IP
-				break
-			}
-		}
-	}
-
 	if vtepIP == nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("no availuable vtep ip can be used for link %v",
 			link.Attrs().Name)
