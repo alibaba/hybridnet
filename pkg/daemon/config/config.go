@@ -74,10 +74,12 @@ type Configuration struct {
 
 	VxlanUDPPort int
 
-	VlanCheckTimeout                     time.Duration
-	IptablesCheckDuration                time.Duration
+	VlanCheckTimeout      time.Duration
+	IptablesCheckDuration time.Duration
+
 	VxlanBaseReachableTime               time.Duration
 	VxlanExpiredNeighCachesClearInterval time.Duration
+	VtepAddressCIDRs                     []*net.IPNet
 
 	// Use fixed table num to mark "local-pod-direct rule"
 	LocalDirectTableNum int
@@ -112,10 +114,11 @@ func ParseFlags() (*Configuration, error) {
 		argVxlanUDPPort                         = pflag.Int("vxlan-udp-port", DefaultVxlanUDPPort, "The local udp port which vxlan tunnel use")
 		argVxlanBaseReachableTime               = pflag.Duration("vxlan-base-reachable-time", DefaultVxlanBaseReachableTime, "The time for neigh caches of vxlan device to get STALE from REACHABLE")
 		argVxlanExpiredNeighCachesClearInterval = pflag.Duration("vxlan-expired-neigh-caches-clear-interval", DefaultVxlanExpiredNeighCachesClearInterval, "The interval for daemon to clear STALE and FAILED neigh caches of vxlan device")
+		argVtepAddressCIDRs                     = pflag.String("vtep-address-cidrs", "0.0.0.0/0,::/0", "The cidr list to select vtep address on each node, e.g., \\\"192.168.10.0/24,10.2.3.0/24\\\"\"")
 		argNeighGCThresh1                       = pflag.Int("neigh-gc-thresh1", DefaultNeighGCThresh1, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh1")
 		argNeighGCThresh2                       = pflag.Int("neigh-gc-thresh2", DefaultNeighGCThresh2, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh2")
 		argNeighGCThresh3                       = pflag.Int("neigh-gc-thresh3", DefaultNeighGCThresh3, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh3")
-		argExtraNodeLocalVxlanIPCidrs           = pflag.String("extra-node-local-vxlan-ip-cidrs", "", "Cidrs to select node extra local vxlan ip, e.g., \"192.168.10.0/24,10.2.3.0/24\"")
+		argExtraNodeLocalVxlanIPCidrs           = pflag.String("extra-node-local-vxlan-ip-cidrs", "", "The cidr list to select node extra local vxlan ip, e.g., \"192.168.10.0/24,10.2.3.0/24\"")
 	)
 
 	// mute info log for ipset lib
@@ -160,6 +163,14 @@ func ParseFlags() (*Configuration, error) {
 		config.ExtraNodeLocalVxlanIPCidrs, err = parseCidrString(*argExtraNodeLocalVxlanIPCidrs)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse extra node local vxlan ip cidrs: %v", err)
+		}
+	}
+
+	if *argVtepAddressCIDRs != "" {
+		var err error
+		config.VtepAddressCIDRs, err = parseCidrString(*argVtepAddressCIDRs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse vtep address cidrs: %v", err)
 		}
 	}
 
