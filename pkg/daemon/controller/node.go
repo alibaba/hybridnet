@@ -108,6 +108,7 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed list node: %v", err)
 	}
 
+	// if the vtep ip change, vxlan interface will be rebuilt
 	vxlanDev, err := vxlan.NewVxlanDevice(vxlanLinkName, int(*overlayNetID),
 		r.ctrlHubRef.config.NodeVxlanIfName, vtepIP, r.ctrlHubRef.config.VxlanUDPPort,
 		r.ctrlHubRef.config.VxlanBaseReachableTime, true)
@@ -177,6 +178,10 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	r.ctrlHubRef.iptablesSyncTrigger()
+
+	// Vxlan device might be regenerated, if that happens, all the related routes will be cleaned.
+	// So subnet controller need to be triggered another time.
+	r.ctrlHubRef.subnetControllerTriggerSource.Trigger()
 
 	return reconcile.Result{}, nil
 }
