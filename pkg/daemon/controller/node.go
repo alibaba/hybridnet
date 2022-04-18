@@ -121,11 +121,13 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 			vxlanLinkName, err)
 	}
 
+	var incompleteVtepInfoNodes []string
 	for _, node := range nodeList.Items {
 		if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
 			node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
 			node.Annotations[constants.AnnotationNodeLocalVxlanIPList] == "" {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("node %v's vtep information has not been updated", node.Name)
+			incompleteVtepInfoNodes = append(incompleteVtepInfoNodes, node.Name)
+			continue
 		}
 
 		vtepMac, err := net.ParseMAC(node.Annotations[constants.AnnotationNodeVtepMac])
@@ -182,6 +184,11 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	// Vxlan device might be regenerated, if that happens, all the related routes will be cleaned.
 	// So subnet controller need to be triggered another time.
 	r.ctrlHubRef.subnetControllerTriggerSource.Trigger()
+
+	if len(incompleteVtepInfoNodes) != 0 {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("some of the nodes' vtep information has not been updated, "+
+			"error nodes are: %v", incompleteVtepInfoNodes)
+	}
 
 	return reconcile.Result{}, nil
 }
