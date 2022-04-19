@@ -71,8 +71,34 @@ spec:
                 required:
                 - ip
                 - mac
-                - netID
                 - version
+                type: object
+              binding:
+                description: Binding defines a binding object with necessary info
+                  of an IPInstance
+                properties:
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  nodeName:
+                    type: string
+                  stateful:
+                    description: StatefulInfo is a collection of related info if binding
+                      to a stateful workload
+                    properties:
+                      index:
+                        format: int32
+                        type: integer
+                    type: object
+                  uid:
+                    description: UID is a type that holds unique ID values, including
+                      UUIDs.  Because we don't ONLY use UUIDs, this is an alias to
+                      string.  Being a type captures intent and helps make sure that
+                      UIDs and names do not get conflated.
+                    type: string
                 type: object
               network:
                 type: string
@@ -95,6 +121,9 @@ spec:
               podNamespace:
                 type: string
               sandboxID:
+                type: string
+              updateTimestamp:
+                format: date-time
                 type: string
             type: object
         type: object
