@@ -122,12 +122,17 @@ func CreateRouteManager(localDirectTableNum, toOverlaySubnetTableNum, overlayMar
 			}
 
 			if route.LinkIndex > 0 {
-				overlayIf, err := netlink.LinkByIndex(route.LinkIndex)
+				routeIf, err := netlink.LinkByIndex(route.LinkIndex)
 				if err != nil {
-					return nil, fmt.Errorf("failed to find overlay interface by index %v: %v", route.LinkIndex, err)
+					return nil, fmt.Errorf("failed to get route interface by index %v: %v", route.LinkIndex, err)
 				}
 
-				if route.Gw != nil || overlayIf.Type() != "vxlan" {
+				// "throw" v6 routes without a specified device will always be specified to "dev lo" by kernel automatically
+				if routeIf.Attrs().Flags&net.FlagLoopback != 0 && isExcludeRoute(&route) {
+					continue
+				}
+
+				if route.Gw != nil || routeIf.Type() != "vxlan" {
 					return nil, fmt.Errorf("to overlay subnet route table %v is used by others", toOverlaySubnetTableNum)
 				}
 			}
