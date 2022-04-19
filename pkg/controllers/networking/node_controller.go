@@ -69,23 +69,43 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	var underlayAttached, overlayAttached bool
+	var underlayAttached, overlayAttached, bgpAttached bool
 	if underlayAttached, overlayAttached, err = utils.DetectNetworkAttachmentOfNode(r, node); err != nil {
 		log.Error(err, "unable to detect network attachment")
 		return ctrl.Result{}, err
 	}
 
-	nodePatch := client.MergeFrom(node.DeepCopy())
+	if underlayAttached {
+		if globalBGPNetwork, err := utils.FindGlobalBGPNetwork(r); err != nil {
+			log.Error(err, "unable to detect global bgp network exist")
+			return ctrl.Result{}, err
+		} else if len(globalBGPNetwork) != 0 {
+			// if global bgp network not exist, do not patch bgp attachment label to node
+			var bgpNetworkName string
+			if bgpNetworkName, err = utils.FindBGPUnderlayNetworkForNode(r, node.GetLabels()); err != nil {
+				log.Error(err, "unable to find bgp underlay network for node %v", node.Name)
+				return ctrl.Result{}, err
+			}
 
-	attachedToString := func(attached bool) string {
-		if attached {
-			return constants.Attached
+			if len(bgpNetworkName) != 0 {
+				bgpAttached = true
+			}
 		}
-		return constants.Unattached
 	}
 
-	node.Labels[constants.LabelUnderlayNetworkAttachment] = attachedToString(underlayAttached)
-	node.Labels[constants.LabelOverlayNetworkAttachment] = attachedToString(overlayAttached)
+	nodePatch := client.MergeFrom(node.DeepCopy())
+
+	updateAttachmentLabel := func(node *corev1.Node, key string, attached bool) {
+		if attached {
+			node.Labels[key] = constants.Attached
+			return
+		}
+		delete(node.Labels, key)
+	}
+
+	updateAttachmentLabel(node, constants.LabelUnderlayNetworkAttachment, underlayAttached)
+	updateAttachmentLabel(node, constants.LabelOverlayNetworkAttachment, overlayAttached)
+	updateAttachmentLabel(node, constants.LabelBGPNetworkAttachment, bgpAttached)
 
 	if err = r.Patch(ctx, node, nodePatch); err != nil {
 		log.Error(err, "unable to patch Node")

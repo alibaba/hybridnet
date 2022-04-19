@@ -57,8 +57,9 @@ const (
 )
 
 const (
-	IndexerFieldNode = "node"
-	OverlayNodeName  = "c3e6699d28e7"
+	IndexerFieldNode  = "node"
+	OverlayNodeName   = "c3e6699d28e7"
+	GlobalBGPNodeName = "d7afdca2c149"
 )
 
 // PodReconciler reconciles a Pod object
@@ -183,53 +184,66 @@ func (r *PodReconciler) selectNetwork(pod *corev1.Pod) (string, error) {
 	switch networkType {
 	case types.Underlay:
 		// try to get underlay network by node indexer
-		var networkList *networkingv1.NetworkList
-		var err error
-		if networkList, err = utils.ListNetworks(r, client.MatchingFields{IndexerFieldNode: pod.Spec.NodeName}); err != nil {
-			return "", fmt.Errorf("unable to list underlay network by indexer node: %v", err)
-		}
-		if len(networkList.Items) >= 1 {
-			return networkList.Items[0].GetName(), nil
+		underlayNetworkName, err := r.getNetworkByNodeNameIndexer(pod.Spec.NodeName)
+		if err != nil {
+			return "", fmt.Errorf("unable to get underlay network by node name indexer: %v", err)
 		}
 
-		// fall back to find underlay network by label selector
-		var underlayNetworkName string
-		if underlayNetworkName, err = utils.FindUnderlayNetworkForNodeName(r, pod.Spec.NodeName); err != nil {
+		if len(underlayNetworkName) == 0 {
 			return "", fmt.Errorf("unable to find underlay network for node %s", pod.Spec.NodeName)
 		}
-		if len(underlayNetworkName) == 0 {
-			return "", fmt.Errorf("no underlay network match node %s", pod.Spec.NodeName)
-		}
+
 		if !r.matchNetworkTypeInManager(underlayNetworkName, types.Underlay) {
 			return "", fmt.Errorf("network %s does not match type %q in manager", underlayNetworkName, types.Underlay)
 		}
 		return underlayNetworkName, nil
 	case types.Overlay:
 		// try to get overlay network by special node name
-		var networkList *networkingv1.NetworkList
-		var err error
-		if networkList, err = utils.ListNetworks(r, client.MatchingFields{IndexerFieldNode: OverlayNodeName}); err != nil {
-			return "", fmt.Errorf("unable to list overlay network by indexer node: %v", err)
-		}
-		if len(networkList.Items) >= 1 {
-			return networkList.Items[0].GetName(), nil
+		overlayNetworkName, err := r.getNetworkByNodeNameIndexer(OverlayNodeName)
+		if err != nil {
+			return "", fmt.Errorf("unable to get overlay network by node name indexer: %v", err)
 		}
 
-		// fall back to find overlay network in client cache
-		var overlayNetworkName string
-		if overlayNetworkName, err = utils.FindOverlayNetwork(r); err != nil {
+		if len(overlayNetworkName) == 0 {
 			return "", fmt.Errorf("unable to find overlay network")
 		}
-		if len(overlayNetworkName) == 0 {
-			return "", fmt.Errorf("no overlay network found")
-		}
+
 		if !r.matchNetworkTypeInManager(overlayNetworkName, types.Overlay) {
 			return "", fmt.Errorf("network %s does not match type %q in manager", overlayNetworkName, types.Overlay)
 		}
 		return overlayNetworkName, nil
+	case types.GlobalBGP:
+		// try to get global bgp network by special node name
+		globalBGPNetworkName, err := r.getNetworkByNodeNameIndexer(GlobalBGPNodeName)
+		if err != nil {
+			return "", fmt.Errorf("unable to get overlay network by node name indexer: %v", err)
+		}
+
+		if len(globalBGPNetworkName) == 0 {
+			return "", fmt.Errorf("unable to find global bgp network")
+		}
+
+		if !r.matchNetworkTypeInManager(globalBGPNetworkName, types.GlobalBGP) {
+			return "", fmt.Errorf("network %s does not match type %q in manager", globalBGPNetworkName, types.GlobalBGP)
+		}
+		return globalBGPNetworkName, nil
 	default:
 		return "", fmt.Errorf("unknown network type %s from pod", networkType)
 	}
+}
+
+func (r *PodReconciler) getNetworkByNodeNameIndexer(nodeName string) (string, error) {
+	var networkList *networkingv1.NetworkList
+	var err error
+	if networkList, err = utils.ListNetworks(r, client.MatchingFields{IndexerFieldNode: nodeName}); err != nil {
+		return "", fmt.Errorf("unable to list network by indexer node name %v: %v", nodeName, err)
+	}
+
+	// only use the first one
+	if len(networkList.Items) >= 1 {
+		return networkList.Items[0].GetName(), nil
+	}
+	return "", nil
 }
 
 // matchNetworkTypeInManager will check the picked network from APIServer in manager on

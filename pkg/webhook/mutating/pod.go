@@ -217,6 +217,12 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		patchSelectorToPod(pod, map[string]string{
 			constants.LabelOverlayNetworkAttachment: constants.Attached,
 		})
+	case ipamtypes.GlobalBGP:
+		logger.Info("patch pod with bgp attachment selector",
+			"namespace", req.Namespace, "name", req.Name)
+		patchSelectorToPod(pod, map[string]string{
+			constants.LabelBGPNetworkAttachment: constants.Attached,
+		})
 	default:
 		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, fmt.Errorf("unknown network type %s", networkType), logger)
 	}

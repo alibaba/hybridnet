@@ -76,11 +76,11 @@ func GetNetworkMode(networkObj *Network) NetworkMode {
 	return networkObj.Spec.Mode
 }
 
-func IsGlobalNetwork(networkObj *Network) bool {
-	return IsGlobalNetworkType(GetNetworkType(networkObj))
+func IsGlobalUniqueNetwork(networkObj *Network) bool {
+	return IsGlobalUniqueNetworkType(GetNetworkType(networkObj))
 }
 
-func IsGlobalNetworkType(networkType NetworkType) bool {
+func IsGlobalUniqueNetworkType(networkType NetworkType) bool {
 	return networkType == NetworkTypeOverlay || networkType == NetworkTypeGlobalBGP
 }
 

@@ -285,6 +285,8 @@ func initIndexers(mgr ctrl.Manager) (err error) {
 				return globalutils.DeepCopyStringSlice(network.Status.NodeList)
 			case networkingv1.NetworkTypeOverlay:
 				return []string{networking.OverlayNodeName}
+			case networkingv1.NetworkTypeGlobalBGP:
+				return []string{networking.GlobalBGPNodeName}
 			default:
 				return nil
 			}
