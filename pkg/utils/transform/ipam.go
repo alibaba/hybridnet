@@ -57,9 +57,14 @@ func TransferIPInstanceForIPAM(in *v1.IPInstance) *ipamtypes.IP {
 		NetID:        int32pToUint32p(in.Spec.Address.NetID),
 		Subnet:       in.Spec.Subnet,
 		Network:      in.Spec.Network,
-		PodName:      in.Status.PodName,
-		PodNamespace: in.Status.PodNamespace,
-		Status:       string(in.Status.Phase),
+		PodName:      v1.FetchBindingPodName(in),
+		PodNamespace: in.Namespace,
+		Status: func() string {
+			if v1.IsReserved(in) {
+				return ipamtypes.IPStatusReserved
+			}
+			return ipamtypes.IPStatusAllocated
+		}(),
 	}
 }
 

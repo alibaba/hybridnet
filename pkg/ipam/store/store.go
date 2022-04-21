@@ -102,7 +102,6 @@ func (w *Worker) IPReserve(pod *corev1.Pod) (err error) {
 				// clean pod & node info means this IP is not being used by any pod
 				ipIns.Spec.Binding.NodeName = ""
 				delete(ipIns.Labels, constants.LabelNode)
-				delete(ipIns.Labels, constants.LabelPod)
 
 				// TODO: clean status
 				return nil
