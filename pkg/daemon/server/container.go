@@ -49,7 +49,7 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 	case networkingv1.NetworkModeVxlan:
 		mtu = cdh.config.VxlanMTU
 		nodeIfName = cdh.config.NodeVxlanIfName
-	case networkingv1.NetworkModeBGP:
+	case networkingv1.NetworkModeBGP, networkingv1.NetworkModeGlobalBGP:
 		mtu = cdh.config.BGPMTU
 		nodeIfName = cdh.config.NodeBGPIfName
 	}

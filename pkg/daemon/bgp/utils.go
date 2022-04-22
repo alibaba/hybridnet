@@ -57,6 +57,11 @@ type peerInfo struct {
 	password               string
 }
 
+type ipInfo struct {
+	ip               net.IP
+	needToBeExported bool
+}
+
 func generatePeerConfig(p *peerInfo) *api.Peer {
 	return &api.Peer{
 		Conf: &api.PeerConf{
@@ -104,7 +109,7 @@ func getIPFamilyFromIP(ip net.IP) *api.Family {
 	return v4Family
 }
 
-func generatePathForIP(ip, nextHop net.IP) *api.Path {
+func generatePathForIP(ip, nextHop net.IP, extraPathAttrs ...*apb.Any) *api.Path {
 	if len(ip) == 0 {
 		return nil
 	}
@@ -120,14 +125,16 @@ func generatePathForIP(ip, nextHop net.IP) *api.Path {
 		PrefixLen: prefixBytesLen * 8,
 	})
 
+	pAttrs := append([]*apb.Any{generateNextHopAttr(isIPv6, nextHop.String(), nlri), originAttr}, extraPathAttrs...)
+
 	return &api.Path{
 		Family: getIPFamilyFromIP(ip),
 		Nlri:   nlri,
-		Pattrs: []*apb.Any{generateNextHopAttr(isIPv6, nextHop.String(), nlri), originAttr, noExportCommunityAttr},
+		Pattrs: pAttrs,
 	}
 }
 
-func generatePathForSubnet(subnet *net.IPNet, nextHop net.IP) *api.Path {
+func generatePathForSubnet(subnet *net.IPNet, nextHop net.IP, extraPathAttrs ...*apb.Any) *api.Path {
 	if subnet == nil {
 		return nil
 	}
@@ -139,10 +146,13 @@ func generatePathForSubnet(subnet *net.IPNet, nextHop net.IP) *api.Path {
 		PrefixLen: uint32(prefixLen),
 	})
 
+	pAttrs := append([]*apb.Any{generateNextHopAttr(subnet.IP.To4() == nil, nextHop.String(), nlri), originAttr},
+		extraPathAttrs...)
+
 	return &api.Path{
 		Family: getIPFamilyFromIP(subnet.IP),
 		Nlri:   nlri,
-		Pattrs: []*apb.Any{generateNextHopAttr(subnet.IP.To4() == nil, nextHop.String(), nlri), originAttr},
+		Pattrs: pAttrs,
 	}
 }
 

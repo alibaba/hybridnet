@@ -21,6 +21,9 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
+	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
+
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -266,4 +269,63 @@ func nodeBelongsToNetwork(nodeName string, network *networkingv1.Network) bool {
 		}
 	}
 	return isUnderlayOnHost
+}
+
+func collectGlobalNetworkInfoAndInit(ctx context.Context, client client.Reader, nodeVxlanIfName, nodeName string,
+	bgpManager *bgp.Manager, recordBGPPeers bool) (vxlanForwardNodeIfName string, bgpPeerIP net.IP, err error) {
+
+	networkList := &networkingv1.NetworkList{}
+	if err = client.List(ctx, networkList); err != nil {
+		err = fmt.Errorf("failed to list network: %v", err)
+		return
+	}
+
+	for _, network := range networkList.Items {
+		switch networkingv1.GetNetworkMode(&network) {
+		case networkingv1.NetworkModeVxlan:
+			netID := network.Spec.NetID
+			vxlanForwardNodeIfName, err = daemonutils.GenerateVxlanNetIfName(nodeVxlanIfName, netID)
+			if err != nil {
+				err = fmt.Errorf("failed to generate vxlan forward node if name: %v", err)
+				return
+			}
+		case networkingv1.NetworkModeBGP:
+			// check if this node belongs to the network, ignore it if not
+			if !nodeBelongsToNetwork(nodeName, &network) {
+				continue
+			}
+
+			if network.Spec.NetID == nil {
+				err = fmt.Errorf("the net id of network %v must to be set", network.Name)
+				return
+
+			}
+
+			localAS := uint32(*network.Spec.NetID)
+			if err = bgpManager.TryStart(localAS); err != nil {
+				err = fmt.Errorf("try start bgp manager for network %v failed: %v", network.Name, err)
+				return
+			}
+
+			if recordBGPPeers {
+				if len(network.Spec.Config.BGPPeers) != 1 {
+					err = fmt.Errorf("no bgp peer or multiple bgp peers are not supported for network %v", network.Name)
+					return
+				}
+
+				for _, peer := range network.Spec.Config.BGPPeers {
+					bgpManager.RecordPeer(peer.Address, peer.Password, int(peer.ASN), peer.GracefulRestartSeconds)
+				}
+			}
+
+			bgpPeerIP = net.ParseIP(network.Spec.Config.BGPPeers[0].Address)
+			if bgpPeerIP == nil {
+				err = fmt.Errorf("get invalid bgp peer address %v for network %v",
+					network.Spec.Config.BGPPeers[0].Address, network.Name)
+				return
+			}
+		}
+	}
+
+	return
 }

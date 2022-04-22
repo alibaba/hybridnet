@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"net"
 	"reflect"
 
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
@@ -66,6 +65,13 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 
 	r.ctrlHubRef.bgpManager.ResetPeerAndSubnetInfos()
 
+	// only update bgp peer info in subnet reconcile
+	overlayForwardNodeIfName, bgpGatewayIP, err := collectGlobalNetworkInfoAndInit(ctx, r,
+		r.ctrlHubRef.config.NodeVxlanIfName, r.ctrlHubRef.config.NodeName, r.ctrlHubRef.bgpManager, true)
+	if err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to collect global network info and init: %v", err)
+	}
+
 	for _, subnet := range subnetList.Items {
 		network := &networkingv1.Network{}
 		if err := r.Get(ctx, types.NamespacedName{Name: subnet.Spec.Network}, network); err != nil {
@@ -81,9 +87,7 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 			netID = network.Spec.NetID
 		}
 
-		subnetCidr, gatewayIP, startIP, endIP, excludeIPs,
-			_, err := parseSubnetSpecRangeMeta(&subnet.Spec.Range)
-
+		subnetCidr, gatewayIP, startIP, endIP, excludeIPs, _, err := parseSubnetSpecRangeMeta(&subnet.Spec.Range)
 		if err != nil {
 			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse subnet %v spec range meta: %v", subnet.Name, err)
 		}
@@ -101,41 +105,26 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 				}
 			}
 		case networkingv1.NetworkModeVxlan:
-			forwardNodeIfName, err = daemonutils.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
-			if err != nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan forward node if name: %v", err)
-			}
+			forwardNodeIfName = overlayForwardNodeIfName
 			isOverlay = true
 			autoNatOutgoing = networkingv1.IsSubnetAutoNatOutgoing(&subnet.Spec)
 		case networkingv1.NetworkModeBGP:
 			if isUnderlayOnHost {
 				forwardNodeIfName = r.ctrlHubRef.config.NodeBGPIfName
-
-				localAS := uint32(*network.Spec.NetID)
-				if err = r.ctrlHubRef.bgpManager.TryStart(localAS); err != nil {
-					return reconcile.Result{Requeue: true},
-						fmt.Errorf("try start bgp manager for network %v failed: %v", network.Name, err)
-				}
-
-				if len(network.Spec.Config.BGPPeers) != 1 {
-					return reconcile.Result{Requeue: true},
-						fmt.Errorf("no bgp peer or multiple bgp peers are not supported for network %v", network.Name)
-				}
-
-				for _, peer := range network.Spec.Config.BGPPeers {
-					r.ctrlHubRef.bgpManager.RecordPeer(peer.Address, peer.Password, int(peer.ASN), peer.GracefulRestartSeconds)
-				}
 				r.ctrlHubRef.bgpManager.RecordSubnet(subnetCidr)
-
-				peerAddr := net.ParseIP(network.Spec.Config.BGPPeers[0].Address)
-				if peerAddr == nil {
-					return reconcile.Result{Requeue: true},
-						fmt.Errorf("get invalid bgp peer address %v for network %v",
-							network.Spec.Config.BGPPeers[0].Address, network.Name)
-				}
-
 				// use peer ip as gateway
-				gatewayIP = peerAddr
+				gatewayIP = bgpGatewayIP
+			}
+		case networkingv1.NetworkModeGlobalBGP:
+			if bgpGatewayIP == nil {
+				// node does not belong to any underlay bgp network
+				isUnderlayOnHost = false
+			} else {
+				isUnderlayOnHost = true
+				forwardNodeIfName = r.ctrlHubRef.config.NodeBGPIfName
+
+				// don't need to record subnet for bgp manager
+				gatewayIP = bgpGatewayIP
 			}
 		default:
 			return reconcile.Result{Requeue: true}, fmt.Errorf("invalic network mode %v for %v", networkMode, network.Name)

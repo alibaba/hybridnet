@@ -145,7 +145,7 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 					return fmt.Errorf("policy rule for %v is not created, waiting for daemon to create it", podCidr)
 				}
 			}
-		case networkingv1.NetworkModeBGP:
+		case networkingv1.NetworkModeBGP, networkingv1.NetworkModeGlobalBGP:
 			ruleExist, table, err := daemonutils.CheckPodRuleExist(podCidr, family)
 			if err != nil {
 				return fmt.Errorf("failed to check cidr %v rule and default route exist: %v", podCidr, err)

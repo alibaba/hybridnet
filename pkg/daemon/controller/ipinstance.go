@@ -64,43 +64,6 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 		logger.V(2).Info("IPInstance information reconciled", "time", endTime)
 	}()
 
-	networkList := &networkingv1.NetworkList{}
-	if err := r.List(ctx, networkList); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list network: %v", err)
-	}
-
-	var overlayExist bool
-	var overlayForwardNodeIfName string
-	var err error
-
-	for _, network := range networkList.Items {
-		switch networkingv1.GetNetworkMode(&network) {
-		case networkingv1.NetworkModeVxlan:
-			netID := network.Spec.NetID
-			overlayForwardNodeIfName, err = daemonutils.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
-			if err != nil {
-				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan forward node if name: %v", err)
-			}
-			overlayExist = true
-		case networkingv1.NetworkModeBGP:
-			// check if this node belongs to the network, ignore it if not
-			if !nodeBelongsToNetwork(r.ctrlHubRef.config.NodeName, &network) {
-				continue
-			}
-
-			if network.Spec.NetID == nil {
-				return reconcile.Result{Requeue: true},
-					fmt.Errorf("the net id of network %v must to be set", network.Name)
-			}
-
-			localAS := uint32(*network.Spec.NetID)
-			if err = r.ctrlHubRef.bgpManager.TryStart(localAS); err != nil {
-				return reconcile.Result{Requeue: true},
-					fmt.Errorf("try start bgp manager for network %v failed: %v", network.Name, err)
-			}
-		}
-	}
-
 	if !r.ctrlHubRef.upgradeWorkDone {
 		if err := ensureExistPodConfigs(r.ctrlHubRef.config.LocalDirectTableNum, logger); err != nil {
 			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to ensure exist pod config: %v", err)
@@ -121,6 +84,12 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 	r.ctrlHubRef.addrV4Manager.ResetInfos()
 	r.ctrlHubRef.bgpManager.ResetIPInfos()
 
+	overlayForwardNodeIfName, _, err := collectGlobalNetworkInfoAndInit(ctx, r,
+		r.ctrlHubRef.config.NodeVxlanIfName, r.ctrlHubRef.config.NodeName, r.ctrlHubRef.bgpManager, false)
+	if err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to collect global network info and init: %v", err)
+	}
+
 	for _, ipInstance := range ipInstanceList.Items {
 		// if this ip instance is not actually being used, ignore
 		if ipInstance.Status.Phase != networkingv1.IPPhaseUsing {
@@ -128,10 +97,6 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 		}
 
 		netID := ipInstance.Spec.Address.NetID
-		if netID == nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("NetID of ip instance %v should not be nil", ipInstance.Name)
-		}
-
 		podIP, subnetCidr, err := net.ParseCIDR(ipInstance.Spec.Address.IP)
 		if err != nil {
 			return reconcile.Result{Requeue: true}, fmt.Errorf("parse pod ip %v error: %v", ipInstance.Spec.Address.IP, err)
@@ -163,13 +128,15 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 				return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan forward node interface name: %v", err)
 			}
 		case networkingv1.NetworkModeBGP:
-			r.ctrlHubRef.bgpManager.RecordIP(podIP)
+			r.ctrlHubRef.bgpManager.RecordIP(podIP, false)
+		case networkingv1.NetworkModeGlobalBGP:
+			r.ctrlHubRef.bgpManager.RecordIP(podIP, true)
 		}
 
 		// create proxy neigh
 		neighManager := r.ctrlHubRef.getNeighManager(ipInstance.Spec.Address.Version)
 
-		if overlayExist {
+		if len(overlayForwardNodeIfName) != 0 {
 			// Every underlay pod should also add a proxy neigh on overlay forward interface.
 			// neighManager.AddPodInfo is idempotent
 			neighManager.AddPodInfo(podIP, overlayForwardNodeIfName)
