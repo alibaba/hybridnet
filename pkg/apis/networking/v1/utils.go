@@ -272,3 +272,15 @@ func FetchBindingPodName(ipInstance *IPInstance) string {
 	// TODO: construct pod name with stateful info?
 	return ipInstance.Labels[constants.LabelPod]
 }
+
+func IsValidIPInstance(ipInstance *IPInstance) bool {
+	if ipInstance == nil {
+		return false
+	}
+
+	if IsLegacyModel(ipInstance) {
+		return len(ipInstance.Status.Phase) > 0
+	}
+
+	return len(ipInstance.Spec.Binding.Kind) > 0
+}

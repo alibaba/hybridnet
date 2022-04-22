@@ -174,10 +174,17 @@ func (r *RemoteVtepReconciler) pickEndpointIPListForNode(ctx context.Context, no
 		if !r.SubnetSet.Has(ipInstance.Spec.Subnet) {
 			continue
 		}
-		// only using IP will be valid endpoint
-		if ipInstance == nil || ipInstance.Status.Phase != networkingv1.IPPhaseUsing {
+		if ipInstance == nil {
 			continue
 		}
+		if !ipInstance.DeletionTimestamp.IsZero() {
+			continue
+		}
+		// skip reserved IPInstance
+		if networkingv1.IsReserved(ipInstance) {
+			continue
+		}
+		// TODO: should skip allocated but not deployed IPInstance?
 		endpointIP, _, _ := net.ParseCIDR(ipInstance.Spec.Address.IP)
 		endpoints = append(endpoints, endpointIP.String())
 	}
@@ -265,13 +272,13 @@ func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 			}),
 			builder.WithPredicates(
 				&predicate.ResourceVersionChangedPredicate{},
-				// only IP instance with valid phase will be processed
+				// only valid IP instance will be processed
 				predicate.NewPredicateFuncs(func(obj client.Object) bool {
 					ipInstance, ok := obj.(*networkingv1.IPInstance)
 					if !ok {
 						return false
 					}
-					return len(ipInstance.Status.Phase) > 0
+					return networkingv1.IsValidIPInstance(ipInstance)
 				}),
 				// if node or phase of IP instance change, node will be processed
 				predicate.Or(
@@ -281,6 +288,7 @@ func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 						},
 					},
 					&utils.IPInstancePhaseChangePredicate{},
+					// TODO: add model change predicate here
 				),
 			),
 		).
