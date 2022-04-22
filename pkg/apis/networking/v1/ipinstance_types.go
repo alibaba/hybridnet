@@ -42,6 +42,9 @@ type Binding struct {
 	NodeName string `json:"nodeName"`
 
 	// +kubebuilder:validation:Optional
+	PodUID types.UID `json:"podUID,omitempty"`
+
+	// +kubebuilder:validation:Optional
 	Stateful *StatefulInfo `json:"stateful,omitempty"`
 }
 
@@ -53,7 +56,7 @@ type BindingMeta struct {
 	Name string `json:"name,omitempty"`
 	// +kubebuilder:validation:Optional
 	Namespace string `json:"namespace,omitempty"`
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	UID types.UID `json:"uid,omitempty"`
 }
 
