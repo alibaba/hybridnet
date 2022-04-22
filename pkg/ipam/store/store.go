@@ -99,11 +99,7 @@ func (w *Worker) IPReserve(pod *corev1.Pod) (err error) {
 		var ipIns = &ipInstanceList.Items[i]
 		reserveFuncs = append(reserveFuncs, func() error {
 			_, err := controllerutil.CreateOrPatch(context.TODO(), w, ipIns, func() error {
-				// clean pod & node info means this IP is not being used by any pod
-				ipIns.Spec.Binding.NodeName = ""
-				delete(ipIns.Labels, constants.LabelNode)
-
-				// TODO: clean status
+				reserveIPInstance(ipIns)
 				return nil
 			})
 			return err
@@ -183,6 +179,7 @@ func fillIPInstance(ipIns *networkingv1.IPInstance, ip *ipamtypes.IP, pod *corev
 	ipIns.Labels[constants.LabelNetwork] = ip.Network
 	ipIns.Labels[constants.LabelNode] = pod.Spec.NodeName
 	ipIns.Labels[constants.LabelPod] = pod.Name
+	ipIns.Labels[constants.LabelPodUID] = string(pod.UID)
 
 	owner := strategy.GetKnownOwnReference(pod)
 	if owner == nil {
@@ -219,6 +216,7 @@ func fillIPInstance(ipIns *networkingv1.IPInstance, ip *ipamtypes.IP, pod *corev
 			UID:  owner.UID,
 		},
 		NodeName: pod.Spec.NodeName,
+		PodUID:   pod.UID,
 	}
 
 	if strategy.OwnByStatefulWorkload(pod) {
@@ -228,6 +226,18 @@ func fillIPInstance(ipIns *networkingv1.IPInstance, ip *ipamtypes.IP, pod *corev
 	}
 
 	return
+}
+
+// reserveIPInstance means this IPInstance does not belong to a specific
+// node and a pod with specific UID
+func reserveIPInstance(ipIns *networkingv1.IPInstance) {
+	// clean pod uid & node info means this IP is not being used by any pod
+	ipIns.Spec.Binding.NodeName = ""
+	ipIns.Spec.Binding.PodUID = ""
+	delete(ipIns.Labels, constants.LabelNode)
+	delete(ipIns.Labels, constants.LabelPodUID)
+
+	// TODO: clean status
 }
 
 func (w *Worker) deleteIP(namespace, name string) error {

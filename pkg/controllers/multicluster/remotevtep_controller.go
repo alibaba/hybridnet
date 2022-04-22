@@ -287,8 +287,9 @@ func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 							constants.LabelNode,
 						},
 					},
+					// TODO: phase change means nothing in new IPInstance model,
+					// to be removed in next major version
 					&utils.IPInstancePhaseChangePredicate{},
-					// TODO: add model change predicate here
 				),
 			),
 		).
