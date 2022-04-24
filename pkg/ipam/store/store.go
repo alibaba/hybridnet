@@ -175,6 +175,7 @@ func fillIPInstance(ipIns *networkingv1.IPInstance, ip *ipamtypes.IP, pod *corev
 	if len(ipIns.Labels) == 0 {
 		ipIns.Labels = map[string]string{}
 	}
+	ipIns.Labels[constants.LabelVersion] = networkingv1.IPInstanceLatestVersion
 	ipIns.Labels[constants.LabelSubnet] = ip.Subnet
 	ipIns.Labels[constants.LabelNetwork] = ip.Network
 	ipIns.Labels[constants.LabelNode] = pod.Spec.NodeName
@@ -224,8 +225,6 @@ func fillIPInstance(ipIns *networkingv1.IPInstance, ip *ipamtypes.IP, pod *corev
 			Index: intToInt32P(utils.GetIndexFromName(pod.Name)),
 		}
 	}
-
-	return
 }
 
 // reserveIPInstance means this IPInstance does not belong to a specific

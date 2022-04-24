@@ -21,6 +21,8 @@ import (
 	"math"
 	"math/big"
 	"net"
+	"strconv"
+	"strings"
 
 	"github.com/containernetworking/plugins/pkg/ip"
 
@@ -273,6 +275,20 @@ func FetchBindingPodName(ipInstance *IPInstance) string {
 	return ipInstance.Labels[constants.LabelPod]
 }
 
+func FetchBindingNodeName(ipInstance *IPInstance) string {
+	if IsLegacyModel(ipInstance) {
+		if len(ipInstance.Status.NodeName) > 0 {
+			return ipInstance.Status.NodeName
+		}
+		return ipInstance.Labels[constants.LabelNode]
+	}
+
+	if len(ipInstance.Spec.Binding.NodeName) > 0 {
+		return ipInstance.Spec.Binding.NodeName
+	}
+	return ipInstance.Labels[constants.LabelNode]
+}
+
 func IsValidIPInstance(ipInstance *IPInstance) bool {
 	if ipInstance == nil {
 		return false
@@ -283,4 +299,15 @@ func IsValidIPInstance(ipInstance *IPInstance) bool {
 	}
 
 	return len(ipInstance.Spec.Binding.Kind) > 0
+}
+
+func GetIndexFromName(name string) int {
+	nameSlice := strings.Split(name, "-")
+	indexStr := nameSlice[len(nameSlice)-1]
+
+	index, err := strconv.Atoi(indexStr)
+	if err != nil {
+		return math.MaxInt32
+	}
+	return index
 }

@@ -23,6 +23,8 @@ import (
 	"os"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/errors"
+
 	globalutils "github.com/alibaba/hybridnet/pkg/utils"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -99,6 +101,17 @@ func main() {
 	})
 	if err != nil {
 		entryLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	var preStartHooks []func() error
+	preStartHooks = append(preStartHooks, func() error {
+		// TODO: this conversion will be removed in next major version
+		return networkingv1.CanonicalizeIPInstance(mgr)
+	})
+
+	if err = errors.AggregateGoroutines(preStartHooks...); err != nil {
+		entryLog.Error(err, "unable to run start hooks")
 		os.Exit(1)
 	}
 
