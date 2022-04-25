@@ -203,8 +203,10 @@ func (c *Controller) reconcileIPInfo() error {
 		}
 	}
 
-	if err := c.addrV4Manager.SyncAddresses(c.getIPInstanceByAddress); err != nil {
-		return fmt.Errorf("sync ipv4 addresses failed: %v", err)
+	if c.config.EnableVlanArpEnhancement {
+		if err := c.addrV4Manager.SyncAddresses(c.getIPInstanceByAddress); err != nil {
+			return fmt.Errorf("sync ipv4 addresses failed: %v", err)
+		}
 	}
 
 	return nil
