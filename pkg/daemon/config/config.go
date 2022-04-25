@@ -93,6 +93,8 @@ type Configuration struct {
 	NeighGCThresh1 int
 	NeighGCThresh2 int
 	NeighGCThresh3 int
+
+	EnableVlanArpEnhancement bool
 }
 
 // ParseFlags will parse cmd args then init kubeClient and configuration
@@ -119,6 +121,7 @@ func ParseFlags() (*Configuration, error) {
 		argNeighGCThresh2                       = pflag.Int("neigh-gc-thresh2", DefaultNeighGCThresh2, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh2")
 		argNeighGCThresh3                       = pflag.Int("neigh-gc-thresh3", DefaultNeighGCThresh3, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh3")
 		argExtraNodeLocalVxlanIPCidrs           = pflag.String("extra-node-local-vxlan-ip-cidrs", "", "The cidr list to select node extra local vxlan ip, e.g., \"192.168.10.0/24,10.2.3.0/24\"")
+		argEnableVlanArpEnhancement             = pflag.Bool("enable-vlan-arp-enhancement", false, "Whether enable arp source enhancement in a vlan environment")
 	)
 
 	// mute info log for ipset lib
@@ -152,6 +155,7 @@ func ParseFlags() (*Configuration, error) {
 		NeighGCThresh2:                       *argNeighGCThresh2,
 		NeighGCThresh3:                       *argNeighGCThresh3,
 		VxlanExpiredNeighCachesClearInterval: *argVxlanExpiredNeighCachesClearInterval,
+		EnableVlanArpEnhancement:             *argEnableVlanArpEnhancement,
 	}
 
 	if *argPreferVlanInterfaces == "" {

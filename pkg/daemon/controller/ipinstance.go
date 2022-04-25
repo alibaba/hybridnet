@@ -193,8 +193,10 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 		}
 	}
 
-	if err := r.ctrlHubRef.addrV4Manager.SyncAddresses(r.ctrlHubRef.getIPInstanceByAddress); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv4 addresses: %v", err)
+	if r.ctrlHubRef.config.EnableVlanArpEnhancement {
+		if err := r.ctrlHubRef.addrV4Manager.SyncAddresses(r.ctrlHubRef.getIPInstanceByAddress); err != nil {
+			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv4 addresses: %v", err)
+		}
 	}
 
 	if err := r.ctrlHubRef.bgpManager.SyncIPInfos(); err != nil {
