@@ -23,6 +23,8 @@ import (
 	"net/http"
 	"time"
 
+	"k8s.io/client-go/util/retry"
+
 	"github.com/alibaba/hybridnet/pkg/daemon/utils"
 
 	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
@@ -248,16 +250,13 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 
 	// update IPInstance crd status
 	for _, ip := range affectedIPInstances {
-		newIPInstance := ip.DeepCopy()
-		if newIPInstance == nil {
-			errMsg := fmt.Errorf("failed to deepCopy IPInstance crd, no available for %s, %v", podRequest.PodName, err)
-			cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
-			return
-		}
-
-		newIPInstance.Status.SandboxID = podRequest.ContainerID
-		if err = cdh.mgrClient.Status().Update(context.TODO(), newIPInstance); err != nil {
-			errMsg := fmt.Errorf("failed to update IPInstance crd for %s, %v", newIPInstance.Name, err)
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			return cdh.mgrClient.Status().Patch(context.TODO(), ip,
+				client.RawPatch(types.MergePatchType,
+					[]byte(fmt.Sprintf(`{"status":{"sandboxID":%q}}`,
+						podRequest.ContainerID))))
+		}); err != nil {
+			errMsg := fmt.Errorf("failed to update IPInstance crd for %s, %v", ip.Name, err)
 			cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
 			return
 		}
