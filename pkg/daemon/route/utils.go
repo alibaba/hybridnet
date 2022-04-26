@@ -184,8 +184,10 @@ func checkIsFromPodSubnetRule(rule netlink.Rule, family int) (bool, error) {
 			return false, fmt.Errorf("failed to get link for route %v: %v", route.String(), err)
 		}
 
-		// underlay subnet route table found
-		if route.Dst == nil && len(routes) == 2 {
+		// Underlay subnet route table found.
+		// For a vlan route table, only one default route and one subnet route will exist.
+		// For a bgp route table, only one default route will exist.
+		if route.Dst == nil && len(routes) == 2 || len(routes) == 1 {
 			return true, nil
 		}
 
