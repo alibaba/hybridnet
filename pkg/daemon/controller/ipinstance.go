@@ -152,7 +152,10 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 			}
 
 			if ipInstance.Spec.Address.Version == networkingv1.IPv4 {
-				r.ctrlHubRef.addrV4Manager.TryAddPodInfo(forwardNodeIfName, subnetCidr, podIP)
+				// if vlan arp enhancement is not enabled, all the enhanced address will be cleaned
+				if r.ctrlHubRef.config.EnableVlanArpEnhancement {
+					r.ctrlHubRef.addrV4Manager.TryAddPodInfo(forwardNodeIfName, subnetCidr, podIP)
+				}
 			}
 		case networkingv1.NetworkModeVxlan:
 			forwardNodeIfName, err = daemonutils.GenerateVxlanNetIfName(r.ctrlHubRef.config.NodeVxlanIfName, netID)
@@ -193,10 +196,8 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 		}
 	}
 
-	if r.ctrlHubRef.config.EnableVlanArpEnhancement {
-		if err := r.ctrlHubRef.addrV4Manager.SyncAddresses(r.ctrlHubRef.getIPInstanceByAddress); err != nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv4 addresses: %v", err)
-		}
+	if err := r.ctrlHubRef.addrV4Manager.SyncAddresses(r.ctrlHubRef.getIPInstanceByAddress); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync ipv4 addresses: %v", err)
 	}
 
 	if err := r.ctrlHubRef.bgpManager.SyncIPInfos(); err != nil {
