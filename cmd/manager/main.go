@@ -104,16 +104,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// pre-start hooks registration
 	var preStartHooks []func() error
 	preStartHooks = append(preStartHooks, func() error {
 		// TODO: this conversion will be removed in next major version
-		return networkingv1.CanonicalizeIPInstance(mgr)
+		return networkingv1.CanonicalizeIPInstance(mgr.GetClient())
 	})
-
-	if err = errors.AggregateGoroutines(preStartHooks...); err != nil {
-		entryLog.Error(err, "unable to run start hooks")
-		os.Exit(1)
-	}
 
 	// indexers need to be injected be for informer is running
 	if err = initIndexers(mgr); err != nil {
@@ -128,15 +124,24 @@ func main() {
 		}
 	}()
 
+	// wait for manager cache client ready
 	mgr.GetCache().WaitForCacheSync(signalContext)
+
+	// run pre-start hooks
+	if err = errors.AggregateGoroutines(preStartHooks...); err != nil {
+		entryLog.Error(err, "unable to run start hooks")
+		os.Exit(1)
+	}
+
+	// init IPAM manager and stort
 	ipamManager, err := networking.NewIPAMManager(mgr.GetClient())
 	if err != nil {
 		entryLog.Error(err, "unable to create IPAM manager")
 		os.Exit(1)
 	}
-
 	ipamStore := networking.NewIPAMStore(mgr.GetClient())
 
+	// setup controllers
 	if err = (&networking.IPAMReconciler{
 		Client:                mgr.GetClient(),
 		Refresh:               ipamManager,

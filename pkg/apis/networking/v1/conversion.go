@@ -22,8 +22,9 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/cluster"
 
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
@@ -42,15 +43,7 @@ func parseIPInstanceVersion(ipInstance *IPInstance) string {
 	return ipInstance.Labels[constants.LabelVersion]
 }
 
-func CanonicalizeIPInstance(cluster cluster.Cluster) (err error) {
-	var c client.Client
-	if c, err = client.New(cluster.GetConfig(), client.Options{
-		Scheme: cluster.GetScheme(),
-		Mapper: cluster.GetRESTMapper(),
-	}); err != nil {
-		return err
-	}
-
+func CanonicalizeIPInstance(c client.Client) (err error) {
 	getPodUID := func(namespace, name string) (types.UID, error) {
 		pod := &corev1.Pod{}
 		if err := c.Get(context.TODO(),
@@ -72,18 +65,26 @@ func CanonicalizeIPInstance(cluster cluster.Cluster) (err error) {
 		return err
 	}
 
+	var patchFuncs []func() error
 	for i := range ipInstanceList.Items {
 		var ipInstance = &ipInstanceList.Items[i]
 		if parseIPInstanceVersion(ipInstance) == IPInstanceLatestVersion {
 			continue
 		}
 
+		ipInstancePatch := client.MergeFrom(ipInstance.DeepCopy())
 		if err = convertIPInstanceToLatestVersion(ipInstance, getPodUID); err != nil {
 			return fmt.Errorf("unable to convert IPInstance to latest version: %v", err)
 		}
+
+		patchFuncs = append(patchFuncs, func() error {
+			return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				return c.Patch(context.TODO(), ipInstance, ipInstancePatch)
+			})
+		})
 	}
 
-	return nil
+	return errors.AggregateGoroutines(patchFuncs...)
 }
 
 func convertIPInstanceToLatestVersion(ipIns *IPInstance, getPodUID func(namespace, name string) (types.UID, error)) error {
