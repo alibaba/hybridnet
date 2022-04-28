@@ -26,10 +26,10 @@ code-gen:
 	cd hack && chmod u+x ./update-codegen.sh && ./update-codegen.sh
 
 crd-yamls: controller-gen ## Generate CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=hybridnet webhook paths="./..." output:crd:artifacts:config=${CRD_YAML_DIR} && rm -rf ./config
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=hybridnet webhook paths="./pkg/apis/..." output:crd:artifacts:config=${CRD_YAML_DIR} && rm -rf ./config
 
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./pkg/apis/..."
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.

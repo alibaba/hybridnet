@@ -89,7 +89,7 @@ type Address struct {
 	IP string `json:"ip"`
 	// +kubebuilder:validation:Optional
 	Gateway string `json:"gateway,omitempty"`
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	NetID *int32 `json:"netID"`
 	// +kubebuilder:validation:Required
 	MAC string `json:"mac"`

@@ -21,8 +21,12 @@ import (
 	"math"
 	"math/big"
 	"net"
+	"strconv"
+	"strings"
 
 	"github.com/containernetworking/plugins/pkg/ip"
+
+	"github.com/alibaba/hybridnet/pkg/constants"
 )
 
 // TODO: unit tests
@@ -237,4 +241,73 @@ func ipToInt(ip net.IP) *big.Int {
 
 func intToIP(i *big.Int) net.IP {
 	return net.IP(i.Bytes())
+}
+
+// IsLegacyModel will show whether IPInstance has switched to new version
+// TODO: legacy mode, to be removed in the next major version
+func IsLegacyModel(ipInstance *IPInstance) bool {
+	return len(ipInstance.Spec.Binding.BindingMeta.Kind) == 0
+}
+
+func IsReserved(ipInstance *IPInstance) bool {
+	if IsLegacyModel(ipInstance) {
+		if ipInstance.Status.Phase == IPPhaseReserved {
+			return true
+		}
+		return len(ipInstance.Labels[constants.LabelNode]) == 0
+	}
+
+	return len(ipInstance.Spec.Binding.NodeName) == 0
+}
+
+func FetchBindingPodName(ipInstance *IPInstance) string {
+	if IsLegacyModel(ipInstance) {
+		if len(ipInstance.Status.PodName) > 0 {
+			return ipInstance.Status.PodName
+		}
+		return ipInstance.Labels[constants.LabelPod]
+	}
+
+	if ipInstance.Spec.Binding.Kind == "Pod" {
+		return ipInstance.Spec.Binding.Name
+	}
+	// TODO: construct pod name with stateful info?
+	return ipInstance.Labels[constants.LabelPod]
+}
+
+func FetchBindingNodeName(ipInstance *IPInstance) string {
+	if IsLegacyModel(ipInstance) {
+		if len(ipInstance.Status.NodeName) > 0 {
+			return ipInstance.Status.NodeName
+		}
+		return ipInstance.Labels[constants.LabelNode]
+	}
+
+	if len(ipInstance.Spec.Binding.NodeName) > 0 {
+		return ipInstance.Spec.Binding.NodeName
+	}
+	return ipInstance.Labels[constants.LabelNode]
+}
+
+func IsValidIPInstance(ipInstance *IPInstance) bool {
+	if ipInstance == nil {
+		return false
+	}
+
+	if IsLegacyModel(ipInstance) {
+		return len(ipInstance.Status.Phase) > 0
+	}
+
+	return len(ipInstance.Spec.Binding.Kind) > 0
+}
+
+func GetIndexFromName(name string) int {
+	nameSlice := strings.Split(name, "-")
+	indexStr := nameSlice[len(nameSlice)-1]
+
+	index, err := strconv.Atoi(indexStr)
+	if err != nil {
+		return math.MaxInt32
+	}
+	return index
 }

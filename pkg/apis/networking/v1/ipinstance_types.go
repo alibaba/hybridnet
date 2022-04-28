@@ -18,10 +18,8 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
-
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // IPInstanceSpec defines the desired state of IPInstance
 type IPInstanceSpec struct {
@@ -31,20 +29,56 @@ type IPInstanceSpec struct {
 	Subnet string `json:"subnet"`
 	// +kubebuilder:validation:Required
 	Address Address `json:"address"`
+	// +kubebuilder:validation:Optional
+	Binding Binding `json:"binding,omitempty"`
+}
+
+// Binding defines a binding object with necessary info of an IPInstance
+type Binding struct {
+	// +kubebuilder:validation:Optional
+	BindingMeta `json:",inline"`
+
+	// +kubebuilder:validation:Optional
+	NodeName string `json:"nodeName"`
+
+	// +kubebuilder:validation:Optional
+	PodUID types.UID `json:"podUID,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	Stateful *StatefulInfo `json:"stateful,omitempty"`
+}
+
+// BindingMeta is a short version of ObjectMeta which is pointing to an Object
+type BindingMeta struct {
+	// +kubebuilder:validation:Required
+	Kind string `json:"kind,omitempty"`
+	// +kubebuilder:validation:Required
+	Name string `json:"name,omitempty"`
+	// +kubebuilder:validation:Optional
+	Namespace string `json:"namespace,omitempty"`
+	// +kubebuilder:validation:Optional
+	UID types.UID `json:"uid,omitempty"`
+}
+
+// StatefulInfo is a collection of related info if binding to a stateful workload
+type StatefulInfo struct {
+	Index *int32 `json:"index,omitempty"`
 }
 
 // IPInstanceStatus defines the observed state of IPInstance
 type IPInstanceStatus struct {
 	// +kubebuilder:validation:Optional
-	NodeName string `json:"nodeName"`
+	NodeName string `json:"nodeName,omitempty"`
 	// +kubebuilder:validation:Optional
-	Phase IPPhase `json:"phase"`
+	Phase IPPhase `json:"phase,omitempty"`
 	// +kubebuilder:validation:Optional
-	PodName string `json:"podName"`
+	PodName string `json:"podName,omitempty"`
 	// +kubebuilder:validation:Optional
-	PodNamespace string `json:"podNamespace"`
+	PodNamespace string `json:"podNamespace,omitempty"`
 	// +kubebuilder:validation:Optional
-	SandboxID string `json:"sandboxID"`
+	SandboxID string `json:"sandboxID,omitempty"`
+	// +kubebuilder:validation:Optional
+	UpdateTimestamp metav1.Time `json:"updateTimestamp,omitempty"`
 }
 
 // +kubebuilder:object:root=true

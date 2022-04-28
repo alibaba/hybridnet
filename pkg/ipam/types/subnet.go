@@ -21,8 +21,9 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/alibaba/hybridnet/pkg/utils"
 	"github.com/containernetworking/plugins/pkg/ip"
+
+	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 var (
@@ -528,7 +529,7 @@ func (s *Subnet) AllocateNext(podName, podNamespace string) *IP {
 			Network:      s.ParentNetwork,
 			PodName:      podName,
 			PodNamespace: podNamespace,
-			Status:       IPStatusUsing,
+			Status:       IPStatusAllocated,
 		}
 
 		s.UsingIPs.Add(ipCandidate, availableIP)
@@ -565,12 +566,12 @@ func (s *Subnet) Assign(podName, podNamespace, ip string, forced bool) (*IP, err
 			Network:      s.ParentNetwork,
 			PodName:      podName,
 			PodNamespace: podNamespace,
-			Status:       IPStatusUsing,
+			Status:       IPStatusAllocated,
 		})
 	case s.UsingIPs.Get(ip).PodNamespace == podNamespace && s.UsingIPs.Get(ip).PodName == podName:
-		s.UsingIPs.Update(ip, podName, podNamespace, IPStatusUsing)
+		s.UsingIPs.Update(ip, podName, podNamespace, IPStatusAllocated)
 	case forced && s.UsingIPs.Get(ip).Status == IPStatusReserved:
-		s.UsingIPs.Update(ip, podName, podNamespace, IPStatusUsing)
+		s.UsingIPs.Update(ip, podName, podNamespace, IPStatusAllocated)
 	default:
 		return nil, ErrNotAvailableAssignedIP
 	}

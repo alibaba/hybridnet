@@ -123,10 +123,13 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	}
 
 	ipInstanceList := &networkingv1.IPInstanceList{}
-	if err := cdh.mgrClient.List(context.TODO(), ipInstanceList, client.MatchingLabels{
-		constants.LabelNode: cdh.config.NodeName,
-		constants.LabelPod:  podRequest.PodName,
-	}); err != nil {
+	if err := cdh.mgrClient.List(context.TODO(), ipInstanceList,
+		client.MatchingLabels{
+			constants.LabelNode: cdh.config.NodeName,
+			constants.LabelPod:  podRequest.PodName,
+		},
+		client.InNamespace(podRequest.PodNamespace),
+	); err != nil {
 		errMsg := fmt.Errorf("failed to list ip instance for pod %v: %v", cdh.config.NodeName, err)
 		cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
 		return
@@ -135,7 +138,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	var networkName string
 	for _, ipInstance := range ipInstanceList.Items {
 		// IPv4 and IPv6 ip will exist at the same time
-		if ipInstance.Status.PodName == podRequest.PodName && ipInstance.Status.PodNamespace == podRequest.PodNamespace {
+		if networkingv1.FetchBindingPodName(&ipInstance) == podRequest.PodName {
 
 			if netID == nil && macAddr == "" {
 				netID = ipInstance.Spec.Address.NetID
