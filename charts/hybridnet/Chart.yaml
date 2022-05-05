@@ -2,8 +2,8 @@ apiVersion: v2
 name: hybridnet
 # When the version is modified, make sure the artifacthub.io/changes list is updated
 # Also update CHANGELOG.md
-version: 0.2.0
-appVersion: 0.4.2
+version: 0.2.1
+appVersion: 0.4.3
 home: https://github.com/alibaba/hybridnet
 description: A container networking solution aiming at hybrid clouds.
 keywords:
@@ -22,9 +22,14 @@ annotations:
   artifacthub.io/prerelease: "false"
   # List of changes for the release in artifacthub.io
   artifacthub.io/changes: |
-    - "adjust names of some fields"
-    - "make the pod creating validation of webhook configurable, to avoid block the creation of other components"
-    - "make the init Subnet/Network be created only once while install the helm chart"
-    - "add enableNetworkPolicy variable for daemon"
-    - "add replicas parameter for manager and webhook pods"
-    - "remove badges in README"
+    - "introduce flag enable-vlan-arp-enhancement for daemon to enable/disable enhanced addresses"
+    - "introduce DEFAULT_IP_FAMILY environment variable on dual-stack mode"
+    - "skip webhook validation on host-networking pods"
+    - "introduce vtep-address-cidrs flag for daemon to help select vtep address"
+    - "fix daemon policy container init error on ipv6-only node"
+    - "node annotation changed should trigger the reconcile of daemon Node controller"
+    - "fix "to overlay subnet route table 40000 is used by others" error of daemon. It happens if an ipv6 subnet with excluded ip ranges is created"
+    - "fix daemon update dual-stack IPInstance status error"
+    - "fix the error that arp enhanced addresses will be taken as source IP address by mistake"
+    - "fix the error that deprecated bgp rules and routes are not cleaned"
+    - "fix chart's type error"

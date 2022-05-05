@@ -34,11 +34,13 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - /hybridnet/hybridnet-manager
-            - --default-ip-retain={{ .Values.defualtIPRetain }}
+            - --default-ip-retain={{ .Values.defaultIPRetain }}
             - --feature-gates=MultiCluster={{ .Values.multiCluster }},DualStack={{ .Values.dualStack }}
           env:
             - name: DEFAULT_NETWORK_TYPE
-              value: {{ .Values.defualtNetworkType }}
+              value: {{ .Values.defaultNetworkType }}
+            - name: DEFAULT_IP_FAMILY
+              value: {{ .Values.defaultIPFamily }}
             - name: NAMESPACE
               valueFrom:
                 fieldRef:
@@ -79,13 +81,15 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - /hybridnet/hybridnet-webhook
-            - --default-ip-retain={{ .Values.defualtIPRetain }}
+            - --default-ip-retain={{ .Values.defaultIPRetain }}
             - --feature-gates=MultiCluster={{ .Values.multiCluster }},DualStack={{ .Values.dualStack }}
           args:
             - --port=9898
           env:
             - name: DEFAULT_NETWORK_TYPE
-              value: {{ .Values.defualtNetworkType }}
+              value: {{ .Values.defaultNetworkType }}
+            - name: DEFAULT_IP_FAMILY
+              value: {{ .Values.defaultIPFamily }}
           ports:
             - containerPort: 9898
               name: webhook-port

@@ -1,7 +1,7 @@
 images:
   hybridnet:
     image: hybridnetdev/hybridnet
-    tag: v0.4.2
+    tag: v0.4.3
   registryURL: "docker.io"
 
 # -- It's always encouraged to use an overlay network to finish some general jobs in hybridnet. This
@@ -44,16 +44,31 @@ daemon:
   preferVlanInterfaces: ""
   preferBGPInterfaces: ""
 
+  # -- Hybridnet use policy routes to implement a L2 Vlan/Bridged network. To make the traffic closed to real
+  # Vlan/Bridged traffic, hybridnet will append some addresses on the node forward interface for arp tricks.
+  # This flag controls if daemon pods will append the "enhanced" addresses.
+  enableVlanARPEnhancement: true
+
+  # -- The CIDRs to select VTEP address on each node, using commons as separator.
+
+  ## If it is empty, daemon on each node will take one of the valid address of the vxlan interface's parent
+  ## (try ipv4 addresses first and then ipv6 addresses if no valid ipv4 address exists) as node's VTEP address
+  ## randomly. If is is not empty, the first result matches any of the CIDRs will be chose as VTEP address.
+  vtepAddressCIDRs: "0.0.0.0/0,::/0"
+
 # -- Whether pod IP of stateful workloads will be retained by default. true or false
 ## Ref: https://github.com/alibaba/hybridnet/wiki/Static-pod-ip-addresses-for-StatefulSet
-defualtIPRetain: true
+defaultIPRetain: true
 
 # -- The default value when pod's network type is unspecified. Overlay or Underlay
 ## Ref: https://github.com/alibaba/hybridnet/wiki/Change-default-network-type
-defualtNetworkType: Overlay
+defaultNetworkType: Overlay
 
 # -- Enable the MultiCluster feature. true or false
 multiCluster: false
 
 # -- Enable the DualStack feature. IPv6 is disabled when is dualStack is not enable. true or false
 dualStack: false
+
+# -- The default value when pod's ip family is unspecified. IPv4 or IPv6 or DualStack
+defaultIPFamily: IPv4
