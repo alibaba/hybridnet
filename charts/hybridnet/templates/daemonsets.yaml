@@ -50,6 +50,10 @@ spec:
             {{ if ne .Values.daemon.preferBGPInterfaces "" }}
             - --prefer-bgp-interfaces={{ .Values.daemon.preferBGPInterfaces }}
             {{ end }}
+            {{ if ne .Values.daemon.vtepAddressCIDRs "" }}
+            - --vtep-address-cidrs={{ .Values.daemon.vtepAddressCIDRs }}
+            {{ end }}
+            - --enable-vlan-arp-enhancement={{ .Values.daemon.enableVlanARPEnhancement }}
             - --feature-gates=MultiCluster={{ .Values.multiCluster }},DualStack={{ .Values.dualStack }}
           securityContext:
             runAsUser: 0
