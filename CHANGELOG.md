@@ -105,3 +105,22 @@ All notable changes to this project will be documented in this file.
 ## v0.4.2
 ### Fixed Issues
 - Fix creating ip-retained sts pod error when it is recreated and rescheduled to another node
+
+## v0.3.3
+### Fixed Issues
+- Introduce flag `enable-vlan-arp-enhancement` to disable setting enhanced addresses by default
+
+## v0.4.3
+### Improvements
+- Introduce flag `enable-vlan-arp-enhancement` for daemon to enable/disable enhanced addresses
+- Introduce `DEFAULT_IP_FAMILY` environment variable on dual-stack mode
+- Skip webhook validation on host-networking pods
+- Introduce `vtep-address-cidrs` flag for daemon to help select vtep address
+
+### Fixed Issues
+- Fix daemon policy container init error on ipv6-only node
+- Node annotation changed should trigger the reconcile of daemon Node controller
+- Fix "to overlay subnet route table 40000 is used by others" error of daemon. It happens if an ipv6 subnet with excluded ip ranges is created
+- Fix daemon update dual-stack IPInstance status error
+- Fix the error that arp enhanced addresses will be taken as source IP address by mistake
+- Fix the error that deprecated bgp rules and routes are not cleaned
