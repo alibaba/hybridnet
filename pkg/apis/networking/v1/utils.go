@@ -251,10 +251,7 @@ func IsLegacyModel(ipInstance *IPInstance) bool {
 
 func IsReserved(ipInstance *IPInstance) bool {
 	if IsLegacyModel(ipInstance) {
-		if ipInstance.Status.Phase == IPPhaseReserved {
-			return true
-		}
-		return len(ipInstance.Labels[constants.LabelNode]) == 0
+		return ipInstance.Status.Phase == IPPhaseReserved || len(ipInstance.Labels[constants.LabelNode]) == 0
 	}
 
 	return len(ipInstance.Spec.Binding.NodeName) == 0
@@ -262,31 +259,18 @@ func IsReserved(ipInstance *IPInstance) bool {
 
 func FetchBindingPodName(ipInstance *IPInstance) string {
 	if IsLegacyModel(ipInstance) {
-		if len(ipInstance.Status.PodName) > 0 {
-			return ipInstance.Status.PodName
-		}
 		return ipInstance.Labels[constants.LabelPod]
 	}
 
-	if ipInstance.Spec.Binding.ReferredObject.Kind == "Pod" {
-		return ipInstance.Spec.Binding.ReferredObject.Name
-	}
-	// TODO: construct pod name with stateful info?
-	return ipInstance.Labels[constants.LabelPod]
+	return ipInstance.Spec.Binding.PodName
 }
 
 func FetchBindingNodeName(ipInstance *IPInstance) string {
 	if IsLegacyModel(ipInstance) {
-		if len(ipInstance.Status.NodeName) > 0 {
-			return ipInstance.Status.NodeName
-		}
 		return ipInstance.Labels[constants.LabelNode]
 	}
 
-	if len(ipInstance.Spec.Binding.NodeName) > 0 {
-		return ipInstance.Spec.Binding.NodeName
-	}
-	return ipInstance.Labels[constants.LabelNode]
+	return ipInstance.Spec.Binding.NodeName
 }
 
 func IsValidIPInstance(ipInstance *IPInstance) bool {
