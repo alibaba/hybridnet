@@ -97,19 +97,23 @@ func convertIPInstanceToLatestVersion(ipIns *IPInstance, getPodUID func(namespac
 		IsReserved(ipIns)
 
 	ipIns.Spec.Binding = Binding{
-		BindingMeta: BindingMeta{
+		ReferredObject: ObjectMeta{
 			Kind: owner.Kind,
 			Name: owner.Name,
 			UID:  owner.UID,
 		},
 	}
 
+	var bindingPodName = FetchBindingPodName(ipIns)
+	ipIns.Labels[constants.LabelPod] = bindingPodName
+	ipIns.Spec.Binding.PodName = bindingPodName
+
 	if isReserved {
 		delete(ipIns.Labels, constants.LabelNode)
 		delete(ipIns.Labels, constants.LabelPodUID)
 	} else {
 		// get podUID and nodeName for allocated IPInstance
-		podUID, err := getPodUID(ipIns.Namespace, FetchBindingPodName(ipIns))
+		podUID, err := getPodUID(ipIns.Namespace, bindingPodName)
 		if err != nil {
 			return fmt.Errorf("unable to get pod uid: %v", err)
 		}

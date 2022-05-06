@@ -246,7 +246,7 @@ func intToIP(i *big.Int) net.IP {
 // IsLegacyModel will show whether IPInstance has switched to new version
 // TODO: legacy mode, to be removed in the next major version
 func IsLegacyModel(ipInstance *IPInstance) bool {
-	return len(ipInstance.Spec.Binding.BindingMeta.Kind) == 0
+	return len(ipInstance.Spec.Binding.ReferredObject.Kind) == 0
 }
 
 func IsReserved(ipInstance *IPInstance) bool {
@@ -268,8 +268,8 @@ func FetchBindingPodName(ipInstance *IPInstance) string {
 		return ipInstance.Labels[constants.LabelPod]
 	}
 
-	if ipInstance.Spec.Binding.Kind == "Pod" {
-		return ipInstance.Spec.Binding.Name
+	if ipInstance.Spec.Binding.ReferredObject.Kind == "Pod" {
+		return ipInstance.Spec.Binding.ReferredObject.Name
 	}
 	// TODO: construct pod name with stateful info?
 	return ipInstance.Labels[constants.LabelPod]
@@ -298,7 +298,7 @@ func IsValidIPInstance(ipInstance *IPInstance) bool {
 		return len(ipInstance.Status.Phase) > 0
 	}
 
-	return len(ipInstance.Spec.Binding.Kind) > 0
+	return len(ipInstance.Spec.Binding.ReferredObject.Kind) > 0
 }
 
 func GetIndexFromName(name string) int {

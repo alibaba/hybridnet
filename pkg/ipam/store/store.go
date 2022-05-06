@@ -211,13 +211,14 @@ func fillIPInstance(ipIns *networkingv1.IPInstance, ip *ipamtypes.IP, pod *corev
 	}
 
 	ipIns.Spec.Binding = networkingv1.Binding{
-		BindingMeta: networkingv1.BindingMeta{
+		ReferredObject: networkingv1.ObjectMeta{
 			Kind: owner.Kind,
 			Name: owner.Name,
 			UID:  owner.UID,
 		},
 		NodeName: pod.Spec.NodeName,
 		PodUID:   pod.UID,
+		PodName:  pod.Name,
 	}
 
 	if strategy.OwnByStatefulWorkload(pod) {

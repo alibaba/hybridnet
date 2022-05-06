@@ -36,7 +36,7 @@ type IPInstanceSpec struct {
 // Binding defines a binding object with necessary info of an IPInstance
 type Binding struct {
 	// +kubebuilder:validation:Optional
-	BindingMeta `json:",inline"`
+	ReferredObject ObjectMeta `json:"referredObject,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	NodeName string `json:"nodeName"`
@@ -45,11 +45,14 @@ type Binding struct {
 	PodUID types.UID `json:"podUID,omitempty"`
 
 	// +kubebuilder:validation:Optional
+	PodName string `json:"podName,omitempty"`
+
+	// +kubebuilder:validation:Optional
 	Stateful *StatefulInfo `json:"stateful,omitempty"`
 }
 
-// BindingMeta is a short version of ObjectMeta which is pointing to an Object
-type BindingMeta struct {
+// ObjectMeta is a short version of ObjectMeta which is pointing to an Object
+type ObjectMeta struct {
 	// +kubebuilder:validation:Required
 	Kind string `json:"kind,omitempty"`
 	// +kubebuilder:validation:Required

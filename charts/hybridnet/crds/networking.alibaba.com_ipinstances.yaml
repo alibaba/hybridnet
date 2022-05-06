@@ -77,14 +77,33 @@ spec:
                 description: Binding defines a binding object with necessary info
                   of an IPInstance
                 properties:
-                  kind:
-                    type: string
-                  name:
-                    type: string
-                  namespace:
-                    type: string
                   nodeName:
                     type: string
+                  podName:
+                    type: string
+                  podUID:
+                    description: UID is a type that holds unique ID values, including
+                      UUIDs.  Because we don't ONLY use UUIDs, this is an alias to
+                      string.  Being a type captures intent and helps make sure that
+                      UIDs and names do not get conflated.
+                    type: string
+                  referredObject:
+                    description: ObjectMeta is a short version of ObjectMeta which
+                      is pointing to an Object
+                    properties:
+                      kind:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                      uid:
+                        description: UID is a type that holds unique ID values, including
+                          UUIDs.  Because we don't ONLY use UUIDs, this is an alias
+                          to string.  Being a type captures intent and helps make
+                          sure that UIDs and names do not get conflated.
+                        type: string
+                    type: object
                   stateful:
                     description: StatefulInfo is a collection of related info if binding
                       to a stateful workload
@@ -93,12 +112,6 @@ spec:
                         format: int32
                         type: integer
                     type: object
-                  uid:
-                    description: UID is a type that holds unique ID values, including
-                      UUIDs.  Because we don't ONLY use UUIDs, this is an alias to
-                      string.  Being a type captures intent and helps make sure that
-                      UIDs and names do not get conflated.
-                    type: string
                 type: object
               network:
                 type: string
