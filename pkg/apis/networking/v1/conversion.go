@@ -92,9 +92,11 @@ func convertIPInstanceToLatestVersion(ipIns *IPInstance, getPodUID func(namespac
 		return fmt.Errorf("unexpected owner reference %v", ipIns.OwnerReferences)
 	}
 
-	isStateful, owner, isReserved := strategy.OwnByStatefulWorkload(ipIns),
+	isStateful, owner, isReserved, bindingPodName, bindingNodeName := strategy.OwnByStatefulWorkload(ipIns),
 		ipIns.OwnerReferences[0],
-		IsReserved(ipIns)
+		IsReserved(ipIns),
+		FetchBindingPodName(ipIns),
+		FetchBindingNodeName(ipIns)
 
 	ipIns.Spec.Binding = Binding{
 		ReferredObject: ObjectMeta{
@@ -104,7 +106,6 @@ func convertIPInstanceToLatestVersion(ipIns *IPInstance, getPodUID func(namespac
 		},
 	}
 
-	var bindingPodName = FetchBindingPodName(ipIns)
 	ipIns.Labels[constants.LabelPod] = bindingPodName
 	ipIns.Spec.Binding.PodName = bindingPodName
 
@@ -117,17 +118,16 @@ func convertIPInstanceToLatestVersion(ipIns *IPInstance, getPodUID func(namespac
 		if err != nil {
 			return fmt.Errorf("unable to get pod uid: %v", err)
 		}
-		nodeName := FetchBindingNodeName(ipIns)
 
-		ipIns.Labels[constants.LabelNode] = nodeName
+		ipIns.Labels[constants.LabelNode] = bindingNodeName
 		ipIns.Labels[constants.LabelPodUID] = string(podUID)
-		ipIns.Spec.Binding.NodeName = nodeName
+		ipIns.Spec.Binding.NodeName = bindingNodeName
 		ipIns.Spec.Binding.PodUID = podUID
 	}
 
 	if isStateful {
 		ipIns.Spec.Binding.Stateful = &StatefulInfo{
-			Index: intToInt32P(GetIndexFromName(FetchBindingPodName(ipIns))),
+			Index: intToInt32P(GetIndexFromName(bindingPodName)),
 		}
 	}
 
