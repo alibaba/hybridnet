@@ -51,14 +51,12 @@ type Binding struct {
 	Stateful *StatefulInfo `json:"stateful,omitempty"`
 }
 
-// ObjectMeta is a short version of ObjectMeta which is pointing to an Object
+// ObjectMeta is a short version of ObjectMeta which is pointing to an Object in specified namespace
 type ObjectMeta struct {
 	// +kubebuilder:validation:Required
 	Kind string `json:"kind,omitempty"`
 	// +kubebuilder:validation:Required
 	Name string `json:"name,omitempty"`
-	// +kubebuilder:validation:Optional
-	Namespace string `json:"namespace,omitempty"`
 	// +kubebuilder:validation:Optional
 	UID types.UID `json:"uid,omitempty"`
 }
