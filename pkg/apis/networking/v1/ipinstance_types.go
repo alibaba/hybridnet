@@ -72,6 +72,7 @@ type StatefulInfo struct {
 type IPInstanceStatus struct {
 	// +kubebuilder:validation:Optional
 	NodeName string `json:"nodeName,omitempty"`
+	// DEPRECATED. Planned to remove in v0.6
 	// +kubebuilder:validation:Optional
 	Phase IPPhase `json:"phase,omitempty"`
 	// +kubebuilder:validation:Optional

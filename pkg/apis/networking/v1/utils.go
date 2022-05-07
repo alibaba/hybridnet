@@ -251,7 +251,7 @@ func IsLegacyModel(ipInstance *IPInstance) bool {
 
 func IsReserved(ipInstance *IPInstance) bool {
 	if IsLegacyModel(ipInstance) {
-		return ipInstance.Status.Phase == IPPhaseReserved || len(ipInstance.Labels[constants.LabelNode]) == 0
+		return len(ipInstance.Status.NodeName) == 0
 	}
 
 	return len(ipInstance.Spec.Binding.NodeName) == 0

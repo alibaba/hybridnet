@@ -107,8 +107,3 @@ type BGPPeer struct {
 }
 
 type IPPhase string
-
-const (
-	IPPhaseUsing    = IPPhase("Using")
-	IPPhaseReserved = IPPhase("Reserved")
-)
