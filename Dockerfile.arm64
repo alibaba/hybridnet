@@ -74,9 +74,6 @@ RUN apk add --no-cache --allow-untrusted \
 	perl \
 	tar
 
-COPY dist/images/iptables-wrapper-installer.sh /
-RUN /iptables-wrapper-installer.sh --no-sanity-check
-
 ENV CNI_VERSION=v0.9.1
 RUN mkdir -p cni-plugins/ && \
     curl -SL https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-linux-arm64-${CNI_VERSION}.tgz \
@@ -91,6 +88,9 @@ RUN mkdir -p gobgp/ && \
 COPY dist/images/start-daemon.sh /hybridnet/start-daemon.sh
 COPY dist/images/install-cni.sh /hybridnet/install-cni.sh
 COPY dist/images/00-hybridnet.conflist /hybridnet/00-hybridnet.conflist
+
+COPY dist/images/iptables-wrapper-installer.sh /
+RUN /iptables-wrapper-installer.sh --no-sanity-check
 
 COPY --from=builder /go/src/github.com/alibaba/hybridnet/dist/images/hybridnet /hybridnet/hybridnet
 COPY --from=builder /go/src/github.com/alibaba/hybridnet/dist/images/hybridnet-daemon /hybridnet/hybridnet-daemon
