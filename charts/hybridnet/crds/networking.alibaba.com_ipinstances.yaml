@@ -89,13 +89,11 @@ spec:
                     type: string
                   referredObject:
                     description: ObjectMeta is a short version of ObjectMeta which
-                      is pointing to an Object
+                      is pointing to an Object in specified namespace
                     properties:
                       kind:
                         type: string
                       name:
-                        type: string
-                      namespace:
                         type: string
                       uid:
                         description: UID is a type that holds unique ID values, including
