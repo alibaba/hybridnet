@@ -3,6 +3,41 @@ entries:
   hybridnet:
   - annotations:
       artifacthub.io/changes: |
+        - "introduce flag for daemon to enable/disable enhanced addresses"
+        - "introduce environment variable on DualStack mode to specify defualt ip family"
+        - "skip webhook validation on hostnetwork pods"
+        - "introduce flag for daemon to help select vtep address"
+        - "fix daemon policy container init error on nodes with only ipv6 addresses"
+        - "node annotation changed should trigger the reconcile of daemon Node controller"
+        - "fix route table 40000 used by others error of daemon which happens if an ipv6 subnet with excluded ip ranges is created"
+        - "fix daemon updating IPInstance status error while a pod has multiple ip instances"
+        - "fix the error that arp enhanced addresses will be taken as source ip address by mistake"
+        - "fix the error that deprecated bgp rules and routes are not cleaned"
+        - "fix chart's typo error"
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: 0.4.3
+    created: "2022-05-09T03:09:39.115161065Z"
+    description: A container networking solution aiming at hybrid clouds.
+    digest: 57da10082f0b21a29c665c4f708e78204752c20d72152cf34ef820d0b59a7919
+    home: https://github.com/alibaba/hybridnet
+    keywords:
+    - network
+    - vlan
+    - bgp
+    - vxlan
+    - cni
+    - kubernetes
+    kubeVersion: '>=1.16.0-0'
+    name: hybridnet
+    sources:
+    - https://github.com/alibaba/hybridnet
+    type: application
+    urls:
+    - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.2.1/hybridnet-0.2.1.tgz
+    version: 0.2.1
+  - annotations:
+      artifacthub.io/changes: |
         - "adjust names of some fields"
         - "make the pod creating validation of webhook configurable, to avoid block the creation of other components"
         - "make the init Subnet/Network be created only once while install the helm chart"
@@ -83,4 +118,4 @@ entries:
     urls:
     - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.1.1/hybridnet-0.1.1.tgz
     version: 0.1.1
-generated: "2022-04-12T12:45:31.500280597Z"
+generated: "2022-05-09T03:09:39.115179165Z"
