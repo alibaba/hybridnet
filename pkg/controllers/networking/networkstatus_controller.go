@@ -134,7 +134,7 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// diff for no-op
 	if reflect.DeepEqual(&network.Status, networkStatus) {
-		log.V(10).Info("network status is up-to-date, skip updating")
+		log.V(1).Info("network status is up-to-date, skip updating")
 		return ctrl.Result{}, nil
 	}
 
@@ -152,7 +152,7 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, wrapError("unable to update network status", err)
 	}
 
-	log.V(8).Info(fmt.Sprintf("sync network status to %+v", networkStatus))
+	log.V(1).Info(fmt.Sprintf("sync network status to %+v", networkStatus))
 	return ctrl.Result{}, nil
 }
 
