@@ -74,8 +74,9 @@ func (w *Worker) DeCouple(pod *corev1.Pod) (err error) {
 
 	var deleteFuncs []func() error
 	for i := range ipInstanceList.Items {
+		var ipInstanceName = ipInstanceList.Items[i].Name
 		deleteFuncs = append(deleteFuncs, func() error {
-			return w.deleteIP(pod.Namespace, ipInstanceList.Items[i].Name)
+			return w.deleteIP(pod.Namespace, ipInstanceName)
 		})
 	}
 
