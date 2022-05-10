@@ -129,7 +129,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	}
 
 	if strategy.OwnByStatefulWorkload(pod) {
-		log.V(4).Info("strategic allocation for pod")
+		log.V(1).Info("strategic allocation for pod")
 		return ctrl.Result{}, wrapError("unable to stateful allocate", r.statefulAllocate(ctx, pod, networkName))
 	}
 

@@ -65,7 +65,7 @@ func (r *QuotaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (resu
 	}
 
 	if networkingv1.GetNetworkType(network) != networkingv1.NetworkTypeUnderlay {
-		log.V(10).Info("only underlay network need quota labels")
+		log.V(1).Info("only underlay network need quota labels")
 		return ctrl.Result{}, nil
 	}
 
@@ -106,7 +106,8 @@ func (r *QuotaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (resu
 		return ctrl.Result{}, wrapError("unable to update quota labels", err)
 	}
 
-	log.V(8).Info(fmt.Sprintf("sync node quota labels to %v", quotaLabels))
+	log.V(1).Info(fmt.Sprintf("sync nodes %v quota labels to %v",
+		network.Status.NodeList, quotaLabels))
 	return ctrl.Result{}, nil
 }
 

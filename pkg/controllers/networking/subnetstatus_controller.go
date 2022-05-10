@@ -99,7 +99,7 @@ func (r *SubnetStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// diff for no-op
 	if reflect.DeepEqual(&subnet.Status, subnetStatus) {
-		log.V(10).Info("subnet status is up-to-date, skip updating")
+		log.V(1).Info("subnet status is up-to-date, skip updating")
 		return ctrl.Result{}, nil
 	}
 
@@ -114,7 +114,7 @@ func (r *SubnetStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, wrapError("unable to update subnet status", err)
 	}
 
-	log.V(8).Info(fmt.Sprintf("sync subnet status to %+v", subnetStatus))
+	log.V(1).Info(fmt.Sprintf("sync subnet status to %+v", subnetStatus))
 	return ctrl.Result{}, nil
 }
 
