@@ -72,7 +72,7 @@ func CanonicalizeIPInstance(c client.Client) (err error) {
 			continue
 		}
 
-		ipInstancePatch := client.MergeFrom(ipInstance.DeepCopy())
+		var ipInstancePatch = client.MergeFrom(ipInstance.DeepCopy())
 		if err = convertIPInstanceToLatestVersion(ipInstance, getPodUID); err != nil {
 			return fmt.Errorf("unable to convert IPInstance to latest version: %v", err)
 		}
