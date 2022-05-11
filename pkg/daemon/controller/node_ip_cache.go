@@ -28,13 +28,13 @@ import (
 type NodeIPCache struct {
 	// ip string to node vtep mac
 	nodeIPMap map[string]net.HardwareAddr
-	mu        *sync.RWMutex
+	mu        sync.RWMutex
 }
 
 func NewNodeIPCache() *NodeIPCache {
 	return &NodeIPCache{
 		nodeIPMap: map[string]net.HardwareAddr{},
-		mu:        &sync.RWMutex{},
+		mu:        sync.RWMutex{},
 	}
 }
 

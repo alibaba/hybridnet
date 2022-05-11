@@ -24,7 +24,7 @@ import (
 )
 
 type DualStackAllocator struct {
-	*sync.RWMutex
+	sync.RWMutex
 
 	Networks types.NetworkSet
 
@@ -35,7 +35,7 @@ type DualStackAllocator struct {
 
 func NewDualStackAllocator(networks []string, nGetter NetworkGetter, sGetter SubnetGetter, iGetter IPSetGetter) (*DualStackAllocator, error) {
 	allocator := &DualStackAllocator{
-		RWMutex:       &sync.RWMutex{},
+		RWMutex:       sync.RWMutex{},
 		Networks:      types.NewNetworkSet(),
 		NetworkGetter: nGetter,
 		SubnetGetter:  sGetter,

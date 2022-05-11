@@ -52,7 +52,7 @@ type Manager struct {
 	subnetMap map[string]*net.IPNet
 	ipMap     map[string]net.IP
 
-	startMutex *sync.RWMutex
+	startMutex sync.RWMutex
 }
 
 func NewManager(peeringInterfaceName, grpcListenAddress string, logger logr.Logger) (*Manager, error) {
@@ -70,7 +70,7 @@ func NewManager(peeringInterfaceName, grpcListenAddress string, logger logr.Logg
 		subnetMap: map[string]*net.IPNet{},
 		ipMap:     map[string]net.IP{},
 
-		startMutex: &sync.RWMutex{},
+		startMutex: sync.RWMutex{},
 	}
 
 	peeringLink, err := netlink.LinkByName(peeringInterfaceName)
