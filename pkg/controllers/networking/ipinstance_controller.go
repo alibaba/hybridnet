@@ -38,6 +38,7 @@ type IPInstanceReconciler struct {
 	client.Client
 
 	// TODO: construct
+	PodIPCache  PodIPCache
 	IPAMManager IPAMManager
 	IPAMStore   IPAMStore
 
@@ -56,6 +57,13 @@ func (r *IPInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if !ip.DeletionTimestamp.IsZero() {
+		podName := networkingv1.FetchBindingPodName(&ip)
+		if len(podName) == 0 {
+			return ctrl.Result{}, wrapError("cannot release an IPInstance without pod label", err)
+		}
+
+		r.PodIPCache.Release(ip.Name, ip.Namespace)
+
 		if err = r.releaseIP(&ip); err != nil {
 			return ctrl.Result{}, wrapError("unable to release IPInstance", err)
 		}

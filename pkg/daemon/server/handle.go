@@ -23,6 +23,10 @@ import (
 	"net/http"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/util/retry"
 
 	"github.com/alibaba/hybridnet/pkg/daemon/utils"
@@ -30,8 +34,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
 
 	"github.com/go-logr/logr"
-
-	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -92,28 +94,35 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	}
 
 	var returnIPAddress []request.IPAddress
+	var ipInstanceList []*networkingv1.IPInstance
+
+	pod := &corev1.Pod{}
+	if err := cdh.mgrAPIReader.Get(context.TODO(), types.NamespacedName{
+		Name:      podRequest.PodName,
+		Namespace: podRequest.PodNamespace,
+	}, pod); err != nil {
+		errMsg := fmt.Errorf("failed to get pod %v/%v: %v", podRequest.PodName, podRequest.PodNamespace, err)
+		cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
+		return
+	}
 
 	backOffBase := 5 * time.Microsecond
 	retries := 11
+	ipFamily := ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
 
 	for i := 0; i < retries; i++ {
 		time.Sleep(backOffBase)
 		backOffBase = backOffBase * 2
 
-		pod := &corev1.Pod{}
-		if err := cdh.mgrAPIReader.Get(context.TODO(), types.NamespacedName{
-			Name:      podRequest.PodName,
-			Namespace: podRequest.PodNamespace,
-		}, pod); err != nil {
-			errMsg := fmt.Errorf("failed to get pod %v/%v: %v", podRequest.PodName, podRequest.PodNamespace, err)
+		if ipInstanceList, err = cdh.listAvailableIPInstanceOfPod(string(pod.GetUID()), podRequest.PodNamespace); err != nil {
+			errMsg := fmt.Errorf("failed to list ip instances for pod %v/%v: %v",
+				podRequest.PodName, podRequest.PodNamespace, err)
 			cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
 			return
 		}
 
-		// wait for ip instance to be coupled
-		annotation := pod.GetAnnotations()
-		_, exist := annotation[constants.AnnotationIP]
-		if exist {
+		if (len(ipInstanceList) == 1 && (ipFamily == ipamtypes.IPv4Only || ipFamily == ipamtypes.IPv6Only)) ||
+			(len(ipInstanceList) == 2 && ipFamily == ipamtypes.DualStack) {
 			break
 		} else if i == retries-1 {
 			errMsg := fmt.Errorf("failed to wait for pod %v/%v be coupled with ip: %v", podRequest.PodName, podRequest.PodNamespace, err)
@@ -122,99 +131,83 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 		}
 	}
 
-	ipInstanceList := &networkingv1.IPInstanceList{}
-	if err := cdh.mgrClient.List(context.TODO(), ipInstanceList,
-		client.MatchingLabels{
-			constants.LabelNode: cdh.config.NodeName,
-			constants.LabelPod:  podRequest.PodName,
-		},
-		client.InNamespace(podRequest.PodNamespace),
-	); err != nil {
-		errMsg := fmt.Errorf("failed to list ip instance for pod %v: %v", cdh.config.NodeName, err)
-		cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
-		return
-	}
-
 	var networkName string
-	for _, ipInstance := range ipInstanceList.Items {
+	for _, ipInstance := range ipInstanceList {
 		// IPv4 and IPv6 ip will exist at the same time
-		if networkingv1.FetchBindingPodName(&ipInstance) == podRequest.PodName {
+		if netID == nil && macAddr == "" {
+			netID = ipInstance.Spec.Address.NetID
+			macAddr = ipInstance.Spec.Address.MAC
+		} else if (netID != ipInstance.Spec.Address.NetID &&
+			(netID != nil && *netID != *ipInstance.Spec.Address.NetID)) ||
+			macAddr != ipInstance.Spec.Address.MAC {
 
-			if netID == nil && macAddr == "" {
-				netID = ipInstance.Spec.Address.NetID
-				macAddr = ipInstance.Spec.Address.MAC
-			} else if (netID != ipInstance.Spec.Address.NetID &&
-				(netID != nil && *netID != *ipInstance.Spec.Address.NetID)) ||
-				macAddr != ipInstance.Spec.Address.MAC {
-
-				errMsg := fmt.Errorf("mac and netId for all ip instances of pod %v/%v should be the same", podRequest.PodNamespace, podRequest.PodName)
-				cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
-				return
-			}
-
-			containerIP, cidrNet, err := net.ParseCIDR(ipInstance.Spec.Address.IP)
-			if err != nil {
-				errMsg := fmt.Errorf("failed to parse ip address %v to cidr: %v", ipInstance.Spec.Address.IP, err)
-				cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
-				return
-			}
-
-			gatewayIP := net.ParseIP(ipInstance.Spec.Address.Gateway)
-
-			ipVersion := networkingv1.IPv4
-			switch ipInstance.Spec.Address.Version {
-			case networkingv1.IPv4:
-				if allocatedIPs[networkingv1.IPv4] != nil {
-					errMsg := fmt.Errorf("only one ipv4 address for each pod are supported, %v/%v", podRequest.PodNamespace, podRequest.PodName)
-					cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
-					return
-				}
-
-				allocatedIPs[networkingv1.IPv4] = &utils.IPInfo{
-					Addr: containerIP,
-					Gw:   gatewayIP,
-					Cidr: cidrNet,
-				}
-			case networkingv1.IPv6:
-				if allocatedIPs[networkingv1.IPv6] != nil {
-					errMsg := fmt.Errorf("only one ipv6 address for each pod are supported, %v/%v", podRequest.PodNamespace, podRequest.PodName)
-					cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
-					return
-				}
-
-				allocatedIPs[networkingv1.IPv6] = &utils.IPInfo{
-					Addr: containerIP,
-					Gw:   gatewayIP,
-					Cidr: cidrNet,
-				}
-
-				ipVersion = networkingv1.IPv6
-			default:
-				errMsg := fmt.Errorf("unsupported ip version %v for pod %v/%v", ipInstance.Spec.Address.Version, podRequest.PodNamespace, podRequest.PodName)
-				cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
-				return
-			}
-
-			currentNetworkName := ipInstance.Spec.Network
-			if networkName == "" {
-				networkName = currentNetworkName
-			} else {
-				if networkName != currentNetworkName {
-					errMsg := fmt.Errorf("found different networks %v/%v for pod %v/%v", currentNetworkName, networkName, podRequest.PodNamespace, podRequest.PodName)
-					cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
-					return
-				}
-			}
-
-			returnIPAddress = append(returnIPAddress, request.IPAddress{
-				IP:       ipInstance.Spec.Address.IP,
-				Mac:      ipInstance.Spec.Address.MAC,
-				Gateway:  ipInstance.Spec.Address.Gateway,
-				Protocol: ipVersion,
-			})
-
-			affectedIPInstances = append(affectedIPInstances, &ipInstance)
+			errMsg := fmt.Errorf("mac and netId for all ip instances of pod %v/%v should be the same", podRequest.PodNamespace, podRequest.PodName)
+			cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
+			return
 		}
+
+		containerIP, cidrNet, err := net.ParseCIDR(ipInstance.Spec.Address.IP)
+		if err != nil {
+			errMsg := fmt.Errorf("failed to parse ip address %v to cidr: %v", ipInstance.Spec.Address.IP, err)
+			cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
+			return
+		}
+
+		gatewayIP := net.ParseIP(ipInstance.Spec.Address.Gateway)
+
+		ipVersion := networkingv1.IPv4
+		switch ipInstance.Spec.Address.Version {
+		case networkingv1.IPv4:
+			if allocatedIPs[networkingv1.IPv4] != nil {
+				errMsg := fmt.Errorf("only one ipv4 address for each pod are supported, %v/%v", podRequest.PodNamespace, podRequest.PodName)
+				cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
+				return
+			}
+
+			allocatedIPs[networkingv1.IPv4] = &utils.IPInfo{
+				Addr: containerIP,
+				Gw:   gatewayIP,
+				Cidr: cidrNet,
+			}
+		case networkingv1.IPv6:
+			if allocatedIPs[networkingv1.IPv6] != nil {
+				errMsg := fmt.Errorf("only one ipv6 address for each pod are supported, %v/%v", podRequest.PodNamespace, podRequest.PodName)
+				cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
+				return
+			}
+
+			allocatedIPs[networkingv1.IPv6] = &utils.IPInfo{
+				Addr: containerIP,
+				Gw:   gatewayIP,
+				Cidr: cidrNet,
+			}
+
+			ipVersion = networkingv1.IPv6
+		default:
+			errMsg := fmt.Errorf("unsupported ip version %v for pod %v/%v", ipInstance.Spec.Address.Version, podRequest.PodNamespace, podRequest.PodName)
+			cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
+			return
+		}
+
+		currentNetworkName := ipInstance.Spec.Network
+		if networkName == "" {
+			networkName = currentNetworkName
+		} else {
+			if networkName != currentNetworkName {
+				errMsg := fmt.Errorf("found different networks %v/%v for pod %v/%v", currentNetworkName, networkName, podRequest.PodNamespace, podRequest.PodName)
+				cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
+				return
+			}
+		}
+
+		returnIPAddress = append(returnIPAddress, request.IPAddress{
+			IP:       ipInstance.Spec.Address.IP,
+			Mac:      ipInstance.Spec.Address.MAC,
+			Gateway:  ipInstance.Spec.Address.Gateway,
+			Protocol: ipVersion,
+		})
+
+		affectedIPInstances = append(affectedIPInstances, ipInstance)
 	}
 
 	// check valid ip information second time
@@ -254,10 +247,16 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	// update IPInstance crd status
 	for _, ip := range affectedIPInstances {
 		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			var updateTimestamp string
+			updateTimestamp, err = metav1.Now().MarshalQueryParameter()
+			if err != nil {
+				return fmt.Errorf("failed to generate update timestamp: %v", err)
+			}
+
 			return cdh.mgrClient.Status().Patch(context.TODO(), ip,
 				client.RawPatch(types.MergePatchType,
-					[]byte(fmt.Sprintf(`{"status":{"sandboxID":%q}}`,
-						podRequest.ContainerID))))
+					[]byte(fmt.Sprintf(`{"status":{"sandboxID":%q,"nodeName":%q,"podNamespace":%q,"podName":%q,"phase":null,"updateTimestamp":%q}}`,
+						podRequest.ContainerID, cdh.config.NodeName, podRequest.PodNamespace, podRequest.PodName, updateTimestamp))))
 		}); err != nil {
 			errMsg := fmt.Errorf("failed to update IPInstance crd for %s, %v", ip.Name, err)
 			cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
@@ -310,18 +309,37 @@ func (cdh *cniDaemonHandler) errorWrapper(err error, status int, resp *restful.R
 	})
 }
 
+func (cdh *cniDaemonHandler) listAvailableIPInstanceOfPod(podUID, podNamespace string) ([]*networkingv1.IPInstance, error) {
+	ipInstanceList := &networkingv1.IPInstanceList{}
+	if err := cdh.mgrClient.List(context.TODO(), ipInstanceList, client.InNamespace(podNamespace), client.MatchingLabels{
+		constants.LabelNode:   cdh.config.NodeName,
+		constants.LabelPodUID: podUID,
+	}); err != nil {
+		return nil, err
+	}
+
+	var availableIPInstances []*networkingv1.IPInstance
+	for index := range ipInstanceList.Items {
+		if ipInstanceList.Items[index].DeletionTimestamp.IsZero() {
+			availableIPInstances = append(availableIPInstances, &ipInstanceList.Items[index])
+		}
+	}
+
+	return availableIPInstances, nil
+}
+
 func printAllocatedIPs(allocatedIPs map[networkingv1.IPVersion]*utils.IPInfo) string {
-	ipAddresseString := ""
+	ipAddressString := ""
 	if allocatedIPs[networkingv1.IPv4] != nil && allocatedIPs[networkingv1.IPv4].Addr != nil {
-		ipAddresseString = ipAddresseString + allocatedIPs[networkingv1.IPv4].Addr.String()
+		ipAddressString = ipAddressString + allocatedIPs[networkingv1.IPv4].Addr.String()
 	}
 
 	if allocatedIPs[networkingv1.IPv6] != nil && allocatedIPs[networkingv1.IPv6].Addr != nil {
-		if ipAddresseString != "" {
-			ipAddresseString = ipAddresseString + "/"
+		if ipAddressString != "" {
+			ipAddressString = ipAddressString + "/"
 		}
-		ipAddresseString = ipAddresseString + allocatedIPs[networkingv1.IPv6].Addr.String()
+		ipAddressString = ipAddressString + allocatedIPs[networkingv1.IPv6].Addr.String()
 	}
 
-	return ipAddresseString
+	return ipAddressString
 }
