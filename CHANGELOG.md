@@ -124,3 +124,8 @@ All notable changes to this project will be documented in this file.
 - Fix daemon update dual-stack IPInstance status error
 - Fix the error that arp enhanced addresses will be taken as source IP address by mistake
 - Fix the error that deprecated bgp rules and routes are not cleaned
+
+## v0.4.4
+### Fixed Issues
+- Fix the error that nodes get "empty" quota while the Underlay Network still have available addresses to allocate
+- Fix daemon policy container exit with ip6tables-legacy-save error
