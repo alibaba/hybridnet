@@ -24,7 +24,7 @@ import (
 )
 
 type Allocator struct {
-	*sync.RWMutex
+	sync.RWMutex
 
 	Networks types.NetworkSet
 
@@ -35,7 +35,7 @@ type Allocator struct {
 
 func NewAllocator(networks []string, nGetter NetworkGetter, sGetter SubnetGetter, iGetter IPSetGetter) (*Allocator, error) {
 	allocator := &Allocator{
-		RWMutex:       &sync.RWMutex{},
+		RWMutex:       sync.RWMutex{},
 		Networks:      types.NewNetworkSet(),
 		NetworkGetter: nGetter,
 		SubnetGetter:  sGetter,
