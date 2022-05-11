@@ -96,8 +96,9 @@ func (r *QuotaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (resu
 
 	var patchFuncs []func() error
 	for _, nodeName := range network.Status.NodeList {
+		nodeNameCopy := nodeName
 		patchFuncs = append(patchFuncs, func() error {
-			return r.patchNodeLabels(ctx, nodeName, quotaLabels)
+			return r.patchNodeLabels(ctx, nodeNameCopy, quotaLabels)
 		})
 	}
 
