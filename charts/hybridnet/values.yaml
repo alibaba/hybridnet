@@ -1,7 +1,7 @@
 images:
   hybridnet:
     image: hybridnetdev/hybridnet
-    tag: v0.4.3
+    tag: v0.4.4
   registryURL: "docker.io"
 
 # -- It's always encouraged to use an overlay network to finish some general jobs in hybridnet. This
