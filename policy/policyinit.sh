@@ -36,7 +36,7 @@ if [ -n "$DATASTORE_TYPE" ]; then
     export FELIX_DATASTORETYPE="$DATASTORE_TYPE"
 fi
 
-if [ "$(cat /sys/module/ipv6/parameters/disable)" -ne "0" ]; then
+if [ "$(cat /sys/module/ipv6/parameters/disable)" -ne "0" ] || [ "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6)" -ne "0" ] ; then
     export FELIX_IPV6SUPPORT=false
 fi
 
