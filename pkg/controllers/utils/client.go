@@ -45,6 +45,17 @@ func GetNetwork(client client.Reader, name string) (*networkingv1.Network, error
 	return &network, nil
 }
 
+func GetPod(client client.Reader, name, namespace string) (*corev1.Pod, error) {
+	var pod = corev1.Pod{}
+	if err := client.Get(context.TODO(), types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}, &pod); err != nil {
+		return nil, err
+	}
+	return &pod, nil
+}
+
 func ListSubnets(client client.Reader, opts ...client.ListOption) (*networkingv1.SubnetList, error) {
 	var subnetList = networkingv1.SubnetList{}
 	if err := client.List(context.TODO(), &subnetList, opts...); err != nil {
@@ -209,7 +220,7 @@ func ListAllocatedIPInstancesOfPod(c client.Reader, pod *corev1.Pod) (ips []*net
 	for i := range ipList.Items {
 		var ip = &ipList.Items[i]
 		// terminating ip should not be picked ip
-		if ip.Status.PodName == pod.Name && ip.DeletionTimestamp == nil {
+		if networkingv1.FetchBindingPodName(ip) == pod.Name && ip.DeletionTimestamp == nil {
 			ips = append(ips, ip.DeepCopy())
 		}
 	}
@@ -225,7 +236,7 @@ func GetIPOfPod(c client.Reader, pod *corev1.Pod) (string, error) {
 	for i := range ipList.Items {
 		var ip = &ipList.Items[i]
 		// terminating ip should not be picked ip
-		if ip.Status.PodName == pod.Name && ip.DeletionTimestamp == nil {
+		if networkingv1.FetchBindingPodName(ip) == pod.Name && ip.DeletionTimestamp == nil {
 			return ToIPFormat(ip.Name), nil
 		}
 	}
@@ -242,7 +253,7 @@ func ListIPsOfPod(c client.Reader, pod *corev1.Pod) ([]string, error) {
 	for i := range ipList.Items {
 		var ip = &ipList.Items[i]
 		// terminating ip should not be picked ip
-		if ip.Status.PodName == pod.Name && ip.DeletionTimestamp == nil {
+		if networkingv1.FetchBindingPodName(ip) == pod.Name && ip.DeletionTimestamp == nil {
 			ipStr, isIPv6 := ToIPFormatWithFamily(ip.Name)
 			if isIPv6 {
 				v6 = append(v6, ipStr)

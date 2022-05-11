@@ -17,7 +17,6 @@
 package constants
 
 const (
-	AnnotationIP       = "networking.alibaba.com/ip"
 	AnnotationIPPool   = "networking.alibaba.com/ip-pool"
 	AnnotationIPFamily = "networking.alibaba.com/ip-family"
 

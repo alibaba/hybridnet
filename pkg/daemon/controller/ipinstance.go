@@ -122,8 +122,8 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 	r.ctrlHubRef.bgpManager.ResetIPInfos()
 
 	for _, ipInstance := range ipInstanceList.Items {
-		// if this ip instance is not actually being used, ignore
-		if ipInstance.Status.Phase != networkingv1.IPPhaseUsing {
+		// skip reserved ip instance
+		if networkingv1.IsReserved(&ipInstance) {
 			continue
 		}
 

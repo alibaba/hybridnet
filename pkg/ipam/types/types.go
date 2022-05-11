@@ -19,8 +19,8 @@ package types
 import "net"
 
 const (
-	IPStatusUsing    = "Using"
-	IPStatusReserved = "Reserved"
+	IPStatusAllocated = "Allocated"
+	IPStatusReserved  = "Reserved"
 )
 
 type Network struct {

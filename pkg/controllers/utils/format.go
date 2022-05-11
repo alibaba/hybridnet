@@ -22,7 +22,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/alibaba/hybridnet/pkg/utils"
+
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
+)
+
+var (
+	ToDNSFormat = utils.ToDNSFormat
 )
 
 func ToIPFormat(name string) string {

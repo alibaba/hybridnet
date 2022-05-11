@@ -22,6 +22,8 @@ const (
 	LabelNetwork = "networking.alibaba.com/network"
 	LabelNode    = "networking.alibaba.com/node"
 	LabelPod     = "networking.alibaba.com/pod"
+	LabelPodUID  = "networking.alibaba.com/pod-uid"
+	LabelVersion = "networking.alibaba.com/version"
 
 	LabelSpecifiedNetwork = "networking.alibaba.com/specified-network"
 	LabelSpecifiedSubnet  = "networking.alibaba.com/specified-subnet"

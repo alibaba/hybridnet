@@ -65,9 +65,6 @@ type Store interface {
 	IPReserve(pod *v1.Pod) (err error)
 	IPRecycle(namespace string, ip *types.IP) (err error)
 	IPUnBind(namespace, ip string) (err error)
-	SyncNetworkUsage(name string, usage *types.Usage) (err error)
-	SyncSubnetUsage(name string, usage *types.Usage) (err error)
-	SyncNetworkStatus(name, nodes, subnets string) (err error)
 }
 
 type DualStackStore interface {
@@ -77,9 +74,6 @@ type DualStackStore interface {
 	IPReserve(pod *v1.Pod) (err error)
 	IPRecycle(namespace string, ip *types.IP) (err error)
 	IPUnBind(namespace, ip string) (err error)
-	SyncNetworkUsage(name string, usages [3]*types.Usage) (err error)
-	SyncSubnetUsage(name string, usage *types.Usage) (err error)
-	SyncNetworkStatus(name, nodes, subnets string) (err error)
 }
 
 type NetworkInterface interface {

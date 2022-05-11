@@ -71,8 +71,45 @@ spec:
                 required:
                 - ip
                 - mac
-                - netID
                 - version
+                type: object
+              binding:
+                description: Binding defines a binding object with necessary info
+                  of an IPInstance
+                properties:
+                  nodeName:
+                    type: string
+                  podName:
+                    type: string
+                  podUID:
+                    description: UID is a type that holds unique ID values, including
+                      UUIDs.  Because we don't ONLY use UUIDs, this is an alias to
+                      string.  Being a type captures intent and helps make sure that
+                      UIDs and names do not get conflated.
+                    type: string
+                  referredObject:
+                    description: ObjectMeta is a short version of ObjectMeta which
+                      is pointing to an Object in specified namespace
+                    properties:
+                      kind:
+                        type: string
+                      name:
+                        type: string
+                      uid:
+                        description: UID is a type that holds unique ID values, including
+                          UUIDs.  Because we don't ONLY use UUIDs, this is an alias
+                          to string.  Being a type captures intent and helps make
+                          sure that UIDs and names do not get conflated.
+                        type: string
+                    type: object
+                  stateful:
+                    description: StatefulInfo is a collection of related info if binding
+                      to a stateful workload
+                    properties:
+                      index:
+                        format: int32
+                        type: integer
+                    type: object
                 type: object
               network:
                 type: string
@@ -89,12 +126,16 @@ spec:
               nodeName:
                 type: string
               phase:
+                description: DEPRECATED. Planned to remove in v0.6
                 type: string
               podName:
                 type: string
               podNamespace:
                 type: string
               sandboxID:
+                type: string
+              updateTimestamp:
+                format: date-time
                 type: string
             type: object
         type: object

@@ -21,8 +21,12 @@ import (
 	"math"
 	"math/big"
 	"net"
+	"strconv"
+	"strings"
 
 	"github.com/containernetworking/plugins/pkg/ip"
+
+	"github.com/alibaba/hybridnet/pkg/constants"
 )
 
 // TODO: unit tests
@@ -237,4 +241,57 @@ func ipToInt(ip net.IP) *big.Int {
 
 func intToIP(i *big.Int) net.IP {
 	return net.IP(i.Bytes())
+}
+
+// IsLegacyModel will show whether IPInstance has switched to new version
+// TODO: legacy mode, to be removed in the next major version
+func IsLegacyModel(ipInstance *IPInstance) bool {
+	return len(ipInstance.Spec.Binding.ReferredObject.Kind) == 0
+}
+
+func IsReserved(ipInstance *IPInstance) bool {
+	if IsLegacyModel(ipInstance) {
+		return len(ipInstance.Status.NodeName) == 0
+	}
+
+	return len(ipInstance.Spec.Binding.NodeName) == 0
+}
+
+func FetchBindingPodName(ipInstance *IPInstance) string {
+	if IsLegacyModel(ipInstance) {
+		return ipInstance.Labels[constants.LabelPod]
+	}
+
+	return ipInstance.Spec.Binding.PodName
+}
+
+func FetchBindingNodeName(ipInstance *IPInstance) string {
+	if IsLegacyModel(ipInstance) {
+		return ipInstance.Labels[constants.LabelNode]
+	}
+
+	return ipInstance.Spec.Binding.NodeName
+}
+
+func IsValidIPInstance(ipInstance *IPInstance) bool {
+	if ipInstance == nil {
+		return false
+	}
+
+	if IsLegacyModel(ipInstance) {
+		return len(ipInstance.Status.Phase) > 0
+	}
+
+	return len(ipInstance.Spec.Binding.ReferredObject.Kind) > 0
+}
+
+func GetIndexFromName(name string) int {
+	nameSlice := strings.Split(name, "-")
+	indexStr := nameSlice[len(nameSlice)-1]
+
+	index, err := strconv.Atoi(indexStr)
+	if err != nil {
+		return math.MaxInt32
+	}
+	return index
 }
