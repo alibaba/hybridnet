@@ -23,10 +23,11 @@ import (
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 
-	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
+
+	"github.com/alibaba/hybridnet/pkg/constants"
 )
 
 type subnetToPodMap map[string]net.IP
@@ -189,6 +190,34 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 				return fmt.Errorf("parse subnet cidr %v failed: %v", subnetString, err)
 			}
 
+			// ARP sender IP selection is totally independent with IP source selection. ARP sender IP
+			// selection will only be controlled by arp_announce sysctl parameter.
+			//
+			// There are two kinds of results for sender IP selection on a interface with more than one ip address:
+			//   1. Use source address in the IP header (always fit for us)
+			//   2. Use the "inet_select_addr" function
+			//
+			// For the second possibility, kernel will use the "inet_select_addr" function with a "link" scope
+			// to select sender IP. That means the first address that matches the subnet of the target IP (of ARP header)
+			// and has a scope greater than or equal to RT_SCOPE_LINK will be selected.
+			//
+			// If a route does not have src specified then:
+			//   1. ip with scope=host can be as backend only for a route with scope=host
+			//   2. ip with scope=link can be as backend only for a route with scope=host or scope=link
+			//   3. ip with scope=global can be as backend only for a route with any scope
+			//
+			// As for the IP source selection after routing, if egress interface of the routing result doesn't have any
+			// address and need to select from other interfaces, only the addresses with "global" scope will be selected.
+			// So the enhanced address will never be used as source address for other interfaces.
+			//
+			// So does the ARP sender IP selection happens on a interface without any address, only the addresses of
+			// other interfaces with "global" scope will be selected as sender IP. If no valid sender IP found, it will
+			// be "0.0.0.0".
+			//
+			// At the same time, subnet direct routes (scope lower than or equal to "link"), which match hybridnet
+			// underlay vlan subnets, are never supposed to be added to enhanced-address-attached interfaces directly by
+			// host. Because of that, we can make the enhanced addresses never be selected as source IP by creating them
+			// with a "link" scope.
 			if err := ensureSubnetEnhancedAddr(forwardNodeIf, &netlink.Addr{
 				IPNet: &net.IPNet{
 					IP:   podIP,
@@ -196,6 +225,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 				},
 				Label: "",
 				Flags: unix.IFA_F_NOPREFIXROUTE,
+				Scope: unix.RT_SCOPE_LINK,
 			}, outOfDateEnhancedAddr, m.family); err != nil {
 				return fmt.Errorf("ensure subnet enhanced addr %v failed: %v", podIP.String(), err)
 			}

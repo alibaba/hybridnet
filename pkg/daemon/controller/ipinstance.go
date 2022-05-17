@@ -167,7 +167,10 @@ func (c *Controller) reconcileIPInfo() error {
 			}
 
 			if ipInstance.Spec.Address.Version == networkingv1.IPv4 {
-				c.addrV4Manager.TryAddPodInfo(forwardNodeIfName, subnetCidr, podIP)
+				// if vlan arp enhancement is not enabled, all the enhanced address will be cleaned
+				if c.config.EnableVlanArpEnhancement {
+					c.addrV4Manager.TryAddPodInfo(forwardNodeIfName, subnetCidr, podIP)
+				}
 			}
 
 		case networkingv1.NetworkTypeOverlay:
@@ -203,10 +206,8 @@ func (c *Controller) reconcileIPInfo() error {
 		}
 	}
 
-	if c.config.EnableVlanArpEnhancement {
-		if err := c.addrV4Manager.SyncAddresses(c.getIPInstanceByAddress); err != nil {
-			return fmt.Errorf("sync ipv4 addresses failed: %v", err)
-		}
+	if err := c.addrV4Manager.SyncAddresses(c.getIPInstanceByAddress); err != nil {
+		return fmt.Errorf("sync ipv4 addresses failed: %v", err)
 	}
 
 	return nil
