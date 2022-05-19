@@ -139,15 +139,15 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 		}
 	}
 
-	// Overlay network capacity validation
-	if feature.DualStackEnabled() && networkType == ipamtypes.Overlay {
+	// Global network capacity validation
+	if feature.DualStackEnabled() && networkingv1.IsGlobalUniqueNetworkType(networkingv1.NetworkType(networkType)) {
 		networkList := &networkingv1.NetworkList{}
 		if err = handler.Client.List(ctx, networkList); err != nil {
 			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 		}
 		for i := range networkList.Items {
 			network := &networkList.Items[i]
-			if network.Spec.Type == networkingv1.NetworkTypeOverlay {
+			if networkingv1.IsGlobalUniqueNetwork(network) {
 				switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
 				case ipamtypes.IPv4Only:
 					if network.Status.Statistics.Available <= 0 {

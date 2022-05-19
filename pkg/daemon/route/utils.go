@@ -262,7 +262,7 @@ func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
 		if err := ensureRoutesForVlanSubnet(forwardLink, cidr, gateway, table, family); err != nil {
 			return fmt.Errorf("failed to ensure routes for vlan subnet %v: %v", cidr.String(), err)
 		}
-	case networkingv1.NetworkModeBGP:
+	case networkingv1.NetworkModeBGP, networkingv1.NetworkModeGlobalBGP:
 		if err := ensureRoutesForBGPSubnet(forwardLink, cidr, table, gateway); err != nil {
 			return fmt.Errorf("failed to ensure routes for bgp subnet %v: %v", cidr.String(), err)
 		}

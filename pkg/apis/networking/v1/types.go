@@ -19,16 +19,18 @@ package v1
 type NetworkType string
 
 const (
-	NetworkTypeUnderlay = NetworkType("Underlay")
-	NetworkTypeOverlay  = NetworkType("Overlay")
+	NetworkTypeUnderlay  = NetworkType("Underlay")
+	NetworkTypeOverlay   = NetworkType("Overlay")
+	NetworkTypeGlobalBGP = NetworkType("GlobalBGP")
 )
 
 type NetworkMode string
 
 const (
-	NetworkModeBGP   = NetworkMode("BGP")
-	NetworkModeVlan  = NetworkMode("VLAN")
-	NetworkModeVxlan = NetworkMode("VXLAN")
+	NetworkModeBGP       = NetworkMode("BGP")
+	NetworkModeVlan      = NetworkMode("VLAN")
+	NetworkModeVxlan     = NetworkMode("VXLAN")
+	NetworkModeGlobalBGP = NetworkMode("GlobalBGP")
 )
 
 type Count struct {

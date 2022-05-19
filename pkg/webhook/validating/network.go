@@ -23,6 +23,10 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/alibaba/hybridnet/pkg/constants"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -60,14 +64,10 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 		}
 	case networkingv1.NetworkTypeOverlay:
 		// check uniqueness
-		networks := &networkingv1.NetworkList{}
-		if err = handler.Client.List(ctx, networks); err != nil {
+		if exist, _, err := checkNetworkTypeExist(ctx, handler.Client, networkType); err != nil {
 			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
-		}
-		for i := range networks.Items {
-			if networkingv1.GetNetworkType(&networks.Items[i]) == networkingv1.NetworkTypeOverlay {
-				return webhookutils.AdmissionDeniedWithLog("must have one overlay network at most", logger)
-			}
+		} else if exist {
+			return webhookutils.AdmissionDeniedWithLog("must have one overlay network at most", logger)
 		}
 
 		// check node selector
@@ -78,6 +78,23 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 		// check net id
 		if network.Spec.NetID == nil {
 			return webhookutils.AdmissionDeniedWithLog("must assign net ID for overlay network", logger)
+		}
+	case networkingv1.NetworkTypeGlobalBGP:
+		// check uniqueness
+		if exist, _, err := checkNetworkTypeExist(ctx, handler.Client, networkType); err != nil {
+			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
+		} else if exist {
+			return webhookutils.AdmissionDeniedWithLog("must have one global bgp network at most", logger)
+		}
+
+		// check node selector
+		if network.Spec.NodeSelector != nil && len(network.Spec.NodeSelector) > 0 {
+			return webhookutils.AdmissionDeniedWithLog("must not assign node selector for global bgp network", logger)
+		}
+
+		// check net id
+		if network.Spec.NetID != nil {
+			return webhookutils.AdmissionDeniedWithLog("must not assign net ID for global bgp network", logger)
 		}
 	default:
 		return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("unknown network type %s", networkingv1.GetNetworkType(network)), logger)
@@ -115,6 +132,10 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 		if networkType != networkingv1.NetworkTypeOverlay {
 			return admission.Denied("VXLAN mode can only be used for overlay network")
 		}
+	case networkingv1.NetworkModeGlobalBGP:
+		if networkType != networkingv1.NetworkTypeGlobalBGP {
+			return admission.Denied("GlobalBGP mode can only be used for global bgp network")
+		}
 	default:
 		return admission.Denied(fmt.Sprintf("unknown network mode %s", networkingv1.GetNetworkMode(network)))
 	}
@@ -147,6 +168,10 @@ func NetworkUpdateValidation(ctx context.Context, req *admission.Request, handle
 		if newN.Spec.NodeSelector != nil && len(newN.Spec.NodeSelector) > 0 {
 			return webhookutils.AdmissionDeniedWithLog("node selector must not be assigned for overlay network", logger)
 		}
+	case networkingv1.NetworkTypeGlobalBGP:
+		if newN.Spec.NodeSelector != nil && len(newN.Spec.NodeSelector) > 0 {
+			return webhookutils.AdmissionDeniedWithLog("node selector must not be assigned for global bgp network", logger)
+		}
 	default:
 		return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("unknown network type %s", networkingv1.GetNetworkType(newN)), logger)
 	}
@@ -166,8 +191,7 @@ func NetworkUpdateValidation(ctx context.Context, req *admission.Request, handle
 				return admission.Denied(fmt.Sprintf("invalid bgp peer ip address %v", peer.Address))
 			}
 		}
-	case networkingv1.NetworkModeVlan:
-	case networkingv1.NetworkModeVxlan:
+	case networkingv1.NetworkModeVlan, networkingv1.NetworkModeVxlan, networkingv1.NetworkModeGlobalBGP:
 	default:
 		return admission.Denied(fmt.Sprintf("unknown network mode %s", networkingv1.GetNetworkMode(newN)))
 	}
@@ -199,7 +223,7 @@ func NetworkDeleteValidation(ctx context.Context, req *admission.Request, handle
 		}
 	}
 
-	if network.Spec.Type == networkingv1.NetworkTypeOverlay && feature.MultiClusterEnabled() {
+	if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay && feature.MultiClusterEnabled() {
 		remoteClusterList := &multiclusterv1.RemoteClusterList{}
 		if err = handler.Client.List(ctx, remoteClusterList); err != nil {
 			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
@@ -209,5 +233,45 @@ func NetworkDeleteValidation(ctx context.Context, req *admission.Request, handle
 		}
 	}
 
+	switch networkingv1.GetNetworkMode(network) {
+	case networkingv1.NetworkModeBGP:
+		globalBGPExist, globalBGPNetwork, err := checkNetworkTypeExist(ctx, handler.Client, networkingv1.NetworkTypeGlobalBGP)
+		if err != nil {
+			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
+		} else if !globalBGPExist {
+			break
+		}
+
+		if len(network.Status.NodeList) != 0 {
+			for _, node := range network.Status.NodeList {
+				ipInstanceList := &networkingv1.IPInstanceList{}
+
+				if err := handler.Client.List(context.TODO(), ipInstanceList, client.MatchingLabels{
+					constants.LabelNode:    node,
+					constants.LabelNetwork: globalBGPNetwork,
+				}); err != nil {
+					return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
+				}
+
+				if len(ipInstanceList.Items) != 0 {
+					return webhookutils.AdmissionDeniedWithLog("still have global bgp ip instance in use", logger)
+				}
+			}
+		}
+	}
+
 	return admission.Allowed("validation pass")
+}
+
+func checkNetworkTypeExist(ctx context.Context, client client.Reader, networkType networkingv1.NetworkType) (bool, string, error) {
+	networks := &networkingv1.NetworkList{}
+	if err := client.List(ctx, networks); err != nil {
+		return false, "", err
+	}
+	for i := range networks.Items {
+		if networkingv1.GetNetworkType(&networks.Items[i]) == networkType {
+			return true, networks.Items[i].Name, nil
+		}
+	}
+	return false, "", nil
 }

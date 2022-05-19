@@ -37,6 +37,7 @@ const (
 
 	LabelUnderlayNetworkAttachment = "networking.alibaba.com/underlay-network-attachment"
 	LabelOverlayNetworkAttachment  = "networking.alibaba.com/overlay-network-attachment"
+	LabelBGPNetworkAttachment      = "networking.alibaba.com/bgp-network-attachment"
 )
 
 const (
@@ -45,6 +46,5 @@ const (
 )
 
 const (
-	Attached   = "true"
-	Unattached = "false"
+	Attached = "true"
 )

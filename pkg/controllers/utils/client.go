@@ -156,7 +156,25 @@ func FindUnderlayNetworkForNode(client client.Reader, nodeLabels map[string]stri
 	for i := range networkList.Items {
 		var network = networkList.Items[i]
 		// TODO: explicit network type
-		if network.Spec.Type != networkingv1.NetworkTypeOverlay && len(network.Spec.NodeSelector) > 0 {
+		if networkingv1.GetNetworkType(&network) == networkingv1.NetworkTypeUnderlay && len(network.Spec.NodeSelector) > 0 {
+			if labels.SelectorFromSet(network.Spec.NodeSelector).Matches(labels.Set(nodeLabels)) {
+				return network.Name, nil
+			}
+		}
+	}
+	return "", nil
+}
+
+func FindBGPUnderlayNetworkForNode(client client.Reader, nodeLabels map[string]string) (underlayNetworkName string, err error) {
+	networkList, err := ListNetworks(client)
+	if err != nil {
+		return "", err
+	}
+
+	for i := range networkList.Items {
+		var network = networkList.Items[i]
+		// TODO: explicit network type
+		if networkingv1.GetNetworkMode(&network) == networkingv1.NetworkModeBGP && len(network.Spec.NodeSelector) > 0 {
 			if labels.SelectorFromSet(network.Spec.NodeSelector).Matches(labels.Set(nodeLabels)) {
 				return network.Name, nil
 			}
@@ -173,8 +191,22 @@ func FindOverlayNetwork(client client.Reader) (overlayNetworkName string, err er
 
 	for i := range networkList.Items {
 		var network = networkList.Items[i]
-		// TODO: explicit network type
-		if network.Spec.Type == networkingv1.NetworkTypeOverlay {
+		if networkingv1.GetNetworkType(&network) == networkingv1.NetworkTypeOverlay {
+			return network.Name, nil
+		}
+	}
+	return
+}
+
+func FindGlobalBGPNetwork(client client.Reader) (globalBGPNetworkName string, err error) {
+	var networkList *networkingv1.NetworkList
+	if networkList, err = ListNetworks(client); err != nil {
+		return
+	}
+
+	for i := range networkList.Items {
+		var network = networkList.Items[i]
+		if networkingv1.GetNetworkType(&network) == networkingv1.NetworkTypeGlobalBGP {
 			return network.Name, nil
 		}
 	}
@@ -188,7 +220,7 @@ func FindOverlayNetworkNetID(client client.Reader) (*int32, error) {
 	}
 	for i := range networkList.Items {
 		var network = &networkList.Items[i]
-		if network.Spec.Type == networkingv1.NetworkTypeOverlay {
+		if networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay {
 			if network.Spec.NetID == nil {
 				return nil, nil
 			}

@@ -88,8 +88,9 @@ func ParseIPFamilyFromEnv() IPFamilyMode {
 type NetworkType string
 
 const (
-	Underlay = NetworkType("Underlay")
-	Overlay  = NetworkType("Overlay")
+	Underlay  = NetworkType("Underlay")
+	Overlay   = NetworkType("Overlay")
+	GlobalBGP = NetworkType("GlobalBGP")
 )
 
 func ParseNetworkTypeFromString(in string) NetworkType {
@@ -98,6 +99,8 @@ func ParseNetworkTypeFromString(in string) NetworkType {
 		return Underlay
 	case strings.ToLower(string(Overlay)):
 		return Overlay
+	case strings.ToLower(string(GlobalBGP)):
+		return GlobalBGP
 	case "":
 		return ParseNetworkTypeFromEnvOnce()
 	default:
@@ -124,6 +127,8 @@ func ParseNetworkTypeFromEnv() NetworkType {
 		return Underlay
 	case strings.ToLower(string(Overlay)):
 		return Overlay
+	case strings.ToLower(string(GlobalBGP)):
+		return GlobalBGP
 	default:
 		return NetworkType(networkTypeEnv)
 	}

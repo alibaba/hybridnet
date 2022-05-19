@@ -22,6 +22,8 @@ import (
 	"net"
 	"sync"
 
+	"google.golang.org/protobuf/types/known/anypb"
+
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 
 	"github.com/vishvananda/netlink"
@@ -50,7 +52,7 @@ type Manager struct {
 
 	peerMap   map[string]*peerInfo
 	subnetMap map[string]*net.IPNet
-	ipMap     map[string]net.IP
+	ipMap     map[string]*ipInfo
 
 	startMutex sync.RWMutex
 }
@@ -68,7 +70,7 @@ func NewManager(peeringInterfaceName, grpcListenAddress string, logger logr.Logg
 
 		peerMap:   map[string]*peerInfo{},
 		subnetMap: map[string]*net.IPNet{},
-		ipMap:     map[string]net.IP{},
+		ipMap:     map[string]*ipInfo{},
 
 		startMutex: sync.RWMutex{},
 	}
@@ -165,8 +167,11 @@ func (m *Manager) RecordSubnet(cidr *net.IPNet) {
 	m.subnetMap[cidr.String()] = cidr
 }
 
-func (m *Manager) RecordIP(ip net.IP) {
-	m.ipMap[ip.String()] = ip
+func (m *Manager) RecordIP(ip net.IP, needToBeExported bool) {
+	m.ipMap[ip.String()] = &ipInfo{
+		ip:               ip,
+		needToBeExported: needToBeExported,
+	}
 }
 
 func (m *Manager) ResetSubnetInfos() {
@@ -183,7 +188,7 @@ func (m *Manager) ResetPeerAndSubnetInfos() {
 }
 
 func (m *Manager) ResetIPInfos() {
-	m.ipMap = map[string]net.IP{}
+	m.ipMap = map[string]*ipInfo{}
 }
 
 func (m *Manager) TryStart(asn uint32) error {
@@ -328,18 +333,23 @@ func (m *Manager) SyncIPInfos() error {
 
 	// Ensure paths for ip instances
 	for _, ipInstance := range m.ipMap {
-		nextHop, err := m.getNextHopAddressByIP(ipInstance)
+		nextHop, err := m.getNextHopAddressByIP(ipInstance.ip)
 		if err != nil {
 			m.logger.Error(err, "failed to get next hop address to add path for ip instance, it will be ignore",
-				"ip", ipInstance.String())
+				"ip", ipInstance.ip.String())
 			continue
 		}
 
-		if _, exist := existIPPathMap[ipInstance.String()]; !exist {
+		var extraPathAttrs []*anypb.Any
+		if !ipInstance.needToBeExported {
+			extraPathAttrs = append(extraPathAttrs, noExportCommunityAttr)
+		}
+
+		if _, exist := existIPPathMap[ipInstance.ip.String()]; !exist {
 			if _, err := m.bgpServer.AddPath(context.Background(), &api.AddPathRequest{
-				Path: generatePathForIP(ipInstance, nextHop),
+				Path: generatePathForIP(ipInstance.ip, nextHop, extraPathAttrs...),
 			}); err != nil {
-				return fmt.Errorf("failed to add path for ip instance %v: %v", ipInstance.String(), err)
+				return fmt.Errorf("failed to add path for ip instance %v: %v", ipInstance.ip.String(), err)
 			}
 		}
 	}
@@ -353,6 +363,7 @@ func (m *Manager) SyncIPInfos() error {
 		}
 
 		if _, exist := m.ipMap[ipAddr.String()]; !exist {
+			// delete path don't need attrs
 			if err := m.bgpServer.DeletePath(context.Background(), &api.DeletePathRequest{
 				Path: generatePathForIP(ipAddr, nextHop),
 			}); err != nil {

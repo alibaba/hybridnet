@@ -175,7 +175,7 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 		if err != nil {
 			return fmt.Errorf("failed to generate vxlan forward node interface name: %v", err)
 		}
-	case networkingv1.NetworkModeBGP:
+	case networkingv1.NetworkModeBGP, networkingv1.NetworkModeGlobalBGP:
 		forwardNodeIfName = nodeIfName
 	}
 

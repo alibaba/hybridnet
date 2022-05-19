@@ -182,7 +182,7 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	r.ctrlHubRef.iptablesSyncTrigger()
 
 	// Vxlan device might be regenerated, if that happens, all the related routes will be cleaned.
-	// So subnet controller need to be triggered another time.
+	// So subnet controller need to be triggered again.
 	r.ctrlHubRef.subnetControllerTriggerSource.Trigger()
 
 	if len(incompleteVtepInfoNodes) != 0 {

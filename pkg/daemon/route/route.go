@@ -360,7 +360,7 @@ func (m *Manager) SyncRoutes() error {
 			combineLocalAndRemoteExcludeIPBlockMap(localUnderlayExcludeIPBlockMap, remoteUnderlayExcludeIPBlockMap),
 			info.mode,
 		); err != nil {
-			return fmt.Errorf("failed to add subnet %v rule and routes: %v", info.cidr, err)
+			return fmt.Errorf("failed to add overlay subnet %v rule and routes: %v", info.cidr, err)
 		}
 	}
 
@@ -374,7 +374,7 @@ func (m *Manager) SyncRoutes() error {
 		if err := ensureFromPodSubnetRuleAndRoutes(info.forwardNodeIfName, info.cidr,
 			info.gateway, info.autoNatOutgoing, m.family, nil, nil, info.mode,
 		); err != nil {
-			return fmt.Errorf("failed to add subnet %v rule and routes: %v", info.cidr, err)
+			return fmt.Errorf("failed to add underlay subnet %v rule and routes: %v", info.cidr, err)
 		}
 	}
 

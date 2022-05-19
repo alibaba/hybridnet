@@ -211,7 +211,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	}
 
 	// check valid ip information second time
-	if macAddr == "" || netID == nil {
+	if macAddr == "" || len(allocatedIPs) == 0 {
 		errMsg := fmt.Errorf("no available ip for pod %s/%s", podRequest.PodNamespace, podRequest.PodName)
 		cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
 		return
@@ -228,8 +228,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 		"podName", podRequest.PodName,
 		"podNamespace", podRequest.PodNamespace,
 		"ipAddr", printAllocatedIPs(allocatedIPs),
-		"macAddr", macAddr,
-		"netID", *netID)
+		"macAddr", macAddr)
 	hostInterface, err := cdh.configureNic(podRequest.PodName, podRequest.PodNamespace, podRequest.NetNs, podRequest.ContainerID,
 		macAddr, netID, allocatedIPs, networkingv1.GetNetworkMode(network))
 	if err != nil {
@@ -241,8 +240,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 		"podName", podRequest.PodName,
 		"podNamespace", podRequest.PodNamespace,
 		"ipAddr", printAllocatedIPs(allocatedIPs),
-		"macAddr", macAddr,
-		"netID", *netID)
+		"macAddr", macAddr)
 
 	// update IPInstance crd status
 	for _, ip := range affectedIPInstances {
