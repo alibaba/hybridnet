@@ -145,7 +145,7 @@ func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	remoteVTEPPatch := client.MergeFrom(remoteVTEP.DeepCopyObject())
+	remoteVTEPPatch := client.MergeFrom(remoteVTEP.DeepCopy())
 	remoteVTEP.Status.LastModifyTime = metav1.Now()
 	if err = r.ParentCluster.GetClient().Status().Patch(ctx, remoteVTEP, remoteVTEPPatch); err != nil {
 		// this error is not fatal, print it and go on

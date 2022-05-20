@@ -121,7 +121,7 @@ func (r *RemoteSubnetReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
-	remoteSubnetPatch := client.MergeFrom(remoteSubnet.DeepCopyObject())
+	remoteSubnetPatch := client.MergeFrom(remoteSubnet.DeepCopy())
 	remoteSubnet.Status.LastModifyTime = metav1.Now()
 	if err = r.ParentCluster.GetClient().Status().Patch(ctx, remoteSubnet, remoteSubnetPatch); err != nil {
 		// this error is not fatal, print it and go on
