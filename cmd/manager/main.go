@@ -17,20 +17,13 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/errors"
-
-	globalutils "github.com/alibaba/hybridnet/pkg/utils"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -40,12 +33,11 @@ import (
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/multicluster"
-	"github.com/alibaba/hybridnet/pkg/controllers/multicluster/clusterchecker"
 	"github.com/alibaba/hybridnet/pkg/controllers/networking"
-	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/managerruntime"
 	zapinit "github.com/alibaba/hybridnet/pkg/zap"
+	"github.com/spf13/pflag"
 )
 
 var (
@@ -112,7 +104,7 @@ func main() {
 	})
 
 	// indexers need to be injected be for informer is running
-	if err = initIndexers(mgr); err != nil {
+	if err = networking.InitIndexers(mgr); err != nil {
 		entryLog.Error(err, "unable to init indexers")
 		os.Exit(1)
 	}
@@ -229,7 +221,7 @@ func main() {
 
 		daemonHub := managerruntime.NewDaemonHub(signalContext)
 
-		clusterStatusChecker, err := initClusterStatusChecker(mgr)
+		clusterStatusChecker, err := multicluster.InitClusterStatusChecker(mgr)
 		if err != nil {
 			entryLog.Error(err, "unable to init cluster status checker")
 			os.Exit(1)
@@ -273,66 +265,4 @@ func main() {
 	}
 
 	<-signalContext.Done()
-}
-
-func initClusterStatusChecker(mgr ctrl.Manager) (clusterchecker.Checker, error) {
-	clusterUUID, err := utils.GetClusterUUID(mgr.GetClient())
-	if err != nil {
-		return nil, fmt.Errorf("unable to get cluster UUID: %v", err)
-	}
-
-	checker := clusterchecker.NewChecker()
-
-	if err = checker.Register(clusterchecker.HealthzCheckName, &clusterchecker.Healthz{}); err != nil {
-		return nil, err
-	}
-	if err = checker.Register(clusterchecker.BidirectionCheckName, &clusterchecker.Bidirection{LocalUUID: clusterUUID}); err != nil {
-		return nil, err
-	}
-	if err = checker.Register(clusterchecker.OverlayNetIDCheckName, &clusterchecker.OverlayNetID{LocalClient: mgr.GetClient()}); err != nil {
-		return nil, err
-	}
-	if err = checker.Register(clusterchecker.SubnetCheckName, &clusterchecker.Subnet{LocalClient: mgr.GetClient()}); err != nil {
-		return nil, err
-	}
-	return checker, nil
-}
-
-func initIndexers(mgr ctrl.Manager) (err error) {
-	// init node indexer for networks
-	if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Network{},
-		networking.IndexerFieldNode, func(obj client.Object) []string {
-			network, ok := obj.(*networkingv1.Network)
-			if !ok {
-				return nil
-			}
-
-			switch networkingv1.GetNetworkType(network) {
-			case networkingv1.NetworkTypeUnderlay:
-				return globalutils.DeepCopyStringSlice(network.Status.NodeList)
-			case networkingv1.NetworkTypeOverlay:
-				return []string{networking.OverlayNodeName}
-			case networkingv1.NetworkTypeGlobalBGP:
-				return []string{networking.GlobalBGPNodeName}
-			default:
-				return nil
-			}
-		}); err != nil {
-		return err
-	}
-
-	// init network indexer for Subnets
-	return mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Subnet{},
-		networking.IndexerFieldNetwork, func(obj client.Object) []string {
-			subnet, ok := obj.(*networkingv1.Subnet)
-			if !ok {
-				return nil
-			}
-
-			networkName := subnet.Spec.Network
-			if len(networkName) > 0 {
-				return []string{networkName}
-			}
-			return nil
-		})
 }
