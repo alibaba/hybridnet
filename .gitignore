@@ -1,7 +1,8 @@
 # IDE and editor files
 .idea
 .vscode
-bin
+/bin
+/kubebuilder
 
 # Binaries for programs and plugins
 *.exe

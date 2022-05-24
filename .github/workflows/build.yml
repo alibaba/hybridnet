@@ -32,7 +32,8 @@ jobs:
             ${{ runner.os }}-go-
       - name: Test and update codecov
         run: |
-          go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+          make bin/envtest
+          export KUBEBUILDER_ASSETS=$(pwd)/bin/envtest && go test -race -coverprofile=coverage.txt -covermode=atomic ./...
       - uses: codecov/codecov-action@v1.5.0
         with:
           file: ./coverage.txt

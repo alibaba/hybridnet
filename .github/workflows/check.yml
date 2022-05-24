@@ -59,6 +59,8 @@ jobs:
             ${{ runner.os }}-go-
       - name: Test
         run: |
+          make bin/envtest
+          export KUBEBUILDER_ASSETS=$(pwd)/bin/envtest
           go test -v ./...
           go test -race -v ./...
 

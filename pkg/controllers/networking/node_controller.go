@@ -97,6 +97,9 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	updateAttachmentLabel := func(node *corev1.Node, key string, attached bool) {
 		if attached {
+			if node.Labels == nil {
+				node.Labels = map[string]string{}
+			}
 			node.Labels[key] = constants.Attached
 			return
 		}
