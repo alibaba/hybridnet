@@ -46,6 +46,7 @@ const ControllerRemoteCluster = "RemoteCluster"
 
 // RemoteClusterReconciler reconciles a RemoteCluster object
 type RemoteClusterReconciler struct {
+	context.Context
 	client.Client
 
 	Recorder record.EventRecorder
@@ -142,7 +143,6 @@ func (r *RemoteClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RemoteClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.LocalManager = mgr
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerRemoteCluster).
 		For(&multiclusterv1.RemoteCluster{},
@@ -208,9 +208,12 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(remoteCluster *
 			subnetSet := sets.NewCallbackSet()
 
 			var remoteSubnetList *multiclusterv1.RemoteSubnetList
-			if remoteSubnetList, err = utils.ListRemoteSubnets(r.LocalManager.GetClient(), client.MatchingLabels{
-				constants.LabelCluster: shadowRemoteCluster.Name,
-			}); err != nil {
+			if remoteSubnetList, err = utils.ListRemoteSubnets(r.Context,
+				r.LocalManager.GetClient(),
+				client.MatchingLabels{
+					constants.LabelCluster: shadowRemoteCluster.Name,
+				},
+			); err != nil {
 				return err
 			}
 			for i := range remoteSubnetList.Items {
@@ -233,6 +236,7 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(remoteCluster *
 
 			// inject RemoteVtepReconciler
 			if err = (&RemoteVtepReconciler{
+				Context:             r.Context,
 				Client:              mgr.GetClient(),
 				ClusterName:         shadowRemoteCluster.Name,
 				ParentCluster:       r.LocalManager,

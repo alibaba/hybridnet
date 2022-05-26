@@ -17,6 +17,7 @@
 package clusterchecker
 
 import (
+	"context"
 	"time"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -25,8 +26,8 @@ import (
 type Checker interface {
 	Register(name string, check Check) error
 	Unregister(name string) error
-	CheckAll(clusterManager controllerruntime.Manager, opts ...Option) (map[string]CheckResult, error)
-	Check(name string, clusterManager controllerruntime.Manager, opts ...Option) (CheckResult, error)
+	CheckAll(ctx context.Context, clusterManager controllerruntime.Manager, opts ...Option) (map[string]CheckResult, error)
+	Check(ctx context.Context, name string, clusterManager controllerruntime.Manager, opts ...Option) (CheckResult, error)
 }
 
 type CheckResult interface {
@@ -36,5 +37,5 @@ type CheckResult interface {
 }
 
 type Check interface {
-	Check(clusterManager controllerruntime.Manager, opts ...Option) CheckResult
+	Check(ctx context.Context, clusterManager controllerruntime.Manager, opts ...Option) CheckResult
 }

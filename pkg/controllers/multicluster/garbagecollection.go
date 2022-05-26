@@ -47,7 +47,7 @@ func (r *RemoteSubnetGarbageCollection) Start(ctx context.Context) error {
 	r.logger.Info("remote subnet garbage collection is starting")
 
 	wait.UntilWithContext(ctx, func(c context.Context) {
-		subnetList, err := utils.ListSubnets(r.reconciler.Client)
+		subnetList, err := utils.ListSubnets(ctx, r.reconciler.Client)
 		if err != nil {
 			r.logger.Error(err, "unable to list subnets")
 			return
@@ -59,7 +59,8 @@ func (r *RemoteSubnetGarbageCollection) Start(ctx context.Context) error {
 
 		// TODO: use indexer field instead of label selector
 		var currentRemoteSubnetSet = sets.NewString()
-		remoteSubnet, err := utils.ListRemoteSubnets(r.reconciler.ParentCluster.GetClient(),
+		remoteSubnet, err := utils.ListRemoteSubnets(ctx,
+			r.reconciler.ParentCluster.GetClient(),
 			client.MatchingLabels{constants.LabelCluster: r.reconciler.ClusterName})
 		if err != nil {
 			r.logger.Error(err, "unable to list remote subnets")
@@ -108,7 +109,7 @@ func (r *RemoteVTEPGarbageCollection) Start(ctx context.Context) error {
 	r.logger.Info("remote vtep garbage collection is starting")
 
 	wait.UntilWithContext(ctx, func(c context.Context) {
-		nodeNames, err := utils.ListNodesToNames(r.reconciler.Client)
+		nodeNames, err := utils.ListNodesToNames(ctx, r.reconciler.Client)
 		if err != nil {
 			r.logger.Error(err, "unable to list nodes")
 			return
@@ -120,7 +121,8 @@ func (r *RemoteVTEPGarbageCollection) Start(ctx context.Context) error {
 
 		// TODO: use indexer field instead of label selector
 		var currentRemoteVTEPSet = sets.NewString()
-		remoteVtepList, err := utils.ListRemoteVteps(r.reconciler.ParentCluster.GetClient(),
+		remoteVtepList, err := utils.ListRemoteVteps(ctx,
+			r.reconciler.ParentCluster.GetClient(),
 			client.MatchingLabels{constants.LabelCluster: r.reconciler.ClusterName})
 		if err != nil {
 			r.logger.Error(err, "unable to list remote VTEPs")

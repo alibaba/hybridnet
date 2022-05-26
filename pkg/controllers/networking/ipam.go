@@ -17,6 +17,8 @@
 package networking
 
 import (
+	"context"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/alibaba/hybridnet/pkg/constants"
@@ -35,8 +37,8 @@ type IPAMManager interface {
 	DualStack() ipam.DualStackInterface
 }
 
-func NewIPAMManager(c client.Reader) (IPAMManager, error) {
-	networkList, err := utils.ListNetworks(c)
+func NewIPAMManager(ctx context.Context, c client.Reader) (IPAMManager, error) {
+	networkList, err := utils.ListNetworks(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -48,12 +50,14 @@ func NewIPAMManager(c client.Reader) (IPAMManager, error) {
 
 	manager := &ipamManager{}
 	if feature.DualStackEnabled() {
-		manager.dualStack, err = allocator.NewDualStackAllocator(networkNames, NetworkGetter(c), SubnetGetter(c), IPSetGetter(c))
+		manager.dualStack, err = allocator.NewDualStackAllocator(networkNames,
+			NetworkGetter(ctx, c), SubnetGetter(ctx, c), IPSetGetter(ctx, c))
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		manager.Interface, err = allocator.NewAllocator(networkNames, NetworkGetter(c), SubnetGetter(c), IPSetGetter(c))
+		manager.Interface, err = allocator.NewAllocator(networkNames,
+			NetworkGetter(ctx, c), SubnetGetter(ctx, c), IPSetGetter(ctx, c))
 		if err != nil {
 			return nil, err
 		}
@@ -62,9 +66,9 @@ func NewIPAMManager(c client.Reader) (IPAMManager, error) {
 	return manager, nil
 }
 
-func NetworkGetter(c client.Reader) allocator.NetworkGetter {
+func NetworkGetter(ctx context.Context, c client.Reader) allocator.NetworkGetter {
 	return func(networkName string) (*types.Network, error) {
-		network, err := utils.GetNetwork(c, networkName)
+		network, err := utils.GetNetwork(ctx, c, networkName)
 		if err != nil {
 			return nil, client.IgnoreNotFound(err)
 		}
@@ -73,9 +77,9 @@ func NetworkGetter(c client.Reader) allocator.NetworkGetter {
 	}
 }
 
-func SubnetGetter(c client.Reader) allocator.SubnetGetter {
+func SubnetGetter(ctx context.Context, c client.Reader) allocator.SubnetGetter {
 	return func(networkName string) ([]*types.Subnet, error) {
-		subnetList, err := utils.ListSubnets(c)
+		subnetList, err := utils.ListSubnets(ctx, c)
 		if err != nil {
 			return nil, err
 		}
@@ -91,9 +95,9 @@ func SubnetGetter(c client.Reader) allocator.SubnetGetter {
 	}
 }
 
-func IPSetGetter(c client.Reader) allocator.IPSetGetter {
+func IPSetGetter(ctx context.Context, c client.Reader) allocator.IPSetGetter {
 	return func(subnetName string) (ipamtypes.IPSet, error) {
-		ipList, err := utils.ListIPInstances(c, client.MatchingLabels{
+		ipList, err := utils.ListIPInstances(ctx, c, client.MatchingLabels{
 			constants.LabelSubnet: subnetName,
 		})
 		if err != nil {

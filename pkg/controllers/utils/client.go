@@ -29,25 +29,25 @@ import (
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 )
 
-func ListNetworks(client client.Reader, opts ...client.ListOption) (*networkingv1.NetworkList, error) {
+func ListNetworks(ctx context.Context, client client.Reader, opts ...client.ListOption) (*networkingv1.NetworkList, error) {
 	var networkList = networkingv1.NetworkList{}
-	if err := client.List(context.TODO(), &networkList, opts...); err != nil {
+	if err := client.List(ctx, &networkList, opts...); err != nil {
 		return nil, err
 	}
 	return &networkList, nil
 }
 
-func GetNetwork(client client.Reader, name string) (*networkingv1.Network, error) {
+func GetNetwork(ctx context.Context, client client.Reader, name string) (*networkingv1.Network, error) {
 	var network = networkingv1.Network{}
-	if err := client.Get(context.TODO(), types.NamespacedName{Name: name}, &network); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: name}, &network); err != nil {
 		return nil, err
 	}
 	return &network, nil
 }
 
-func GetPod(client client.Reader, name, namespace string) (*corev1.Pod, error) {
+func GetPod(ctx context.Context, client client.Reader, name, namespace string) (*corev1.Pod, error) {
 	var pod = corev1.Pod{}
-	if err := client.Get(context.TODO(), types.NamespacedName{
+	if err := client.Get(ctx, types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}, &pod); err != nil {
@@ -56,33 +56,33 @@ func GetPod(client client.Reader, name, namespace string) (*corev1.Pod, error) {
 	return &pod, nil
 }
 
-func ListSubnets(client client.Reader, opts ...client.ListOption) (*networkingv1.SubnetList, error) {
+func ListSubnets(ctx context.Context, client client.Reader, opts ...client.ListOption) (*networkingv1.SubnetList, error) {
 	var subnetList = networkingv1.SubnetList{}
-	if err := client.List(context.TODO(), &subnetList, opts...); err != nil {
+	if err := client.List(ctx, &subnetList, opts...); err != nil {
 		return nil, err
 	}
 	return &subnetList, nil
 }
 
-func GetSubnet(client client.Reader, name string) (*networkingv1.Subnet, error) {
+func GetSubnet(ctx context.Context, client client.Reader, name string) (*networkingv1.Subnet, error) {
 	var subnet = networkingv1.Subnet{}
-	if err := client.Get(context.TODO(), types.NamespacedName{Name: name}, &subnet); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: name}, &subnet); err != nil {
 		return nil, err
 	}
 	return &subnet, nil
 }
 
-func ListIPInstances(client client.Reader, opts ...client.ListOption) (*networkingv1.IPInstanceList, error) {
+func ListIPInstances(ctx context.Context, client client.Reader, opts ...client.ListOption) (*networkingv1.IPInstanceList, error) {
 	var ipList = networkingv1.IPInstanceList{}
-	if err := client.List(context.TODO(), &ipList, opts...); err != nil {
+	if err := client.List(ctx, &ipList, opts...); err != nil {
 		return nil, err
 	}
 	return &ipList, nil
 }
 
-func ListNodesToNames(client client.Reader, opts ...client.ListOption) ([]string, error) {
+func ListNodesToNames(ctx context.Context, client client.Reader, opts ...client.ListOption) ([]string, error) {
 	var nodeList = corev1.NodeList{}
-	if err := client.List(context.TODO(), &nodeList, opts...); err != nil {
+	if err := client.List(ctx, &nodeList, opts...); err != nil {
 		// TODO: handle error here
 		return nil, err
 	}
@@ -93,8 +93,8 @@ func ListNodesToNames(client client.Reader, opts ...client.ListOption) ([]string
 	return names, nil
 }
 
-func ListSubnetsToNames(client client.Reader, opts ...client.ListOption) ([]string, error) {
-	subnetList, err := ListSubnets(client, opts...)
+func ListSubnetsToNames(ctx context.Context, client client.Reader, opts ...client.ListOption) ([]string, error) {
+	subnetList, err := ListSubnets(ctx, client, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -106,49 +106,49 @@ func ListSubnetsToNames(client client.Reader, opts ...client.ListOption) ([]stri
 	return names, nil
 }
 
-func ListRemoteSubnets(client client.Reader, opts ...client.ListOption) (*multiclusterv1.RemoteSubnetList, error) {
+func ListRemoteSubnets(ctx context.Context, client client.Reader, opts ...client.ListOption) (*multiclusterv1.RemoteSubnetList, error) {
 	var remoteSubnetList = multiclusterv1.RemoteSubnetList{}
-	if err := client.List(context.TODO(), &remoteSubnetList, opts...); err != nil {
+	if err := client.List(ctx, &remoteSubnetList, opts...); err != nil {
 		return nil, err
 	}
 	return &remoteSubnetList, nil
 }
 
-func ListRemoteVteps(client client.Reader, opts ...client.ListOption) (*multiclusterv1.RemoteVtepList, error) {
+func ListRemoteVteps(ctx context.Context, client client.Reader, opts ...client.ListOption) (*multiclusterv1.RemoteVtepList, error) {
 	var remoteVtepList = multiclusterv1.RemoteVtepList{}
-	if err := client.List(context.TODO(), &remoteVtepList, opts...); err != nil {
+	if err := client.List(ctx, &remoteVtepList, opts...); err != nil {
 		return nil, err
 	}
 	return &remoteVtepList, nil
 }
 
-func ListRemoteClusters(client client.Reader, opts ...client.ListOption) (*multiclusterv1.RemoteClusterList, error) {
+func ListRemoteClusters(ctx context.Context, client client.Reader, opts ...client.ListOption) (*multiclusterv1.RemoteClusterList, error) {
 	var remoteClusterList = multiclusterv1.RemoteClusterList{}
-	if err := client.List(context.TODO(), &remoteClusterList, opts...); err != nil {
+	if err := client.List(ctx, &remoteClusterList, opts...); err != nil {
 		return nil, err
 	}
 	return &remoteClusterList, nil
 }
 
-func GetRemoteCluster(client client.Reader, name string) (*multiclusterv1.RemoteCluster, error) {
+func GetRemoteCluster(ctx context.Context, client client.Reader, name string) (*multiclusterv1.RemoteCluster, error) {
 	var remoteCluster = &multiclusterv1.RemoteCluster{}
-	if err := client.Get(context.TODO(), types.NamespacedName{Name: name}, remoteCluster); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: name}, remoteCluster); err != nil {
 		return nil, err
 	}
 	return remoteCluster, nil
 }
 
-func FindUnderlayNetworkForNodeName(client client.Reader, nodeName string) (underlayNetworkName string, err error) {
+func FindUnderlayNetworkForNodeName(ctx context.Context, client client.Reader, nodeName string) (underlayNetworkName string, err error) {
 	var node = &corev1.Node{}
-	if err = client.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node); err != nil {
+	if err = client.Get(ctx, types.NamespacedName{Name: nodeName}, node); err != nil {
 		return "", err
 	}
 
-	return FindUnderlayNetworkForNode(client, node.GetLabels())
+	return FindUnderlayNetworkForNode(ctx, client, node.GetLabels())
 }
 
-func FindUnderlayNetworkForNode(client client.Reader, nodeLabels map[string]string) (underlayNetworkName string, err error) {
-	networkList, err := ListNetworks(client)
+func FindUnderlayNetworkForNode(ctx context.Context, client client.Reader, nodeLabels map[string]string) (underlayNetworkName string, err error) {
+	networkList, err := ListNetworks(ctx, client)
 	if err != nil {
 		return "", err
 	}
@@ -165,8 +165,8 @@ func FindUnderlayNetworkForNode(client client.Reader, nodeLabels map[string]stri
 	return "", nil
 }
 
-func FindBGPUnderlayNetworkForNode(client client.Reader, nodeLabels map[string]string) (underlayNetworkName string, err error) {
-	networkList, err := ListNetworks(client)
+func FindBGPUnderlayNetworkForNode(ctx context.Context, client client.Reader, nodeLabels map[string]string) (underlayNetworkName string, err error) {
+	networkList, err := ListNetworks(ctx, client)
 	if err != nil {
 		return "", err
 	}
@@ -183,9 +183,9 @@ func FindBGPUnderlayNetworkForNode(client client.Reader, nodeLabels map[string]s
 	return "", nil
 }
 
-func FindOverlayNetwork(client client.Reader) (overlayNetworkName string, err error) {
+func FindOverlayNetwork(ctx context.Context, client client.Reader) (overlayNetworkName string, err error) {
 	var networkList *networkingv1.NetworkList
-	if networkList, err = ListNetworks(client); err != nil {
+	if networkList, err = ListNetworks(ctx, client); err != nil {
 		return
 	}
 
@@ -198,9 +198,9 @@ func FindOverlayNetwork(client client.Reader) (overlayNetworkName string, err er
 	return
 }
 
-func FindGlobalBGPNetwork(client client.Reader) (globalBGPNetworkName string, err error) {
+func FindGlobalBGPNetwork(ctx context.Context, client client.Reader) (globalBGPNetworkName string, err error) {
 	var networkList *networkingv1.NetworkList
-	if networkList, err = ListNetworks(client); err != nil {
+	if networkList, err = ListNetworks(ctx, client); err != nil {
 		return
 	}
 
@@ -213,8 +213,8 @@ func FindGlobalBGPNetwork(client client.Reader) (globalBGPNetworkName string, er
 	return
 }
 
-func FindOverlayNetworkNetID(client client.Reader) (*int32, error) {
-	networkList, err := ListNetworks(client)
+func FindOverlayNetworkNetID(ctx context.Context, client client.Reader) (*int32, error) {
+	networkList, err := ListNetworks(ctx, client)
 	if err != nil {
 		return nil, err
 	}
@@ -231,22 +231,22 @@ func FindOverlayNetworkNetID(client client.Reader) (*int32, error) {
 	return nil, fmt.Errorf("no overlay network found")
 }
 
-func DetectNetworkAttachmentOfNode(client client.Reader, node *corev1.Node) (underlayAttached, overlayAttached bool, err error) {
+func DetectNetworkAttachmentOfNode(ctx context.Context, client client.Reader, node *corev1.Node) (underlayAttached, overlayAttached bool, err error) {
 	var underlayNetworkName string
-	if underlayNetworkName, err = FindUnderlayNetworkForNode(client, node.GetLabels()); err != nil {
+	if underlayNetworkName, err = FindUnderlayNetworkForNode(ctx, client, node.GetLabels()); err != nil {
 		return
 	}
 	var overlayNetworkName string
-	if overlayNetworkName, err = FindOverlayNetwork(client); err != nil {
+	if overlayNetworkName, err = FindOverlayNetwork(ctx, client); err != nil {
 		return
 	}
 
 	return underlayNetworkName != "", overlayNetworkName != "", nil
 }
 
-func ListAllocatedIPInstancesOfPod(c client.Reader, pod *corev1.Pod) (ips []*networkingv1.IPInstance, err error) {
+func ListAllocatedIPInstancesOfPod(ctx context.Context, c client.Reader, pod *corev1.Pod) (ips []*networkingv1.IPInstance, err error) {
 	var ipList *networkingv1.IPInstanceList
-	if ipList, err = ListIPInstances(c, client.InNamespace(pod.Namespace)); err != nil {
+	if ipList, err = ListIPInstances(ctx, c, client.InNamespace(pod.Namespace)); err != nil {
 		return
 	}
 	for i := range ipList.Items {
@@ -259,8 +259,8 @@ func ListAllocatedIPInstancesOfPod(c client.Reader, pod *corev1.Pod) (ips []*net
 	return
 }
 
-func GetIPOfPod(c client.Reader, pod *corev1.Pod) (string, error) {
-	ipList, err := ListIPInstances(c, client.InNamespace(pod.Namespace))
+func GetIPOfPod(ctx context.Context, c client.Reader, pod *corev1.Pod) (string, error) {
+	ipList, err := ListIPInstances(ctx, c, client.InNamespace(pod.Namespace))
 	if err != nil {
 		return "", err
 	}
@@ -275,8 +275,8 @@ func GetIPOfPod(c client.Reader, pod *corev1.Pod) (string, error) {
 	return "", nil
 }
 
-func ListIPsOfPod(c client.Reader, pod *corev1.Pod) ([]string, error) {
-	ipList, err := ListIPInstances(c, client.InNamespace(pod.Namespace))
+func ListIPsOfPod(ctx context.Context, c client.Reader, pod *corev1.Pod) ([]string, error) {
+	ipList, err := ListIPInstances(ctx, c, client.InNamespace(pod.Namespace))
 	if err != nil {
 		return nil, err
 	}
@@ -297,9 +297,9 @@ func ListIPsOfPod(c client.Reader, pod *corev1.Pod) ([]string, error) {
 	return append(v4, v6...), nil
 }
 
-func GetClusterUUID(c client.Reader) (types.UID, error) {
+func GetClusterUUID(ctx context.Context, c client.Reader) (types.UID, error) {
 	var namespace = &corev1.Namespace{}
-	if err := c.Get(context.TODO(), types.NamespacedName{Name: "kube-system"}, namespace); err != nil {
+	if err := c.Get(ctx, types.NamespacedName{Name: "kube-system"}, namespace); err != nil {
 		return "", err
 	}
 	return namespace.UID, nil

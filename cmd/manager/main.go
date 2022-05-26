@@ -22,6 +22,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -37,7 +38,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/managerruntime"
 	zapinit "github.com/alibaba/hybridnet/pkg/zap"
-	"github.com/spf13/pflag"
 )
 
 var (
@@ -77,7 +77,7 @@ func main() {
 		"commit-id", gitCommit,
 		"controller-concurrency", controllerConcurrency)
 
-	signalContext := ctrl.SetupSignalHandler()
+	globalContext := ctrl.SetupSignalHandler()
 
 	clientConfig := ctrl.GetConfigOrDie()
 	clientConfig.QPS = clientQPS
@@ -110,14 +110,14 @@ func main() {
 	}
 
 	go func() {
-		if err := mgr.Start(signalContext); err != nil {
+		if err := mgr.Start(globalContext); err != nil {
 			entryLog.Error(err, "manager exit unexpectedly")
 			os.Exit(1)
 		}
 	}()
 
 	// wait for manager cache client ready
-	mgr.GetCache().WaitForCacheSync(signalContext)
+	mgr.GetCache().WaitForCacheSync(globalContext)
 
 	// run pre-start hooks
 	if err = errors.AggregateGoroutines(preStartHooks...); err != nil {
@@ -126,13 +126,13 @@ func main() {
 	}
 
 	// init IPAM manager and stort
-	ipamManager, err := networking.NewIPAMManager(mgr.GetClient())
+	ipamManager, err := networking.NewIPAMManager(globalContext, mgr.GetClient())
 	if err != nil {
 		entryLog.Error(err, "unable to create IPAM manager")
 		os.Exit(1)
 	}
 
-	podIPCache, err := networking.NewPodIPCache(mgr.GetClient(), ctrllog.Log.WithName("pod-ip-cache"))
+	podIPCache, err := networking.NewPodIPCache(globalContext, mgr.GetClient(), ctrllog.Log.WithName("pod-ip-cache"))
 	if err != nil {
 		entryLog.Error(err, "unable to create Pod IP cache")
 		os.Exit(1)
@@ -162,6 +162,7 @@ func main() {
 	}
 
 	if err = (&networking.NodeReconciler{
+		Context:               globalContext,
 		Client:                mgr.GetClient(),
 		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerNode]),
 	}).SetupWithManager(mgr); err != nil {
@@ -183,6 +184,7 @@ func main() {
 	}
 
 	if err = (&networking.NetworkStatusReconciler{
+		Context:               globalContext,
 		Client:                mgr.GetClient(),
 		IPAMManager:           ipamManager,
 		Recorder:              mgr.GetEventRecorderFor(networking.ControllerNetworkStatus + "Controller"),
@@ -213,15 +215,15 @@ func main() {
 	if feature.MultiClusterEnabled() {
 		clusterCheckEvent := make(chan multicluster.ClusterCheckEvent, 5)
 
-		uuidMutex, err := multicluster.NewUUIDMutexFromClient(mgr.GetClient())
+		uuidMutex, err := multicluster.NewUUIDMutexFromClient(globalContext, mgr.GetClient())
 		if err != nil {
 			entryLog.Error(err, "unable to create cluster UUID mutex")
 			os.Exit(1)
 		}
 
-		daemonHub := managerruntime.NewDaemonHub(signalContext)
+		daemonHub := managerruntime.NewDaemonHub(globalContext)
 
-		clusterStatusChecker, err := multicluster.InitClusterStatusChecker(mgr)
+		clusterStatusChecker, err := multicluster.InitClusterStatusChecker(globalContext, mgr)
 		if err != nil {
 			entryLog.Error(err, "unable to init cluster status checker")
 			os.Exit(1)
@@ -238,6 +240,7 @@ func main() {
 		}
 
 		if err = (&multicluster.RemoteClusterReconciler{
+			Context:               globalContext,
 			Client:                mgr.GetClient(),
 			Recorder:              mgr.GetEventRecorderFor(multicluster.ControllerRemoteCluster + "Controller"),
 			UUIDMutex:             uuidMutex,
@@ -264,5 +267,5 @@ func main() {
 		}
 	}
 
-	<-signalContext.Done()
+	<-globalContext.Done()
 }

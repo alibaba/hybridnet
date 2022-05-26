@@ -51,6 +51,7 @@ const (
 
 // NetworkStatusReconciler reconciles status of network objects
 type NetworkStatusReconciler struct {
+	context.Context
 	client.Client
 
 	IPAMManager IPAMManager
@@ -83,13 +84,14 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// update node list
 	networkStatus := &networkingv1.NetworkStatus{}
-	if networkStatus.NodeList, err = utils.ListNodesToNames(r, client.MatchingLabels(network.Spec.NodeSelector)); err != nil {
+	if networkStatus.NodeList, err = utils.ListNodesToNames(ctx, r, client.MatchingLabels(network.Spec.NodeSelector)); err != nil {
 		return ctrl.Result{}, wrapError("unable to update node list", err)
 	}
 	sort.Strings(networkStatus.NodeList)
 
 	// update subnet list
-	if networkStatus.SubnetList, err = utils.ListSubnetsToNames(r,
+	if networkStatus.SubnetList, err = utils.ListSubnetsToNames(ctx,
+		r,
 		client.MatchingFields{
 			IndexerFieldNetwork: network.GetName(),
 		},
@@ -234,7 +236,7 @@ func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) (err error)
 				if !ok {
 					return nil
 				}
-				underlayNetworkName, err := utils.FindUnderlayNetworkForNode(r, node.GetLabels())
+				underlayNetworkName, err := utils.FindUnderlayNetworkForNode(r.Context, r, node.GetLabels())
 				if err != nil {
 					// TODO: handle error
 					return nil
@@ -253,7 +255,10 @@ func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) (err error)
 			builder.WithPredicates(
 				&predicate.ResourceVersionChangedPredicate{},
 				&predicate.LabelChangedPredicate{},
-				&utils.NetworkOfNodeChangePredicate{Client: r},
+				&utils.NetworkOfNodeChangePredicate{
+					Context: r.Context,
+					Client:  r.Client,
+				},
 			)).
 		WithOptions(
 			controller.Options{

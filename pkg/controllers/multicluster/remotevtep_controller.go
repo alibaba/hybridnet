@@ -56,6 +56,7 @@ const indexerFieldNode = "node"
 
 // RemoteVtepReconciler reconciles a Node object to RemoveVtep in parent cluster
 type RemoteVtepReconciler struct {
+	context.Context
 	client.Client
 
 	ClusterName         string
@@ -162,7 +163,7 @@ func (r *RemoteVtepReconciler) cleanVTEPForNode(ctx context.Context, nodeName st
 }
 
 func (r *RemoteVtepReconciler) pickEndpointIPListForNode(ctx context.Context, nodeName string) ([]string, error) {
-	ipInstanceList, err := utils.ListIPInstances(r, client.MatchingFields{indexerFieldNode: nodeName})
+	ipInstanceList, err := utils.ListIPInstances(ctx, r, client.MatchingFields{indexerFieldNode: nodeName})
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +198,7 @@ func (r *RemoteVtepReconciler) pickEndpointIPListForNode(ctx context.Context, no
 // RefreshAll will trigger all nodes to reconcile,
 // this function should be called when recognized subnet set change
 func (r *RemoteVtepReconciler) RefreshAll() {
-	nodeNames, err := utils.ListNodesToNames(r)
+	nodeNames, err := utils.ListNodesToNames(r.Context, r.Client)
 	if err != nil {
 		return
 	}

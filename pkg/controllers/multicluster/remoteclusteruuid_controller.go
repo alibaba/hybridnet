@@ -89,7 +89,7 @@ func (r *RemoteClusterUUIDReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	var clusterUUID types.UID
-	if clusterUUID, err = utils.GetClusterUUID(remoteClusterClient); err != nil {
+	if clusterUUID, err = utils.GetClusterUUID(ctx, remoteClusterClient); err != nil {
 		r.Recorder.Event(remoteCluster, corev1.EventTypeWarning, "GetUUIDFail", err.Error())
 		return ctrl.Result{}, wrapError("unable to get UUID of remote cluster", err)
 	}

@@ -17,17 +17,17 @@
 package networking
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
 	"github.com/go-logr/logr"
-
-	"github.com/alibaba/hybridnet/pkg/utils"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	controllerutils "github.com/alibaba/hybridnet/pkg/controllers/utils"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 type PodIPCache interface {
@@ -53,7 +53,7 @@ type podIPCache struct {
 	logger logr.Logger
 }
 
-func NewPodIPCache(c client.Reader, logger logr.Logger) (PodIPCache, error) {
+func NewPodIPCache(ctx context.Context, c client.Reader, logger logr.Logger) (PodIPCache, error) {
 	cache := &podIPCache{
 		podToIP: map[string]*podAllocatedInfo{},
 		ipToPod: map[string]string{},
@@ -61,7 +61,7 @@ func NewPodIPCache(c client.Reader, logger logr.Logger) (PodIPCache, error) {
 		logger:  logger,
 	}
 
-	ipList, err := controllerutils.ListIPInstances(c)
+	ipList, err := controllerutils.ListIPInstances(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func NewPodIPCache(c client.Reader, logger logr.Logger) (PodIPCache, error) {
 				podUID = ip.Spec.Binding.PodUID
 			} else if !networkingv1.IsReserved(&ip) {
 				// TODO: no longer need to get pod if all the ip instances is updated to the v1.2 version
-				pod, err := controllerutils.GetPod(c, podName, ip.Namespace)
+				pod, err := controllerutils.GetPod(ctx, c, podName, ip.Namespace)
 				if err != nil {
 					if err = client.IgnoreNotFound(err); err != nil {
 						return nil, fmt.Errorf("unable to get Pod %v for IPInstance %v: %v", podName, ip.Name, err)

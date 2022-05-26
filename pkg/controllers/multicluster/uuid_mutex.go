@@ -17,6 +17,7 @@
 package multicluster
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -103,9 +104,9 @@ func NewUUIDMutex() UUIDMutex {
 	}
 }
 
-func NewUUIDMutexFromClient(c client.Reader) (UUIDMutex, error) {
+func NewUUIDMutexFromClient(ctx context.Context, c client.Reader) (UUIDMutex, error) {
 	mutex := NewUUIDMutex()
-	localUUID, err := utils.GetClusterUUID(c)
+	localUUID, err := utils.GetClusterUUID(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +114,7 @@ func NewUUIDMutexFromClient(c client.Reader) (UUIDMutex, error) {
 		return nil, err
 	}
 
-	remoteClusterList, err := utils.ListRemoteClusters(c)
+	remoteClusterList, err := utils.ListRemoteClusters(ctx, c)
 	if err != nil {
 		return nil, err
 	}
