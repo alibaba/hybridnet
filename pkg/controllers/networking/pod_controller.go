@@ -107,7 +107,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 
 	if pod.DeletionTimestamp != nil {
 		if strategy.OwnByStatefulWorkload(pod) {
-			if err = r.reserve(pod); err != nil {
+			if err = r.reserve(ctx, pod); err != nil {
 				return ctrl.Result{}, wrapError("unable to reserve pod", err)
 			}
 			return ctrl.Result{}, wrapError("unable to remote finalizer", r.removeFinalizer(ctx, pod))
@@ -131,7 +131,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		}
 	}
 
-	networkName, err = r.selectNetwork(pod)
+	networkName, err = r.selectNetwork(ctx, pod)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to select network: %v", err)
 	}
@@ -162,7 +162,7 @@ func (r *PodReconciler) decouple(pod *corev1.Pod) (err error) {
 }
 
 // reserve will reserve IP instances with Pod
-func (r *PodReconciler) reserve(pod *corev1.Pod) (err error) {
+func (r *PodReconciler) reserve(ctx context.Context, pod *corev1.Pod) (err error) {
 	var reserveFunc func(pod *corev1.Pod) (err error)
 	if feature.DualStackEnabled() {
 		reserveFunc = r.IPAMStore.DualStack().IPReserve
@@ -181,7 +181,7 @@ func (r *PodReconciler) reserve(pod *corev1.Pod) (err error) {
 // selectNetwork will pick the hit network by pod, taking the priority as below
 // 1. explicitly specify network in pod annotations/labels
 // 2. parse network type from pod and select a corresponding network binding on node
-func (r *PodReconciler) selectNetwork(pod *corev1.Pod) (string, error) {
+func (r *PodReconciler) selectNetwork(ctx context.Context, pod *corev1.Pod) (string, error) {
 	var specifiedNetwork string
 	if specifiedNetwork = globalutils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedNetwork], pod.Labels[constants.LabelSpecifiedNetwork]); len(specifiedNetwork) > 0 {
 		return specifiedNetwork, nil
@@ -191,7 +191,7 @@ func (r *PodReconciler) selectNetwork(pod *corev1.Pod) (string, error) {
 	switch networkType {
 	case types.Underlay:
 		// try to get underlay network by node indexer
-		underlayNetworkName, err := r.getNetworkByNodeNameIndexer(pod.Spec.NodeName)
+		underlayNetworkName, err := r.getNetworkByNodeNameIndexer(ctx, pod.Spec.NodeName)
 		if err != nil {
 			return "", fmt.Errorf("unable to get underlay network by node name indexer: %v", err)
 		}
@@ -206,7 +206,7 @@ func (r *PodReconciler) selectNetwork(pod *corev1.Pod) (string, error) {
 		return underlayNetworkName, nil
 	case types.Overlay:
 		// try to get overlay network by special node name
-		overlayNetworkName, err := r.getNetworkByNodeNameIndexer(OverlayNodeName)
+		overlayNetworkName, err := r.getNetworkByNodeNameIndexer(ctx, OverlayNodeName)
 		if err != nil {
 			return "", fmt.Errorf("unable to get overlay network by node name indexer: %v", err)
 		}
@@ -221,7 +221,7 @@ func (r *PodReconciler) selectNetwork(pod *corev1.Pod) (string, error) {
 		return overlayNetworkName, nil
 	case types.GlobalBGP:
 		// try to get global bgp network by special node name
-		globalBGPNetworkName, err := r.getNetworkByNodeNameIndexer(GlobalBGPNodeName)
+		globalBGPNetworkName, err := r.getNetworkByNodeNameIndexer(ctx, GlobalBGPNodeName)
 		if err != nil {
 			return "", fmt.Errorf("unable to get overlay network by node name indexer: %v", err)
 		}
@@ -239,10 +239,10 @@ func (r *PodReconciler) selectNetwork(pod *corev1.Pod) (string, error) {
 	}
 }
 
-func (r *PodReconciler) getNetworkByNodeNameIndexer(nodeName string) (string, error) {
+func (r *PodReconciler) getNetworkByNodeNameIndexer(ctx context.Context, nodeName string) (string, error) {
 	var networkList *networkingv1.NetworkList
 	var err error
-	if networkList, err = utils.ListNetworks(r, client.MatchingFields{IndexerFieldNode: nodeName}); err != nil {
+	if networkList, err = utils.ListNetworks(ctx, r, client.MatchingFields{IndexerFieldNode: nodeName}); err != nil {
 		return "", fmt.Errorf("unable to list network by indexer node name %v: %v", nodeName, err)
 	}
 
@@ -304,7 +304,7 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 			}
 		case shouldReallocate:
 			var allocatedIPs []*networkingv1.IPInstance
-			if allocatedIPs, err = utils.ListAllocatedIPInstancesOfPod(r, pod); err != nil {
+			if allocatedIPs, err = utils.ListAllocatedIPInstancesOfPod(ctx, r, pod); err != nil {
 				return err
 			}
 
@@ -318,7 +318,7 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 			// reallocate
 			return wrapError("unable to reallocate", r.allocate(ctx, pod, networkName))
 		default:
-			if ipCandidates, err = utils.ListIPsOfPod(r, pod); err != nil {
+			if ipCandidates, err = utils.ListIPsOfPod(ctx, r, pod); err != nil {
 				return err
 			}
 
@@ -348,7 +348,7 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 		}
 	case shouldReallocate:
 		var allocatedIPs []*networkingv1.IPInstance
-		if allocatedIPs, err = utils.ListAllocatedIPInstancesOfPod(r, pod); err != nil {
+		if allocatedIPs, err = utils.ListAllocatedIPInstancesOfPod(ctx, r, pod); err != nil {
 			return err
 		}
 
@@ -362,7 +362,7 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 		// reallocate
 		return wrapError("unable to reallocate", r.allocate(ctx, pod, networkName))
 	default:
-		ipCandidate, err = utils.GetIPOfPod(r, pod)
+		ipCandidate, err = utils.GetIPOfPod(ctx, r, pod)
 		if err != nil {
 			return err
 		}

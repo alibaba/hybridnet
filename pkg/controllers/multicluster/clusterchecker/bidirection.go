@@ -17,6 +17,7 @@
 package clusterchecker
 
 import (
+	"context"
 	"errors"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -31,8 +32,8 @@ type Bidirection struct {
 	LocalUUID types.UID
 }
 
-func (b *Bidirection) Check(clusterManager ctrl.Manager, opts ...Option) CheckResult {
-	remoteClusterList, err := utils.ListRemoteClusters(clusterManager.GetAPIReader())
+func (b *Bidirection) Check(ctx context.Context, clusterManager ctrl.Manager, opts ...Option) CheckResult {
+	remoteClusterList, err := utils.ListRemoteClusters(ctx, clusterManager.GetAPIReader())
 	if err != nil {
 		return NewResult(err)
 	}

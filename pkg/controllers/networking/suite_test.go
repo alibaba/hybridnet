@@ -36,10 +36,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -111,12 +112,12 @@ var _ = BeforeSuite(func() {
 	Expect(errors.AggregateGoroutines(preStartHooks...)).ToNot(HaveOccurred())
 
 	// init IPAM manager and stort
-	ipamManager, err := networking.NewIPAMManager(mgr.GetClient())
+	ipamManager, err := networking.NewIPAMManager(context.TODO(), mgr.GetClient())
 	if err != nil {
 		os.Exit(1)
 	}
 
-	podIPCache, err := networking.NewPodIPCache(mgr.GetClient(), ctrl.Log.WithName("pod-ip-cache"))
+	podIPCache, err := networking.NewPodIPCache(context.TODO(), mgr.GetClient(), ctrl.Log.WithName("pod-ip-cache"))
 	Expect(err).ToNot(HaveOccurred())
 
 	ipamStore := networking.NewIPAMStore(mgr.GetClient())
@@ -137,6 +138,7 @@ var _ = BeforeSuite(func() {
 	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
 
 	Expect((&networking.NodeReconciler{
+		Context:               context.TODO(),
 		Client:                mgr.GetClient(),
 		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerNode]),
 	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
@@ -152,6 +154,7 @@ var _ = BeforeSuite(func() {
 	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
 
 	Expect((&networking.NetworkStatusReconciler{
+		Context:               context.TODO(),
 		Client:                mgr.GetClient(),
 		IPAMManager:           ipamManager,
 		Recorder:              &record.FakeRecorder{},

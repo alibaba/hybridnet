@@ -29,7 +29,7 @@ const HealthzCheckName = "HealthProbe"
 
 type Healthz struct{}
 
-func (h *Healthz) Check(clusterManager ctrl.Manager, opts ...Option) CheckResult {
+func (h *Healthz) Check(ctx context.Context, clusterManager ctrl.Manager, opts ...Option) CheckResult {
 	client, err := discovery.NewDiscoveryClientForConfig(clusterManager.GetConfig())
 	if err != nil {
 		return NewResult(err)

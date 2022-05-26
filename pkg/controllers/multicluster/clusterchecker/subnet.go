@@ -17,6 +17,7 @@
 package clusterchecker
 
 import (
+	"context"
 	"fmt"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,19 +34,19 @@ type Subnet struct {
 	LocalClient client.Client
 }
 
-func (o *Subnet) Check(clusterManager ctrl.Manager, opts ...Option) CheckResult {
+func (o *Subnet) Check(ctx context.Context, clusterManager ctrl.Manager, opts ...Option) CheckResult {
 	options := ToOptions(opts...)
 
-	subnetsOfCluster, err := clientutils.ListSubnets(clusterManager.GetAPIReader())
+	subnetsOfCluster, err := clientutils.ListSubnets(ctx, clusterManager.GetAPIReader())
 	if err != nil {
 		return NewResult(err)
 	}
 
-	localSubnets, err := clientutils.ListSubnets(o.LocalClient)
+	localSubnets, err := clientutils.ListSubnets(ctx, o.LocalClient)
 	if err != nil {
 		return NewResult(err)
 	}
-	localRemoteSubnets, err := clientutils.ListRemoteSubnets(o.LocalClient)
+	localRemoteSubnets, err := clientutils.ListRemoteSubnets(ctx, o.LocalClient)
 	if err != nil {
 		return NewResult(err)
 	}

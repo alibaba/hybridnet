@@ -17,6 +17,7 @@
 package clusterchecker
 
 import (
+	"context"
 	"fmt"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -31,13 +32,13 @@ type OverlayNetID struct {
 	LocalClient client.Client
 }
 
-func (o *OverlayNetID) Check(clusterManager ctrl.Manager, opts ...Option) CheckResult {
-	localOverlayNetID, err := utils.FindOverlayNetworkNetID(o.LocalClient)
+func (o *OverlayNetID) Check(ctx context.Context, clusterManager ctrl.Manager, opts ...Option) CheckResult {
+	localOverlayNetID, err := utils.FindOverlayNetworkNetID(ctx, o.LocalClient)
 	if err != nil {
 		return NewResult(fmt.Errorf("unable to find overlay net ID of local cluster: %v", err))
 	}
 
-	remoteOverlayNetID, err := utils.FindOverlayNetworkNetID(clusterManager.GetAPIReader())
+	remoteOverlayNetID, err := utils.FindOverlayNetworkNetID(ctx, clusterManager.GetAPIReader())
 	if err != nil {
 		return NewResult(fmt.Errorf("unable to find overlay net ID of remote cluster: %v", err))
 	}

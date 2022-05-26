@@ -82,7 +82,7 @@ func (r *RemoteClusterStatusChecker) Start(ctx context.Context) error {
 func (r *RemoteClusterStatusChecker) crontab(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 
-	remoteClusterList, err := utils.ListRemoteClusters(r)
+	remoteClusterList, err := utils.ListRemoteClusters(ctx, r)
 	if err != nil {
 		r.Logger.Error(err, "unable to fetch remote clusters")
 		return
@@ -111,7 +111,7 @@ func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, nam
 		metrics.RemoteClusterStatusCheckDuration.WithLabelValues(name).Observe(time.Since(start).Seconds())
 	}()
 
-	remoteCluster, err := utils.GetRemoteCluster(r, name)
+	remoteCluster, err := utils.GetRemoteCluster(ctx, r, name)
 	if err != nil {
 		// TODO: handle fetch error here
 		return
@@ -160,7 +160,7 @@ func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, nam
 			}
 		}()
 
-		results, err := r.Checker.CheckAll(managerRuntime.Manager(), clusterchecker.ClusterName(name))
+		results, err := r.Checker.CheckAll(ctx, managerRuntime.Manager(), clusterchecker.ClusterName(name))
 		if err != nil {
 			remoteCluster.Status.State = multiclusterv1.ClusterNotReady
 			fillCondition(&remoteCluster.Status, &metav1.Condition{

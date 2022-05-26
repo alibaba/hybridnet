@@ -17,6 +17,7 @@
 package utils
 
 import (
+	"context"
 	"reflect"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -121,17 +122,18 @@ func (SubnetSpecChangePredicate) Update(e event.UpdateEvent) bool {
 }
 
 type NetworkOfNodeChangePredicate struct {
-	Client client.Client
+	Context context.Context
+	Client  client.Client
 	predicate.Funcs
 }
 
 func (n NetworkOfNodeChangePredicate) Update(e event.UpdateEvent) bool {
-	oldNetwork, err := FindUnderlayNetworkForNode(n.Client, e.ObjectOld.GetLabels())
+	oldNetwork, err := FindUnderlayNetworkForNode(n.Context, n.Client, e.ObjectOld.GetLabels())
 	if err != nil {
 		// TODO: log here
 		return true
 	}
-	newNetwork, err := FindUnderlayNetworkForNode(n.Client, e.ObjectNew.GetLabels())
+	newNetwork, err := FindUnderlayNetworkForNode(n.Context, n.Client, e.ObjectNew.GetLabels())
 	if err != nil {
 		// TODO: log here
 		return true

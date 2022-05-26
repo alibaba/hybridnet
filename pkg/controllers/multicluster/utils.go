@@ -17,6 +17,7 @@
 package multicluster
 
 import (
+	"context"
 	"fmt"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -25,8 +26,8 @@ import (
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 )
 
-func InitClusterStatusChecker(mgr ctrl.Manager) (clusterchecker.Checker, error) {
-	clusterUUID, err := utils.GetClusterUUID(mgr.GetClient())
+func InitClusterStatusChecker(ctx context.Context, mgr ctrl.Manager) (clusterchecker.Checker, error) {
+	clusterUUID, err := utils.GetClusterUUID(ctx, mgr.GetClient())
 	if err != nil {
 		return nil, fmt.Errorf("unable to get cluster UUID: %v", err)
 	}
