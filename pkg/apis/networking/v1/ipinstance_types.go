@@ -87,8 +87,8 @@ type IPInstanceStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.spec.address.ip`
 // +kubebuilder:printcolumn:name="Gateway",type=string,JSONPath=`.spec.address.gateway`
-// +kubebuilder:printcolumn:name="PodName",type=string,JSONPath=`.status.podName`
-// +kubebuilder:printcolumn:name="Node",type=string,JSONPath=`.status.nodeName`
+// +kubebuilder:printcolumn:name="PodName",type=string,JSONPath=`.spec.binding.podName`
+// +kubebuilder:printcolumn:name="Node",type=string,JSONPath=`.spec.binding.nodeName`
 // +kubebuilder:printcolumn:name="Subnet",type=string,JSONPath=`.spec.subnet`
 // +kubebuilder:printcolumn:name="Network",type=string,JSONPath=`.spec.network`
 
