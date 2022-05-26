@@ -49,19 +49,19 @@ func NewWorker(client client.Client) *Worker {
 	}
 }
 
-func (w *Worker) Couple(pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
-	_, err = w.createIP(pod, ip)
+func (w *Worker) Couple(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
+	_, err = w.createIP(ctx, pod, ip)
 	return
 }
 
-func (w *Worker) ReCouple(pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
-	_, err = w.createOrUpdateIPWithMac(pod, ip, "")
+func (w *Worker) ReCouple(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
+	_, err = w.createOrUpdateIPWithMac(ctx, pod, ip, "")
 	return
 }
 
-func (w *Worker) DeCouple(pod *corev1.Pod) (err error) {
+func (w *Worker) DeCouple(ctx context.Context, pod *corev1.Pod) (err error) {
 	var ipInstanceList = &networkingv1.IPInstanceList{}
-	if err = w.List(context.TODO(),
+	if err = w.List(ctx,
 		ipInstanceList,
 		client.MatchingLabels{
 			constants.LabelPod: pod.Name,
@@ -75,16 +75,16 @@ func (w *Worker) DeCouple(pod *corev1.Pod) (err error) {
 	for i := range ipInstanceList.Items {
 		var ipInstanceName = ipInstanceList.Items[i].Name
 		deleteFuncs = append(deleteFuncs, func() error {
-			return w.deleteIP(pod.Namespace, ipInstanceName)
+			return w.deleteIP(ctx, pod.Namespace, ipInstanceName)
 		})
 	}
 
 	return errors.AggregateGoroutines(deleteFuncs...)
 }
 
-func (w *Worker) IPReserve(pod *corev1.Pod) (err error) {
+func (w *Worker) IPReserve(ctx context.Context, pod *corev1.Pod) (err error) {
 	var ipInstanceList = &networkingv1.IPInstanceList{}
-	if err = w.List(context.TODO(),
+	if err = w.List(ctx,
 		ipInstanceList,
 		client.MatchingLabels{
 			constants.LabelPod: pod.Name,
@@ -98,7 +98,7 @@ func (w *Worker) IPReserve(pod *corev1.Pod) (err error) {
 	for i := range ipInstanceList.Items {
 		var ipIns = &ipInstanceList.Items[i]
 		reserveFuncs = append(reserveFuncs, func() error {
-			_, err := controllerutil.CreateOrPatch(context.TODO(), w, ipIns, func() error {
+			_, err := controllerutil.CreateOrPatch(ctx, w, ipIns, func() error {
 				reserveIPInstance(ipIns)
 				return nil
 			})
@@ -109,14 +109,14 @@ func (w *Worker) IPReserve(pod *corev1.Pod) (err error) {
 	return errors.AggregateGoroutines(reserveFuncs...)
 }
 
-func (w *Worker) IPRecycle(namespace string, ip *ipamtypes.IP) (err error) {
-	return w.deleteIP(namespace, toDNSLabelFormat(ip))
+func (w *Worker) IPRecycle(ctx context.Context, namespace string, ip *ipamtypes.IP) (err error) {
+	return w.deleteIP(ctx, namespace, toDNSLabelFormat(ip))
 }
 
-func (w *Worker) IPUnBind(namespace, ip string) (err error) {
+func (w *Worker) IPUnBind(ctx context.Context, namespace, ip string) (err error) {
 	patchBody := `{"metadata":{"finalizers":null}}`
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		return w.Patch(context.TODO(),
+		return w.Patch(ctx,
 			&networkingv1.IPInstance{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: namespace,
@@ -131,11 +131,11 @@ func (w *Worker) IPUnBind(namespace, ip string) (err error) {
 	})
 }
 
-func (w *Worker) createIP(pod *corev1.Pod, ip *ipamtypes.IP) (ipIns *networkingv1.IPInstance, err error) {
-	return w.createIPWithMAC(pod, ip, mac.GenerateMAC().String())
+func (w *Worker) createIP(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP) (ipIns *networkingv1.IPInstance, err error) {
+	return w.createIPWithMAC(ctx, pod, ip, mac.GenerateMAC().String())
 }
 
-func (w *Worker) createIPWithMAC(pod *corev1.Pod, ip *ipamtypes.IP, macAddr string) (ipIns *networkingv1.IPInstance, err error) {
+func (w *Worker) createIPWithMAC(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP, macAddr string) (ipIns *networkingv1.IPInstance, err error) {
 	ipInstance := &networkingv1.IPInstance{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      toDNSLabelFormat(ip),
@@ -145,10 +145,10 @@ func (w *Worker) createIPWithMAC(pod *corev1.Pod, ip *ipamtypes.IP, macAddr stri
 
 	fillIPInstance(ipInstance, ip, pod, macAddr)
 
-	return ipInstance, w.Create(context.TODO(), ipInstance)
+	return ipInstance, w.Create(ctx, ipInstance)
 }
 
-func (w *Worker) createOrUpdateIPWithMac(pod *corev1.Pod, ip *ipamtypes.IP, macAddr string) (ipIns *networkingv1.IPInstance, err error) {
+func (w *Worker) createOrUpdateIPWithMac(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP, macAddr string) (ipIns *networkingv1.IPInstance, err error) {
 	var ipInstance = &networkingv1.IPInstance{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      toDNSLabelFormat(ip),
@@ -156,7 +156,7 @@ func (w *Worker) createOrUpdateIPWithMac(pod *corev1.Pod, ip *ipamtypes.IP, macA
 		},
 	}
 
-	_, err = controllerutil.CreateOrPatch(context.TODO(), w, ipInstance, func() error {
+	_, err = controllerutil.CreateOrPatch(ctx, w, ipInstance, func() error {
 		if !ipInstance.DeletionTimestamp.IsZero() {
 			return fmt.Errorf("ip instance %s/%s is deleting, can not be updated", ipInstance.Namespace, ipInstance.Name)
 		}
@@ -240,8 +240,8 @@ func reserveIPInstance(ipIns *networkingv1.IPInstance) {
 	// TODO: clean status
 }
 
-func (w *Worker) deleteIP(namespace, name string) error {
-	return w.Delete(context.TODO(), &networkingv1.IPInstance{
+func (w *Worker) deleteIP(ctx context.Context, namespace, name string) error {
+	return w.Delete(ctx, &networkingv1.IPInstance{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace,
 			Name:      name,
@@ -249,9 +249,9 @@ func (w *Worker) deleteIP(namespace, name string) error {
 	})
 }
 
-func (w *Worker) getIP(namespace string, ip *ipamtypes.IP) (*networkingv1.IPInstance, error) {
+func (w *Worker) getIP(ctx context.Context, namespace string, ip *ipamtypes.IP) (*networkingv1.IPInstance, error) {
 	var ipInstance = &networkingv1.IPInstance{}
-	if err := w.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: toDNSLabelFormat(ip)}, ipInstance); err != nil {
+	if err := w.Get(ctx, types.NamespacedName{Namespace: namespace, Name: toDNSLabelFormat(ip)}, ipInstance); err != nil {
 		return nil, err
 	}
 	return ipInstance, nil

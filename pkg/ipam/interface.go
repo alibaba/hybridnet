@@ -17,6 +17,8 @@
 package ipam
 
 import (
+	"context"
+
 	v1 "k8s.io/api/core/v1"
 
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
@@ -59,21 +61,21 @@ type DualStackUsage interface {
 }
 
 type Store interface {
-	Couple(pod *v1.Pod, ip *types.IP) (err error)
-	ReCouple(pod *v1.Pod, ip *types.IP) (err error)
-	DeCouple(pod *v1.Pod) (err error)
-	IPReserve(pod *v1.Pod) (err error)
-	IPRecycle(namespace string, ip *types.IP) (err error)
-	IPUnBind(namespace, ip string) (err error)
+	Couple(ctx context.Context, pod *v1.Pod, ip *types.IP) (err error)
+	ReCouple(ctx context.Context, pod *v1.Pod, ip *types.IP) (err error)
+	DeCouple(ctx context.Context, pod *v1.Pod) (err error)
+	IPReserve(ctx context.Context, pod *v1.Pod) (err error)
+	IPRecycle(ctx context.Context, namespace string, ip *types.IP) (err error)
+	IPUnBind(ctx context.Context, namespace, ip string) (err error)
 }
 
 type DualStackStore interface {
-	Couple(pod *v1.Pod, IPs []*types.IP) (err error)
-	ReCouple(pod *v1.Pod, IPs []*types.IP) (err error)
-	DeCouple(pod *v1.Pod) (err error)
-	IPReserve(pod *v1.Pod) (err error)
-	IPRecycle(namespace string, ip *types.IP) (err error)
-	IPUnBind(namespace, ip string) (err error)
+	Couple(ctx context.Context, pod *v1.Pod, IPs []*types.IP) (err error)
+	ReCouple(ctx context.Context, pod *v1.Pod, IPs []*types.IP) (err error)
+	DeCouple(ctx context.Context, pod *v1.Pod) (err error)
+	IPReserve(ctx context.Context, pod *v1.Pod) (err error)
+	IPRecycle(ctx context.Context, namespace string, ip *types.IP) (err error)
+	IPUnBind(ctx context.Context, namespace, ip string) (err error)
 }
 
 type NetworkInterface interface {
