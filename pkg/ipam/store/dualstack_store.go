@@ -17,6 +17,8 @@
 package store
 
 import (
+	"context"
+
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -39,12 +41,12 @@ func NewDualStackWorker(c client.Client) *DualStackWorker {
 	}
 }
 
-func (d *DualStackWorker) Couple(pod *v1.Pod, IPs []*types.IP) (err error) {
+func (d *DualStackWorker) Couple(ctx context.Context, pod *v1.Pod, IPs []*types.IP) (err error) {
 	var createdNames []string
 	defer func() {
 		if err != nil {
 			for _, name := range createdNames {
-				_ = d.worker.deleteIP(pod.Namespace, name)
+				_ = d.worker.deleteIP(ctx, pod.Namespace, name)
 			}
 		}
 	}()
@@ -52,7 +54,7 @@ func (d *DualStackWorker) Couple(pod *v1.Pod, IPs []*types.IP) (err error) {
 	var globalMac = mac.GenerateMAC().String()
 	for _, ip := range IPs {
 		var ipIns *networkingv1.IPInstance
-		if ipIns, err = d.worker.createIPWithMAC(pod, ip, globalMac); err != nil {
+		if ipIns, err = d.worker.createIPWithMAC(ctx, pod, ip, globalMac); err != nil {
 			return err
 		}
 		createdNames = append(createdNames, ipIns.Name)
@@ -61,11 +63,11 @@ func (d *DualStackWorker) Couple(pod *v1.Pod, IPs []*types.IP) (err error) {
 	return nil
 }
 
-func (d *DualStackWorker) ReCouple(pod *v1.Pod, IPs []*types.IP) (err error) {
+func (d *DualStackWorker) ReCouple(ctx context.Context, pod *v1.Pod, IPs []*types.IP) (err error) {
 	var globalMac = mac.GenerateMAC().String()
 	for _, ip := range IPs {
 		var ipIns *networkingv1.IPInstance
-		if ipIns, err = d.worker.getIP(pod.Namespace, ip); err != nil {
+		if ipIns, err = d.worker.getIP(ctx, pod.Namespace, ip); err != nil {
 			// ignore the not-found error
 			if err = client.IgnoreNotFound(err); err == nil {
 				continue
@@ -79,7 +81,7 @@ func (d *DualStackWorker) ReCouple(pod *v1.Pod, IPs []*types.IP) (err error) {
 	}
 
 	for _, ip := range IPs {
-		if _, err = d.worker.createOrUpdateIPWithMac(pod, ip, globalMac); err != nil {
+		if _, err = d.worker.createOrUpdateIPWithMac(ctx, pod, ip, globalMac); err != nil {
 			return
 		}
 	}
@@ -87,18 +89,18 @@ func (d *DualStackWorker) ReCouple(pod *v1.Pod, IPs []*types.IP) (err error) {
 	return
 }
 
-func (d *DualStackWorker) DeCouple(pod *v1.Pod) (err error) {
-	return d.worker.DeCouple(pod)
+func (d *DualStackWorker) DeCouple(ctx context.Context, pod *v1.Pod) (err error) {
+	return d.worker.DeCouple(ctx, pod)
 }
 
-func (d *DualStackWorker) IPReserve(pod *v1.Pod) (err error) {
-	return d.worker.IPReserve(pod)
+func (d *DualStackWorker) IPReserve(ctx context.Context, pod *v1.Pod) (err error) {
+	return d.worker.IPReserve(ctx, pod)
 }
 
-func (d *DualStackWorker) IPRecycle(namespace string, ip *types.IP) (err error) {
-	return d.worker.IPRecycle(namespace, ip)
+func (d *DualStackWorker) IPRecycle(ctx context.Context, namespace string, ip *types.IP) (err error) {
+	return d.worker.IPRecycle(ctx, namespace, ip)
 }
 
-func (d *DualStackWorker) IPUnBind(namespace, ip string) (err error) {
-	return d.worker.IPUnBind(namespace, ip)
+func (d *DualStackWorker) IPUnBind(ctx context.Context, namespace, ip string) (err error) {
+	return d.worker.IPUnBind(ctx, namespace, ip)
 }

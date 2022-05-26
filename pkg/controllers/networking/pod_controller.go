@@ -117,7 +117,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 
 	// Pre decouple ip instances for completed or evicted pods
 	if utils.PodIsEvicted(pod) || utils.PodIsCompleted(pod) {
-		return ctrl.Result{}, wrapError("unable to decouple pod", r.decouple(pod))
+		return ctrl.Result{}, wrapError("unable to decouple pod", r.decouple(ctx, pod))
 	}
 
 	cacheExist, uid, ipInstanceList := r.PodIPCache.Get(pod.Name, pod.Namespace)
@@ -145,15 +145,15 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 }
 
 // decouple will unbind IP instance with Pod
-func (r *PodReconciler) decouple(pod *corev1.Pod) (err error) {
-	var decoupleFunc func(pod *corev1.Pod) (err error)
+func (r *PodReconciler) decouple(ctx context.Context, pod *corev1.Pod) (err error) {
+	var decoupleFunc func(ctx context.Context, pod *corev1.Pod) (err error)
 	if feature.DualStackEnabled() {
 		decoupleFunc = r.IPAMStore.DualStack().DeCouple
 	} else {
 		decoupleFunc = r.IPAMStore.DeCouple
 	}
 
-	if err = decoupleFunc(pod); err != nil {
+	if err = decoupleFunc(ctx, pod); err != nil {
 		return fmt.Errorf("unable to decouple ips for pod %s: %v", client.ObjectKeyFromObject(pod).String(), err)
 	}
 
@@ -163,14 +163,14 @@ func (r *PodReconciler) decouple(pod *corev1.Pod) (err error) {
 
 // reserve will reserve IP instances with Pod
 func (r *PodReconciler) reserve(ctx context.Context, pod *corev1.Pod) (err error) {
-	var reserveFunc func(pod *corev1.Pod) (err error)
+	var reserveFunc func(ctx context.Context, pod *corev1.Pod) (err error)
 	if feature.DualStackEnabled() {
 		reserveFunc = r.IPAMStore.DualStack().IPReserve
 	} else {
 		reserveFunc = r.IPAMStore.IPReserve
 	}
 
-	if err = reserveFunc(pod); err != nil {
+	if err = reserveFunc(ctx, pod); err != nil {
 		return fmt.Errorf("unable to reserve ips for pod: %v", err)
 	}
 
@@ -380,7 +380,7 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 
 // release will release IP instances of pod
 func (r *PodReconciler) release(ctx context.Context, pod *corev1.Pod, allocatedIPs []*types.IP) (err error) {
-	var recycleFunc func(namespace string, ip *types.IP) (err error)
+	var recycleFunc func(ctx context.Context, namespace string, ip *types.IP) (err error)
 	if feature.DualStackEnabled() {
 		recycleFunc = r.IPAMStore.DualStack().IPRecycle
 	} else {
@@ -388,7 +388,7 @@ func (r *PodReconciler) release(ctx context.Context, pod *corev1.Pod, allocatedI
 	}
 
 	for _, ip := range allocatedIPs {
-		if err = recycleFunc(pod.Namespace, ip); err != nil {
+		if err = recycleFunc(ctx, pod.Namespace, ip); err != nil {
 			return fmt.Errorf("unable to recycle ip %v: %v", ip, err)
 		}
 	}
@@ -424,7 +424,7 @@ func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkNa
 			}
 		}()
 
-		if err = r.IPAMStore.DualStack().Couple(pod, ips); err != nil {
+		if err = r.IPAMStore.DualStack().Couple(ctx, pod, ips); err != nil {
 			return fmt.Errorf("unable to couple IPs with pod: %v", err)
 		}
 
@@ -453,7 +453,7 @@ func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkNa
 		}
 	}()
 
-	if err = r.IPAMStore.Couple(pod, ip); err != nil {
+	if err = r.IPAMStore.Couple(ctx, pod, ip); err != nil {
 		return fmt.Errorf("unable to couple ip with pod: %v", err)
 	}
 
@@ -478,7 +478,7 @@ func (r *PodReconciler) assign(ctx context.Context, pod *corev1.Pod, networkName
 		}
 	}()
 
-	if err = r.IPAMStore.ReCouple(pod, ip); err != nil {
+	if err = r.IPAMStore.ReCouple(ctx, pod, ip); err != nil {
 		return fmt.Errorf("unable to force-couple ip with pod: %v", err)
 	}
 
@@ -501,7 +501,7 @@ func (r *PodReconciler) multiAssign(ctx context.Context, pod *corev1.Pod, networ
 		}
 	}()
 
-	if err = r.IPAMStore.DualStack().ReCouple(pod, IPs); err != nil {
+	if err = r.IPAMStore.DualStack().ReCouple(ctx, pod, IPs); err != nil {
 		return fmt.Errorf("fail to force-couple ips %+v with pod: %v", IPs, err)
 	}
 

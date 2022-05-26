@@ -64,7 +64,7 @@ func (r *IPInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		r.PodIPCache.Release(ip.Name, ip.Namespace)
 
-		if err = r.releaseIP(&ip); err != nil {
+		if err = r.releaseIP(ctx, &ip); err != nil {
 			return ctrl.Result{}, wrapError("unable to release IPInstance", err)
 		}
 	}
@@ -72,7 +72,7 @@ func (r *IPInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return ctrl.Result{}, nil
 }
 
-func (r *IPInstanceReconciler) releaseIP(ipInstance *networkingv1.IPInstance) (err error) {
+func (r *IPInstanceReconciler) releaseIP(ctx context.Context, ipInstance *networkingv1.IPInstance) (err error) {
 	if feature.DualStackEnabled() {
 		if err = r.IPAMManager.DualStack().Release(utils.ToIPFamilyMode(networkingv1.IsIPv6IPInstance(ipInstance)),
 			ipInstance.Spec.Network,
@@ -85,14 +85,14 @@ func (r *IPInstanceReconciler) releaseIP(ipInstance *networkingv1.IPInstance) (e
 		); err != nil {
 			return err
 		}
-		if err = r.IPAMStore.DualStack().IPUnBind(ipInstance.Namespace, ipInstance.Name); err != nil {
+		if err = r.IPAMStore.DualStack().IPUnBind(ctx, ipInstance.Namespace, ipInstance.Name); err != nil {
 			return err
 		}
 	} else {
 		if err = r.IPAMManager.Release(ipInstance.Spec.Network, ipInstance.Spec.Subnet, utils.ToIPFormat(ipInstance.Name)); err != nil {
 			return err
 		}
-		if err = r.IPAMStore.IPUnBind(ipInstance.Namespace, ipInstance.Name); err != nil {
+		if err = r.IPAMStore.IPUnBind(ctx, ipInstance.Namespace, ipInstance.Name); err != nil {
 			return err
 		}
 	}
