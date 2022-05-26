@@ -20,6 +20,12 @@ spec:
     - jsonPath: .spec.netID
       name: NetID
       type: integer
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
     name: v1
     schema:
       openAPIV3Schema:
@@ -70,9 +76,6 @@ spec:
                 additionalProperties:
                   type: string
                 type: object
-              switchID:
-                description: Deprecated, will be removed in v0.5.0
-                type: string
               type:
                 type: string
             type: object

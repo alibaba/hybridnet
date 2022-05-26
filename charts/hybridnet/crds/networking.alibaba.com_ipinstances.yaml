@@ -23,10 +23,10 @@ spec:
     - jsonPath: .spec.address.gateway
       name: Gateway
       type: string
-    - jsonPath: .status.podName
+    - jsonPath: .spec.binding.podName
       name: PodName
       type: string
-    - jsonPath: .status.nodeName
+    - jsonPath: .spec.binding.nodeName
       name: Node
       type: string
     - jsonPath: .spec.subnet
