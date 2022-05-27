@@ -22,5 +22,5 @@ annotations:
   artifacthub.io/prerelease: "false"
   # List of changes for the release in artifacthub.io
   artifacthub.io/changes: |
-    - "fix the error that nodes get "empty" quota while the Underlay Network still have available addresses to allocate"
-    - "fix daemon policy container exit with ip6tables-legacy-save error"
+    - "fix the error that nodes get empty quota while the Underlay Network still have available addresses to allocate"
+    - "fix the error that daemon policy container exit on a ipv6 disabled node"
