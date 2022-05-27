@@ -19,7 +19,6 @@ package networking_test
 import (
 	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,9 +34,6 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var _ = Describe("Network status test", func() {
-	const timeout = time.Second * 10
-	const interval = time.Microsecond * 500
-
 	It("Node list update", func() {
 		By("Expecting to have two node fo underlay network status")
 		Eventually(func() error {

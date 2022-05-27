@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/alibaba/hybridnet/pkg/controllers/networking"
 
@@ -52,6 +53,11 @@ var (
 	testEnv   *envtest.Environment
 
 	controllerConcurrency map[string]int
+)
+
+const (
+	timeout  = time.Second * 30
+	interval = time.Second * 1
 )
 
 func TestAPIs(t *testing.T) {
