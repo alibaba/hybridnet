@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
@@ -82,9 +83,17 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, wrapError("unable to fetch Network", client.IgnoreNotFound(err))
 	}
 
+	nodeSelector := network.Spec.NodeSelector
+	switch networkingv1.GetNetworkType(network) {
+	case networkingv1.NetworkTypeGlobalBGP:
+		nodeSelector = map[string]string{
+			constants.LabelBGPNetworkAttachment: constants.Attached,
+		}
+	}
+
 	// update node list
 	networkStatus := &networkingv1.NetworkStatus{}
-	if networkStatus.NodeList, err = utils.ListNodesToNames(ctx, r, client.MatchingLabels(network.Spec.NodeSelector)); err != nil {
+	if networkStatus.NodeList, err = utils.ListNodesToNames(ctx, r, client.MatchingLabels(nodeSelector)); err != nil {
 		return ctrl.Result{}, wrapError("unable to update node list", err)
 	}
 	sort.Strings(networkStatus.NodeList)
