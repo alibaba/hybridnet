@@ -3,6 +3,32 @@ entries:
   hybridnet:
   - annotations:
       artifacthub.io/changes: |
+        - "fix the error that nodes get empty quota while the Underlay Network still have available addresses to allocate"
+        - "fix the error that daemon policy container exit on a ipv6 disabled node"
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: 0.4.4
+    created: "2022-05-27T09:56:37.722333224Z"
+    description: A container networking solution aiming at hybrid clouds.
+    digest: 69aece47aea0039b4888bcb85dff18c1e72bc702aa088234104f067138827364
+    home: https://github.com/alibaba/hybridnet
+    keywords:
+    - network
+    - vlan
+    - bgp
+    - vxlan
+    - cni
+    - kubernetes
+    kubeVersion: '>=1.16.0-0'
+    name: hybridnet
+    sources:
+    - https://github.com/alibaba/hybridnet
+    type: application
+    urls:
+    - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.2.2/hybridnet-0.2.2.tgz
+    version: 0.2.2
+  - annotations:
+      artifacthub.io/changes: |
         - "introduce flag for daemon to enable/disable enhanced addresses"
         - "introduce environment variable on DualStack mode to specify defualt ip family"
         - "skip webhook validation on hostnetwork pods"
@@ -118,4 +144,4 @@ entries:
     urls:
     - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.1.1/hybridnet-0.1.1.tgz
     version: 0.1.1
-generated: "2022-05-11T11:32:50.47412875Z"
+generated: "2022-05-27T09:56:37.722359024Z"
