@@ -77,6 +77,14 @@ All notable changes to this project will be documented in this file.
 - Fix ipv6 address range calculation error
 - Fix nil point dereference error while creating a vlan interface
 
+## v0.3.3
+### Fixed Issues
+- Introduce flag `enable-vlan-arp-enhancement` to disable setting enhanced addresses by default
+
+## v0.3.4
+### Fixed Issues
+- Prevent enhanced addresses from source selection
+
 ## v0.4.0
 ### New features
 - Support BGP mode for an Underlay type Network
@@ -106,10 +114,6 @@ All notable changes to this project will be documented in this file.
 ### Fixed Issues
 - Fix creating ip-retained sts pod error when it is recreated and rescheduled to another node
 
-## v0.3.3
-### Fixed Issues
-- Introduce flag `enable-vlan-arp-enhancement` to disable setting enhanced addresses by default
-
 ## v0.4.3
 ### Improvements
 - Introduce flag `enable-vlan-arp-enhancement` for daemon to enable/disable enhanced addresses
@@ -129,3 +133,11 @@ All notable changes to this project will be documented in this file.
 ### Fixed Issues
 - Fix the error that nodes get "empty" quota while the Underlay Network still have available addresses to allocate
 - Fix daemon policy container exit with ip6tables-legacy-save error
+
+## v0.5.0
+### New features
+- Change IPInstance APIs and optimize IP allocation performance of manager
+- Introduce GlobalBGP type Network
+
+### Improvements
+- Bump controller-runtime from v0.8.3 to v0.9.7

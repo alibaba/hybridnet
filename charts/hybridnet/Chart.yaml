@@ -2,8 +2,8 @@ apiVersion: v2
 name: hybridnet
 # When the version is modified, make sure the artifacthub.io/changes list is updated
 # Also update CHANGELOG.md
-version: 0.2.2
-appVersion: 0.4.4
+version: 0.5.0-rc1
+appVersion: 0.5.0
 home: https://github.com/alibaba/hybridnet
 description: A container networking solution aiming at hybrid clouds.
 keywords:
@@ -22,5 +22,6 @@ annotations:
   artifacthub.io/prerelease: "false"
   # List of changes for the release in artifacthub.io
   artifacthub.io/changes: |
-    - "fix the error that nodes get empty quota while the Underlay Network still have available addresses to allocate"
-    - "fix the error that daemon policy container exit on a ipv6 disabled node"
+    - "Change IPInstance APIs and optimize IP allocation performance of manager"
+    - "Introduce GlobalBGP type Network"
+    - "Bump controller runtime from v0.8.3 to v0.9.7"
