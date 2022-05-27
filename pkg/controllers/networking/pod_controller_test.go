@@ -19,7 +19,6 @@ package networking_test
 import (
 	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,11 +36,8 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var _ = Describe("IP allocation test", func() {
-	const timeout = time.Second * 5
-	const interval = time.Microsecond * 500
-
 	It("IP allocation for single Pod", func() {
-		By("Create a stateful Pod and wait for IPInstance")
+		By("Create a stateless Pod and wait for IPInstance")
 		ctx := context.Background()
 		pod1 := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
