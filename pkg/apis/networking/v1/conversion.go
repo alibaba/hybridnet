@@ -68,7 +68,7 @@ func CanonicalizeIPInstance(c client.Client) (err error) {
 	var patchFuncs []func() error
 	for i := range ipInstanceList.Items {
 		var ipInstance = &ipInstanceList.Items[i]
-		if parseIPInstanceVersion(ipInstance) == IPInstanceLatestVersion {
+		if parseIPInstanceVersion(ipInstance) == IPInstanceLatestVersion && !IsLegacyModel(ipInstance) {
 			continue
 		}
 
