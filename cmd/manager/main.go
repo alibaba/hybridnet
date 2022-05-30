@@ -125,7 +125,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// init IPAM manager and stort
+	// init IPAM manager and start
 	ipamManager, err := networking.NewIPAMManager(globalContext, mgr.GetClient())
 	if err != nil {
 		entryLog.Error(err, "unable to create IPAM manager")
