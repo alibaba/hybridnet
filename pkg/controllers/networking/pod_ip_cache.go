@@ -67,6 +67,11 @@ func NewPodIPCache(ctx context.Context, c client.Reader, logger logr.Logger) (Po
 	}
 
 	for _, ip := range ipList.Items {
+		if networkingv1.IsLegacyModel(&ip) {
+			return nil, fmt.Errorf("get legacy model ip instance, if this happens more than once, " +
+				"please check if the networking CRD yamls is updated to the latest v0.5 version")
+		}
+
 		podName := networkingv1.FetchBindingPodName(&ip)
 		if len(podName) != 0 {
 			var podUID types.UID
