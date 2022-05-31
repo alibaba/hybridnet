@@ -3,6 +3,33 @@ entries:
   hybridnet:
   - annotations:
       artifacthub.io/changes: |
+        - "Change IPInstance APIs and optimize IP allocation performance of manager"
+        - "Introduce GlobalBGP type Network"
+        - "Bump controller runtime from v0.8.3 to v0.9.7"
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: 0.5.0
+    created: "2022-05-31T06:55:48.516822275Z"
+    description: A container networking solution aiming at hybrid clouds.
+    digest: 1389f11c1c1550e31c76b811e145e6b8a400cfd5cee0e9a2e638ef1836c8ffa7
+    home: https://github.com/alibaba/hybridnet
+    keywords:
+    - network
+    - vlan
+    - bgp
+    - vxlan
+    - cni
+    - kubernetes
+    kubeVersion: '>=1.16.0-0'
+    name: hybridnet
+    sources:
+    - https://github.com/alibaba/hybridnet
+    type: application
+    urls:
+    - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.3.0/hybridnet-0.3.0.tgz
+    version: 0.3.0
+  - annotations:
+      artifacthub.io/changes: |
         - "fix the error that nodes get empty quota while the Underlay Network still have available addresses to allocate"
         - "fix the error that daemon policy container exit on a ipv6 disabled node"
       artifacthub.io/prerelease: "false"
@@ -144,4 +171,4 @@ entries:
     urls:
     - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.1.1/hybridnet-0.1.1.tgz
     version: 0.1.1
-generated: "2022-05-27T09:56:37.722359024Z"
+generated: "2022-05-31T06:55:48.516967975Z"
