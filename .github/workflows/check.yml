@@ -62,7 +62,6 @@ jobs:
           make bin/envtest
           export KUBEBUILDER_ASSETS=$(pwd)/bin/envtest
           go test -v ./...
-          go test -race -v ./...
 
   shellcheck:
     runs-on: ubuntu-latest

@@ -124,9 +124,9 @@ spec:
     
     end: "192.168.56.200"                             # Optional. The last usable ip of cidr.
     
-    reservedIPs: "192.168.56.101","192.168.56.102"    # Optional. The reserved ips for later assignment.
+    reservedIPs: ["192.168.56.101","192.168.56.102"]  # Optional. The reserved ips for later assignment.
     
-    excludeIPs: "192.168.56.103","192.168.56.104"     # Optional. The excluded ips for unusable. 
+    excludeIPs: ["192.168.56.103","192.168.56.104"]   # Optional. The excluded ips for unusable. 
   config:
     autoNatOutgoing: false                            # Optional, Overlay Network only, Default is true. 
                                                       # If pods in this sunbet can access to addresses outside 

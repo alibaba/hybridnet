@@ -23,7 +23,7 @@ spec:
       initContainers:
         - name: install-cni
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.images.hybridnet.imagePullPolicy }}
           command: ["/hybridnet/install-cni.sh"]
           securityContext:
             runAsUser: 0
@@ -36,7 +36,7 @@ spec:
       containers:
         - name: cni-daemon
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.images.hybridnet.imagePullPolicy }}
           command:
             - sh
             - /hybridnet/start-daemon.sh
@@ -59,6 +59,8 @@ spec:
             runAsUser: 0
             privileged: true
           env:
+            - name: DEFAULT_IP_FAMILY
+              value: {{ .Values.defaultIPFamily }}
             - name: NODE_IP
               valueFrom:
                 fieldRef:
@@ -100,7 +102,7 @@ spec:
         {{ if .Values.daemon.enableNetworkPolicy }}
         - name: policy
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.images.hybridnet.imagePullPolicy }}
           command:
             - /hybridnet/policyinit.sh
           env:

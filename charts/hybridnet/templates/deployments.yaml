@@ -31,7 +31,7 @@ spec:
       containers:
         - name: hybridnet-manager
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.images.hybridnet.imagePullPolicy }}
           command:
             - /hybridnet/hybridnet-manager
             - --default-ip-retain={{ .Values.defaultIPRetain }}
@@ -78,7 +78,7 @@ spec:
       containers:
         - name: hybridnet-webhook
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.images.hybridnet.imagePullPolicy }}
           command:
             - /hybridnet/hybridnet-webhook
             - --default-ip-retain={{ .Values.defaultIPRetain }}
