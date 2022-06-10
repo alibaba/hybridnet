@@ -124,7 +124,7 @@ To put forward a PR, we assume you have registered a GitHub ID. Then you could f
 
 ### Branch Definition
 
-Right now we assume every contribution via pull request is for [branch master](https://github.com/alibaba/hybridnet/tree/main) in Hybridnet. Before contributing, be aware of branch definition would help a lot.
+Right now we assume every contribution via pull request is for [branch main](https://github.com/alibaba/hybridnet/tree/main) in Hybridnet. Before contributing, be aware of branch definition would help a lot.
 
 As a contributor, keep in mind again that every contribution via pull request is for branch `main`. While in project Hybridnet, there will be several release branches except `main` branch.
 

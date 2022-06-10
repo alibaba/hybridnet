@@ -9,29 +9,43 @@
 ![workflow check](https://github.com/alibaba/hybridnet/actions/workflows/check.yml/badge.svg)
 ![workflow build](https://github.com/alibaba/hybridnet/actions/workflows/build.yml/badge.svg)
 
-## What is Hybridnet?
-
 Hybridnet is an open source container networking solution designed for hybrid clouds, integrated with Kubernetes and used officially by following well-known PaaS platforms,
 
 - ACK Distro of Alibaba Cloud
 - AECP of Alibaba Cloud
 - SOFAStack of Ant Financial Co.
 
-Hybridnet focuses on productive large-scale clusters, heterogeneous infrastructure and user-friendliness. Now hundreds of clusters are running hybridnet all over world.
+
+## Introduction
+
+Most CNI plugins classify the forms of container network into two types and make them work at their own paces without connection:
+1. *Overlay*, an abstract data plane on top of host network which is usually not visible to underlying network and brings cost
+2. *Underlay*, putting container traffic "directly" into host network and depending on the abilities of underlying network
+
+In hybridnet, we try to break the strict boundary of all the forms of container network with a simple design:
+1. Overlay and underlay network can be created in the same cluster
+2. If a connection has either an overlay container side (even the other side is an underlay container), it's considered an "Overlay" connection (without NATed). In other words, underlay containers are always connected with overlay containers directly, just like they are all overlay containers
+3. Traffic between underlay containers keeps the origin "Underlay" attributes. Lower costs and being visible to underlying network
+
+The users of hybridnet can keep both *Overlay* and *Underlay* network inside a Kubernetes cluster without any concern about the connectivity, which brings a more flexible and extensible container network to orchestrate different applications.
+
+As the foundation of hybridnet, we use "Policy Routing" to distribute traffic across the different data planes. The feature of "Policy Routing" is introduced in 2.1 version of linux kernel as a basic part of routing subsystem, which provides strong stability and compatibility. Another two docs about [hybridnet components](/docs/components.md) and [the contrast between hybridnet and other CNI implementations](/docs/other-implementations.md) can be considered as further references.
 
 ## Features
 
-- Flexible network models: three-level, **Network, Subnet and IPInstance**, all implemented in CRD
-- DualStack: three modes optional, IPv4Only, IPv6Only and DualStack
-- Hybrid network fabric: support overlay and underlay pods at same time on node level
-- Cluster mesh: support network connectivity among different clusters
-- Advanced IPAM: Network/Subnet/IPInstance assignment; stateful workloads IP retain
-- Integration friendly: working well with other networking components (e.g., kube-proxy, cilium)
-- ARM support: run on x86_64 and arm64 architectures
+- [Unified management APIs](/docs/crd.md) implemented with Kubernetes CRD
+- Support IPv4/IPv6 dual stack
+- Multiple network fabrics. VXLAN(overlay), VLAN(underlay), BGP(underlay), etc.
+- Advanced IPAM. Retaining IP for stateful workloads, topology-aware IP allocation, etc.
+- Good compatibility with other networking components (e.g., kube-proxy, cilium)
 
 ## How-To-Use
 
 See documents on [wiki](https://github.com/alibaba/hybridnet/wiki).
+
+## Compile and build
+
+Clone the repository to local `make` can build hybridnet images
 
 ## Contributing
 
