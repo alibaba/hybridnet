@@ -129,6 +129,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 			(len(ipInstanceList) == 2 && ipFamily == ipamtypes.DualStack) {
 			return ctrl.Result{}, nil
 		}
+
+		if len(ipInstanceList) > 0 {
+			return ctrl.Result{}, fmt.Errorf("duplicated ip instances exist for pod: %v/%v, pod ip family is %v",
+				pod.Namespace, pod.Name, ipFamily)
+		}
 	}
 
 	networkName, err = r.selectNetwork(ctx, pod)
