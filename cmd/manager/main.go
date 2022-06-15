@@ -116,6 +116,9 @@ func main() {
 		}
 	}()
 
+	// Initialization should be after leader election success
+	<-mgr.Elected()
+
 	// wait for manager cache client ready
 	mgr.GetCache().WaitForCacheSync(globalContext)
 
