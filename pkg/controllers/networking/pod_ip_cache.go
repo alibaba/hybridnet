@@ -99,6 +99,9 @@ func NewPodIPCache(ctx context.Context, c client.Reader, logger logr.Logger) (Po
 				recordedIPInstances = cache.podToIP[namespacedKey(podName, ip.Namespace)].ipInstanceNames
 			}
 
+			logger.V(1).Info("add record to init cache", "ip",
+				ip.Name, "namespace", ip.Namespace, "pod", podName, "pod uid", podUID)
+
 			// this is different from a normal Record action
 			cache.podToIP[namespacedKey(podName, ip.Namespace)] = &podAllocatedInfo{
 				podUID:          podUID,
