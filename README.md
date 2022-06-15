@@ -9,7 +9,7 @@
 ![workflow check](https://github.com/alibaba/hybridnet/actions/workflows/check.yml/badge.svg)
 ![workflow build](https://github.com/alibaba/hybridnet/actions/workflows/build.yml/badge.svg)
 
-Hybridnet is an open source container networking solution designed for hybrid clouds, integrated with Kubernetes and used officially by following well-known PaaS platforms,
+Hybridnet is an open source container networking solution designed for hybrid clouds, integrated with Kubernetes and used officially by following well-known PaaS platforms
 
 - ACK Distro of Alibaba Cloud
 - AECP of Alibaba Cloud
@@ -45,7 +45,7 @@ See documents on [wiki](https://github.com/alibaba/hybridnet/wiki).
 
 ## Compile and build
 
-Clone the repository to local `make` can build hybridnet images
+Clone the repository to local and `make` can build hybridnet images.
 
 ## Contributing
 
