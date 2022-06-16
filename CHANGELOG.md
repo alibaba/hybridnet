@@ -141,3 +141,7 @@ All notable changes to this project will be documented in this file.
 
 ### Improvements
 - Bump controller-runtime from v0.8.3 to v0.9.7
+
+## v0.5.1
+### Fixed Issues
+- Fix address duplication error while active-standby switch of manager pods happens
