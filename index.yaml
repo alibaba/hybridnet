@@ -3,6 +3,32 @@ entries:
   hybridnet:
   - annotations:
       artifacthub.io/changes: |
+        - "Update hybridnet image to v0.5.1"
+        - "Make network initialization optional"
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: 0.5.1
+    created: "2022-06-16T03:37:44.617646798Z"
+    description: A container networking solution aiming at hybrid clouds.
+    digest: 1ee1c963317b50644045e0c4209563f33c337eea4c192bbc5495526e2a5272e3
+    home: https://github.com/alibaba/hybridnet
+    keywords:
+    - network
+    - vlan
+    - bgp
+    - vxlan
+    - cni
+    - kubernetes
+    kubeVersion: '>=1.16.0-0'
+    name: hybridnet
+    sources:
+    - https://github.com/alibaba/hybridnet
+    type: application
+    urls:
+    - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.3.1/hybridnet-0.3.1.tgz
+    version: 0.3.1
+  - annotations:
+      artifacthub.io/changes: |
         - "Change IPInstance APIs and optimize IP allocation performance of manager"
         - "Introduce GlobalBGP type Network"
         - "Bump controller runtime from v0.8.3 to v0.9.7"
@@ -171,4 +197,4 @@ entries:
     urls:
     - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.1.1/hybridnet-0.1.1.tgz
     version: 0.1.1
-generated: "2022-05-31T06:55:48.516967975Z"
+generated: "2022-06-16T03:37:44.617707303Z"
