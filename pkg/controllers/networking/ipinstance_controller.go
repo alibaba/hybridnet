@@ -85,16 +85,13 @@ func (r *IPInstanceReconciler) releaseIP(ctx context.Context, ipInstance *networ
 		); err != nil {
 			return err
 		}
-		if err = r.IPAMStore.DualStack().IPUnBind(ctx, ipInstance.Namespace, ipInstance.Name); err != nil {
-			return err
-		}
 	} else {
 		if err = r.IPAMManager.Release(ipInstance.Spec.Network, ipInstance.Spec.Subnet, utils.ToIPFormat(ipInstance.Name)); err != nil {
 			return err
 		}
-		if err = r.IPAMStore.IPUnBind(ctx, ipInstance.Namespace, ipInstance.Name); err != nil {
-			return err
-		}
+	}
+	if err = r.IPAMStore.IPUnBind(ctx, ipInstance.Namespace, ipInstance.Name); err != nil {
+		return err
 	}
 	return nil
 }

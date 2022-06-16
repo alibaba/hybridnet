@@ -22,7 +22,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/util/retry"
@@ -31,37 +30,92 @@ import (
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/controllers/utils"
+	"github.com/alibaba/hybridnet/pkg/ipam"
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/ipam/utils"
 	"github.com/alibaba/hybridnet/pkg/utils/mac"
 )
 
 const podKind = "Pod"
 
-type Worker struct {
+var _ ipam.Store = &crdStore{}
+
+// crdStore is an implementation of Store based on some Custom Resource Definitions
+type crdStore struct {
 	client.Client
 }
 
-func NewWorker(client client.Client) *Worker {
-	return &Worker{
-		Client: client,
+func NewCRDStore(c client.Client) ipam.Store {
+	return &crdStore{
+		Client: c,
 	}
 }
 
-func (w *Worker) Couple(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
-	_, err = w.createIP(ctx, pod, ip)
+// Couple will create related IPInstances bind to a specified pod
+func (s *crdStore) Couple(ctx context.Context, pod *corev1.Pod, IPs []*ipamtypes.IP) (err error) {
+	var createdNames []string
+	defer func() {
+		if err != nil {
+			for _, name := range createdNames {
+				_ = s.deleteIPInstance(ctx, pod.Namespace, name)
+			}
+		}
+	}()
+
+	var unifiedMACAddr = mac.GenerateMAC().String()
+	for _, ip := range IPs {
+		var ipInstance *networkingv1.IPInstance
+		if ipInstance, err = s.createIPInstance(ctx, pod, ip, unifiedMACAddr); err != nil {
+			return err
+		}
+		createdNames = append(createdNames, ipInstance.Name)
+	}
+
+	return nil
+}
+
+// ReCouple will create or update related IPInstances, and force them redirect to a specified pod
+func (s *crdStore) ReCouple(ctx context.Context, pod *corev1.Pod, IPs []*ipamtypes.IP) (err error) {
+	var unifiedMACAddr string
+
+	// if pod will be recoupled with multi IPs, a unified MAC address
+	// should be reused or created
+	if len(IPs) > 1 {
+		for _, ip := range IPs {
+			var ipInstance *networkingv1.IPInstance
+			if ipInstance, err = s.getIPInstance(ctx, pod.Namespace, ip); err != nil {
+				// ignore the not-found error
+				if err = client.IgnoreNotFound(err); err == nil {
+					continue
+				}
+				return
+			}
+
+			// fetch valid MAC address from created ip instances and try to reuse it
+			unifiedMACAddr = ipInstance.Spec.Address.MAC
+			break
+		}
+
+		// if no valid MAC address reused, recreate a new one
+		if len(unifiedMACAddr) == 0 {
+			unifiedMACAddr = mac.GenerateMAC().String()
+		}
+	}
+
+	for _, ip := range IPs {
+		if _, err = s.createOrUpdateIPInstance(ctx, pod, ip, unifiedMACAddr); err != nil {
+			return
+		}
+	}
+
 	return
 }
 
-func (w *Worker) ReCouple(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP) (err error) {
-	_, err = w.createOrUpdateIPWithMac(ctx, pod, ip, "")
-	return
-}
-
-func (w *Worker) DeCouple(ctx context.Context, pod *corev1.Pod) (err error) {
+// DeCouple will release(remove) related IPInstances of a specified pod
+func (s *crdStore) DeCouple(ctx context.Context, pod *corev1.Pod) (err error) {
 	var ipInstanceList = &networkingv1.IPInstanceList{}
-	if err = w.List(ctx,
+	if err = s.List(ctx,
 		ipInstanceList,
 		client.MatchingLabels{
 			constants.LabelPod: pod.Name,
@@ -71,20 +125,21 @@ func (w *Worker) DeCouple(ctx context.Context, pod *corev1.Pod) (err error) {
 		return err
 	}
 
-	var deleteFuncs []func() error
+	var deleteFunctions []func() error
 	for i := range ipInstanceList.Items {
 		var ipInstanceName = ipInstanceList.Items[i].Name
-		deleteFuncs = append(deleteFuncs, func() error {
-			return w.deleteIP(ctx, pod.Namespace, ipInstanceName)
+		deleteFunctions = append(deleteFunctions, func() error {
+			return s.deleteIPInstance(ctx, pod.Namespace, ipInstanceName)
 		})
 	}
 
-	return errors.AggregateGoroutines(deleteFuncs...)
+	return errors.AggregateGoroutines(deleteFunctions...)
 }
 
-func (w *Worker) IPReserve(ctx context.Context, pod *corev1.Pod) (err error) {
+// IPReserve will change IPInstances to reservation status of a specified pod
+func (s *crdStore) IPReserve(ctx context.Context, pod *corev1.Pod) (err error) {
 	var ipInstanceList = &networkingv1.IPInstanceList{}
-	if err = w.List(ctx,
+	if err = s.List(ctx,
 		ipInstanceList,
 		client.MatchingLabels{
 			constants.LabelPod: pod.Name,
@@ -94,33 +149,116 @@ func (w *Worker) IPReserve(ctx context.Context, pod *corev1.Pod) (err error) {
 		return err
 	}
 
-	var reserveFuncs []func() error
+	var reserveFunctions []func() error
 	for i := range ipInstanceList.Items {
-		var ipIns = &ipInstanceList.Items[i]
-		reserveFuncs = append(reserveFuncs, func() error {
-			_, err := controllerutil.CreateOrPatch(ctx, w, ipIns, func() error {
-				reserveIPInstance(ipIns)
-				return nil
-			})
-			return err
+		var ipInstance = &ipInstanceList.Items[i]
+		reserveFunctions = append(reserveFunctions, func() error {
+			return s.reserveIPInstance(ctx, ipInstance)
 		})
 	}
 
-	return errors.AggregateGoroutines(reserveFuncs...)
+	return errors.AggregateGoroutines(reserveFunctions...)
 }
 
-func (w *Worker) IPRecycle(ctx context.Context, namespace string, ip *ipamtypes.IP) (err error) {
-	return w.deleteIP(ctx, namespace, toDNSLabelFormat(ip))
+// IPRecycle will remove a specified IPInstance by name
+func (s *crdStore) IPRecycle(ctx context.Context, namespace string, ip *ipamtypes.IP) (err error) {
+	return s.deleteIPInstance(ctx, namespace, utils.ToDNSLabelFormatName(ip))
 }
 
-func (w *Worker) IPUnBind(ctx context.Context, namespace, ip string) (err error) {
+// IPUnBind will be called after IPInstance garbage collection in memory to announce
+// this IPInstance would be deleted from persist storage
+func (s *crdStore) IPUnBind(ctx context.Context, namespace, ip string) (err error) {
+	return s.removeFinalizerOfIPInstance(ctx, namespace, ip)
+}
+
+// createIPInstance will create an IPInstance by pod info, ip info and mac address
+func (s *crdStore) createIPInstance(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP, macAddr string) (ipIns *networkingv1.IPInstance, err error) {
+	ipInstance := &networkingv1.IPInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      utils.ToDNSLabelFormatName(ip),
+			Namespace: pod.Namespace,
+		},
+	}
+
+	assembleIPInstance(ipInstance, ip, pod, macAddr)
+
+	return ipInstance, s.Create(ctx, ipInstance)
+}
+
+// createOrUpdateIPInstance will create or update an IPInstance by pod info, ip info and mac address
+func (s *crdStore) createOrUpdateIPInstance(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP, macAddr string) (ipIns *networkingv1.IPInstance, err error) {
+	var ipInstance = &networkingv1.IPInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      utils.ToDNSLabelFormatName(ip),
+			Namespace: pod.Namespace,
+		},
+	}
+
+	_, err = controllerutil.CreateOrPatch(ctx, s, ipInstance, func() error {
+		if !ipInstance.DeletionTimestamp.IsZero() {
+			return fmt.Errorf("ip instance %s/%s is deleting, can not be updated", ipInstance.Namespace, ipInstance.Name)
+		}
+
+		// mac address will be regenerated if reused ipInstance was deleted unexpectedly
+		assembleIPInstance(ipInstance, ip, pod, macAddr)
+		return nil
+	})
+
+	return ipInstance, err
+}
+
+// deleteIPInstance will remove an IPInstance by namespace and name
+func (s *crdStore) deleteIPInstance(ctx context.Context, namespace, name string) error {
+	return s.Delete(ctx, &networkingv1.IPInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+	})
+}
+
+// getIPInstance will get an IPInstance by namespace and name
+func (s *crdStore) getIPInstance(ctx context.Context, namespace string, ip *ipamtypes.IP) (*networkingv1.IPInstance, error) {
+	var ipInstance = &networkingv1.IPInstance{}
+	if err := s.Get(ctx, types.NamespacedName{Namespace: namespace, Name: utils.ToDNSLabelFormatName(ip)}, ipInstance); err != nil {
+		return nil, err
+	}
+	return ipInstance, nil
+}
+
+// reserveIPInstance means this IPInstance does not belong to a specific
+// node and a pod with specific UID, also the status is meaningless
+func (s *crdStore) reserveIPInstance(ctx context.Context, ipInstance *networkingv1.IPInstance) error {
+	_, err := controllerutil.CreateOrPatch(ctx, s, ipInstance,
+		// update both spec and status for reservation
+		func() error {
+			// clean pod uid & node info means this IP is not being used by any pod
+			ipInstance.Spec.Binding.NodeName = ""
+			ipInstance.Spec.Binding.PodUID = ""
+			delete(ipInstance.Labels, constants.LabelNode)
+			delete(ipInstance.Labels, constants.LabelPodUID)
+
+			// refresh status
+			ipInstance.Status.PodName = ""
+			ipInstance.Status.PodNamespace = ""
+			ipInstance.Status.NodeName = ""
+			ipInstance.Status.SandboxID = ""
+			ipInstance.Status.UpdateTimestamp = metav1.Now()
+			return nil
+		},
+	)
+	return err
+}
+
+// removeFinalizerOfIPInstance will remove the blocking finalizer of a specified IPInstance
+func (s *crdStore) removeFinalizerOfIPInstance(ctx context.Context, namespace, name string) error {
 	patchBody := `{"metadata":{"finalizers":null}}`
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		return w.Patch(ctx,
+		return s.Patch(ctx,
 			&networkingv1.IPInstance{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: namespace,
-					Name:      ip,
+					Name:      name,
 				},
 			},
 			client.RawPatch(
@@ -131,47 +269,13 @@ func (w *Worker) IPUnBind(ctx context.Context, namespace, ip string) (err error)
 	})
 }
 
-func (w *Worker) createIP(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP) (ipIns *networkingv1.IPInstance, err error) {
-	return w.createIPWithMAC(ctx, pod, ip, mac.GenerateMAC().String())
-}
-
-func (w *Worker) createIPWithMAC(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP, macAddr string) (ipIns *networkingv1.IPInstance, err error) {
-	ipInstance := &networkingv1.IPInstance{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      toDNSLabelFormat(ip),
-			Namespace: pod.Namespace,
-		},
-	}
-
-	fillIPInstance(ipInstance, ip, pod, macAddr)
-
-	return ipInstance, w.Create(ctx, ipInstance)
-}
-
-func (w *Worker) createOrUpdateIPWithMac(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP, macAddr string) (ipIns *networkingv1.IPInstance, err error) {
-	var ipInstance = &networkingv1.IPInstance{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      toDNSLabelFormat(ip),
-			Namespace: pod.Namespace,
-		},
-	}
-
-	_, err = controllerutil.CreateOrPatch(ctx, w, ipInstance, func() error {
-		if !ipInstance.DeletionTimestamp.IsZero() {
-			return fmt.Errorf("ip instance %s/%s is deleting, can not be updated", ipInstance.Namespace, ipInstance.Name)
-		}
-
-		// mac address will be regenerated if reused ipInstance was deleted unexpectedly
-		fillIPInstance(ipInstance, ip, pod, macAddr)
-		return nil
-	})
-
-	return ipInstance, err
-}
-
-func fillIPInstance(ipIns *networkingv1.IPInstance, ip *ipamtypes.IP, pod *corev1.Pod, macAddr string) {
+// assembleIPInstance will assemble the spec of IPInstance with provided inputs,
+// including pod, ip info and mac address
+func assembleIPInstance(ipIns *networkingv1.IPInstance, ip *ipamtypes.IP, pod *corev1.Pod, macAddr string) {
+	// finalizer will block deletion for garbage collection
 	ipIns.Finalizers = []string{constants.FinalizerIPAllocated}
 
+	// labels will help quick search by label-selecting
 	if len(ipIns.Labels) == 0 {
 		ipIns.Labels = map[string]string{}
 	}
@@ -182,22 +286,27 @@ func fillIPInstance(ipIns *networkingv1.IPInstance, ip *ipamtypes.IP, pod *corev
 	ipIns.Labels[constants.LabelPod] = pod.Name
 	ipIns.Labels[constants.LabelPodUID] = string(pod.UID)
 
+	// owner reference point to the owner of this IPInstance
 	owner := strategy.GetKnownOwnReference(pod)
 	if owner == nil {
-		owner = newControllerRef(pod, corev1.SchemeGroupVersion.WithKind(podKind))
+		owner = utils.NewControllerRef(pod, corev1.SchemeGroupVersion.WithKind(podKind), true, false)
 	}
 	ipIns.OwnerReferences = []metav1.OwnerReference{*owner}
 
+	// parent network and subnet name
 	ipIns.Spec.Network = ip.Network
 	ipIns.Spec.Subnet = ip.Subnet
 
+	// ip spec is composed by ip info and mac address
 	if len(ipIns.Spec.Address.IP) == 0 {
 		ipIns.Spec.Address = networkingv1.Address{
-			Version: extractIPVersion(ip),
+			Version: utils.ExtractIPVersion(ip),
 			IP:      ip.Address.String(),
-			NetID:   uint32PtoInt32P(ip.NetID),
+			NetID:   utils.Uint32PtoInt32P(ip.NetID),
 		}
 
+		// if mac address specified, override this original value
+		// if mac address still empty after overriding, generate a new one
 		if len(macAddr) > 0 {
 			ipIns.Spec.Address.MAC = macAddr
 		}
@@ -205,11 +314,13 @@ func fillIPInstance(ipIns *networkingv1.IPInstance, ip *ipamtypes.IP, pod *corev
 			ipIns.Spec.Address.MAC = mac.GenerateMAC().String()
 		}
 
+		// gateway is optional
 		if ip.Gateway != nil {
 			ipIns.Spec.Address.Gateway = ip.Gateway.String()
 		}
 	}
 
+	// binding point to the owner
 	ipIns.Spec.Binding = networkingv1.Binding{
 		ReferredObject: networkingv1.ObjectMeta{
 			Kind: owner.Kind,
@@ -221,76 +332,10 @@ func fillIPInstance(ipIns *networkingv1.IPInstance, ip *ipamtypes.IP, pod *corev
 		PodName:  pod.Name,
 	}
 
+	// index is the serial number of a stateful workload
 	if strategy.OwnByStatefulWorkload(pod) {
 		ipIns.Spec.Binding.Stateful = &networkingv1.StatefulInfo{
-			Index: intToInt32P(utils.GetIndexFromName(pod.Name)),
+			Index: utils.IntToInt32P(utils.GetIndexFromName(pod.Name)),
 		}
 	}
-}
-
-// reserveIPInstance means this IPInstance does not belong to a specific
-// node and a pod with specific UID
-func reserveIPInstance(ipIns *networkingv1.IPInstance) {
-	// clean pod uid & node info means this IP is not being used by any pod
-	ipIns.Spec.Binding.NodeName = ""
-	ipIns.Spec.Binding.PodUID = ""
-	delete(ipIns.Labels, constants.LabelNode)
-	delete(ipIns.Labels, constants.LabelPodUID)
-
-	// TODO: clean status
-}
-
-func (w *Worker) deleteIP(ctx context.Context, namespace, name string) error {
-	return w.Delete(ctx, &networkingv1.IPInstance{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
-		},
-	})
-}
-
-func (w *Worker) getIP(ctx context.Context, namespace string, ip *ipamtypes.IP) (*networkingv1.IPInstance, error) {
-	var ipInstance = &networkingv1.IPInstance{}
-	if err := w.Get(ctx, types.NamespacedName{Namespace: namespace, Name: toDNSLabelFormat(ip)}, ipInstance); err != nil {
-		return nil, err
-	}
-	return ipInstance, nil
-}
-
-func toDNSLabelFormat(ip *ipamtypes.IP) string {
-	return utils.ToDNSFormat(ip.Address.IP)
-}
-
-func newControllerRef(owner metav1.Object, gvk schema.GroupVersionKind) *metav1.OwnerReference {
-	blockOwnerDeletion := false
-	isController := true
-	return &metav1.OwnerReference{
-		APIVersion:         gvk.GroupVersion().String(),
-		Kind:               gvk.Kind,
-		Name:               owner.GetName(),
-		UID:                owner.GetUID(),
-		BlockOwnerDeletion: &blockOwnerDeletion,
-		Controller:         &isController,
-	}
-}
-
-func extractIPVersion(ip *ipamtypes.IP) networkingv1.IPVersion {
-	if ip.IsIPv6() {
-		return networkingv1.IPv6
-	}
-	return networkingv1.IPv4
-}
-
-func uint32PtoInt32P(in *uint32) *int32 {
-	if in == nil {
-		return nil
-	}
-
-	out := int32(*in)
-	return &out
-}
-
-func intToInt32P(in int) *int32 {
-	out := int32(in)
-	return &out
 }

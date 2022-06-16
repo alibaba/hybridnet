@@ -60,25 +60,16 @@ type DualStackUsage interface {
 	SubnetUsage(network, subnet string) (*types.Usage, error)
 }
 
-type Store interface {
-	Couple(ctx context.Context, pod *v1.Pod, ip *types.IP) (err error)
-	ReCouple(ctx context.Context, pod *v1.Pod, ip *types.IP) (err error)
-	DeCouple(ctx context.Context, pod *v1.Pod) (err error)
-	IPReserve(ctx context.Context, pod *v1.Pod) (err error)
-	IPRecycle(ctx context.Context, namespace string, ip *types.IP) (err error)
-	IPUnBind(ctx context.Context, namespace, ip string) (err error)
+type NetworkInterface interface {
+	GetNetworksByType(networkType types.NetworkType) []string
+	MatchNetworkType(networkName string, networkType types.NetworkType) bool
 }
 
-type DualStackStore interface {
+type Store interface {
 	Couple(ctx context.Context, pod *v1.Pod, IPs []*types.IP) (err error)
 	ReCouple(ctx context.Context, pod *v1.Pod, IPs []*types.IP) (err error)
 	DeCouple(ctx context.Context, pod *v1.Pod) (err error)
 	IPReserve(ctx context.Context, pod *v1.Pod) (err error)
 	IPRecycle(ctx context.Context, namespace string, ip *types.IP) (err error)
 	IPUnBind(ctx context.Context, namespace, ip string) (err error)
-}
-
-type NetworkInterface interface {
-	GetNetworksByType(networkType types.NetworkType) []string
-	MatchNetworkType(networkName string, networkType types.NetworkType) bool
 }

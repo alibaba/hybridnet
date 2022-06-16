@@ -132,21 +132,8 @@ func (i *ipamManager) Refresh(networks []string) error {
 
 type IPAMStore interface {
 	ipam.Store
-	DualStack() ipam.DualStackStore
-}
-
-type ipamStore struct {
-	ipam.Store
-	dualStack ipam.DualStackStore
-}
-
-func (i *ipamStore) DualStack() ipam.DualStackStore {
-	return i.dualStack
 }
 
 func NewIPAMStore(c client.Client) IPAMStore {
-	return &ipamStore{
-		Store:     store.NewWorker(c),
-		dualStack: store.NewDualStackWorker(c),
-	}
+	return store.NewCRDStore(c)
 }
