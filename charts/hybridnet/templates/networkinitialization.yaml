@@ -1,4 +1,4 @@
-{{ if .Release.IsInstall }}
+{{ if and (eq .Release.IsInstall true) (eq .Values.init.withoutNetwork false)  }}
 apiVersion: networking.alibaba.com/v1
 kind: Network
 metadata:
