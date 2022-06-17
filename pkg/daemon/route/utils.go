@@ -556,32 +556,32 @@ func isExcludeRoute(route *netlink.Route) bool {
 	return route.Type == unix.RTN_THROW
 }
 
-func combineLocalAndRemoteSubnetInfoMap(local, remote SubnetInfoMap) SubnetInfoMap {
-	if len(remote) == 0 {
-		return local
+func combineSubnetInfoMap(a, b SubnetInfoMap) SubnetInfoMap {
+	if len(b) == 0 {
+		return a
 	}
 
-	res := make(map[string]*SubnetInfo, len(local)+len(remote))
-	for cidr, info := range local {
+	res := make(map[string]*SubnetInfo, len(a)+len(b))
+	for cidr, info := range a {
 		res[cidr] = info
 	}
-	for cidr, info := range remote {
+	for cidr, info := range b {
 		res[cidr] = info
 	}
 
 	return res
 }
 
-func combineLocalAndRemoteExcludeIPBlockMap(local, remote map[string]*net.IPNet) map[string]*net.IPNet {
-	if len(remote) == 0 {
-		return local
+func combineNetMap(a, b map[string]*net.IPNet) map[string]*net.IPNet {
+	if len(b) == 0 {
+		return a
 	}
 
-	res := make(map[string]*net.IPNet, len(local)+len(remote))
-	for s, block := range local {
+	res := make(map[string]*net.IPNet, len(a)+len(b))
+	for s, block := range a {
 		res[s] = block
 	}
-	for s, block := range remote {
+	for s, block := range b {
 		res[s] = block
 	}
 

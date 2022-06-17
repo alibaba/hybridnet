@@ -133,7 +133,21 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 	if err = handler.Client.List(ctx, subnetList); err != nil {
 		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 	}
+
 	for i := range subnetList.Items {
+		if subnet.Spec.Range.CIDR != subnetList.Items[i].Spec.Range.CIDR &&
+			utils.Intersect(&networkingv1.AddressRange{CIDR: subnet.Spec.Range.CIDR},
+				&networkingv1.AddressRange{CIDR: subnetList.Items[i].Spec.Range.CIDR}) {
+			return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("different but overlapped CIDR with existing subnet %s, this is not suppored yet",
+				subnetList.Items[i].Name), logger)
+		}
+
+		if subnet.Spec.Range.CIDR == subnetList.Items[i].Spec.Range.CIDR &&
+			subnet.Spec.Network != subnetList.Items[i].Spec.Network {
+			return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("the same CIDR with existing subnet %s, this is allowed but need to be in the same network",
+				subnetList.Items[i].Name), logger)
+		}
+
 		comparedSubnet := transform.TransferSubnetForIPAM(&subnetList.Items[i])
 		// we assume that all existing subnets all have been canonicalized
 		if err = comparedSubnet.Canonicalize(); err == nil && comparedSubnet.Overlap(ipamSubnet) {
