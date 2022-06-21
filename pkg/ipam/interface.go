@@ -24,45 +24,15 @@ import (
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
 )
 
-type Interface interface {
-	Refresh
-	Usage
-	NetworkInterface
+type Manager interface {
+	Refresh(options ...types.RefreshOption) error
 
-	Allocate(network, subnet, podName, podNamespace string) (*types.IP, error)
-	Assign(network, subnet, podname, podNamespace, ip string, forced bool) (*types.IP, error)
-	Release(network, subnet, ip string) error
-}
+	GetNetworkUsage(networkName string) (*types.NetworkUsage, error)
+	GetSubnetUsage(networkName, subnetName string) (*types.Usage, error)
 
-type Refresh interface {
-	Refresh(networks []string) error
-}
-
-type Usage interface {
-	Usage(network string) (*types.Usage, map[string]*types.Usage, error)
-	SubnetUsage(network, subnet string) (*types.Usage, error)
-}
-
-type DualStackInterface interface {
-	Refresh
-	DualStackUsage
-	NetworkInterface
-
-	Allocate(ipFamilyMode types.IPFamilyMode, network string, subnets []string,
-		podName, podNamespace string) (IPs []*types.IP, err error)
-	Assign(ipFamilyMode types.IPFamilyMode, network string, subnets, IPs []string,
-		podName, podNamespace string, forced bool) (AssignedIPs []*types.IP, err error)
-	Release(ipFamilyMode types.IPFamilyMode, network string, subnets, IPs []string) (err error)
-}
-
-type DualStackUsage interface {
-	Usage(network string) ([3]*types.Usage, map[string]*types.Usage, error)
-	SubnetUsage(network, subnet string) (*types.Usage, error)
-}
-
-type NetworkInterface interface {
-	GetNetworksByType(networkType types.NetworkType) []string
-	MatchNetworkType(networkName string, networkType types.NetworkType) bool
+	Allocate(networkName string, podInfo types.PodInfo, options ...types.AllocateOption) (allocatedIPs []*types.IP, err error)
+	Assign(networkName string, podInfo types.PodInfo, assignedSuites []types.SubnetIPSuite, options ...types.AssignOption) (assignedIPs []*types.IP, err error)
+	Release(networkName string, releaseSuites []types.SubnetIPSuite) (err error)
 }
 
 type Store interface {

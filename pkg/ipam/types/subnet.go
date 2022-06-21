@@ -90,22 +90,19 @@ func (s *SubnetSlice) GetAvailableIPv4Subnet() (*Subnet, error) {
 		return nil, ErrNoAvailableSubnet
 	}
 
-	var onlyIPv4Candidates, pairedIPv4Candidates []string
-	var theChosenOne string
-	onlyIPv4Candidates, _, pairedIPv4Candidates, _ = s.classify()
+	lastIndex := s.SubnetIndex
+	for {
+		var subnet = s.Subnets[s.SubnetIndex]
 
-	// TODO: support more selecting algorithms
-	switch {
-	case len(onlyIPv4Candidates) > 0:
-		theChosenOne = onlyIPv4Candidates[0]
-	case len(pairedIPv4Candidates) > 0:
-		theChosenOne = pairedIPv4Candidates[0]
-	default:
-		return nil, ErrNoAvailableSubnet
+		if subnet.IsIPv4() && subnet.IsAvailable() {
+			return subnet, nil
+		}
+
+		s.SubnetIndex = (s.SubnetIndex + 1) % s.SubnetCount
+		if s.SubnetIndex == lastIndex {
+			return nil, ErrNoAvailableSubnet
+		}
 	}
-
-	s.SubnetIndex = s.SubnetIndexMap[theChosenOne]
-	return s.GetSubnet(theChosenOne)
 }
 
 func (s *SubnetSlice) GetAvailableIPv6Subnet() (*Subnet, error) {
@@ -113,55 +110,51 @@ func (s *SubnetSlice) GetAvailableIPv6Subnet() (*Subnet, error) {
 		return nil, ErrNoAvailableSubnet
 	}
 
-	var (
-		onlyIPv6Candidates, pairedIPv6Candidates []string
-		theChosenOne                             string
-	)
-	_, onlyIPv6Candidates, _, pairedIPv6Candidates = s.classify()
+	lastIndex := s.SubnetIndex
+	for {
+		var subnet = s.Subnets[s.SubnetIndex]
 
-	// TODO: support more selecting algorithms
-	switch {
-	case len(onlyIPv6Candidates) > 0:
-		theChosenOne = onlyIPv6Candidates[0]
-	case len(pairedIPv6Candidates) > 0:
-		theChosenOne = pairedIPv6Candidates[0]
-	default:
-		return nil, ErrNoAvailableSubnet
+		if subnet.IsIPv6() && subnet.IsAvailable() {
+			return subnet, nil
+		}
+
+		s.SubnetIndex = (s.SubnetIndex + 1) % s.SubnetCount
+		if s.SubnetIndex == lastIndex {
+			return nil, ErrNoAvailableSubnet
+		}
 	}
-
-	s.SubnetIndex = s.SubnetIndexMap[theChosenOne]
-	return s.GetSubnet(theChosenOne)
-
 }
 
-func (s *SubnetSlice) GetAvailablePairedDualStackSubnets() (v4Subnet *Subnet, v6Subnet *Subnet, err error) {
+func (s *SubnetSlice) GetAvailableDualStackSubnets() (v4Subnet *Subnet, v6Subnet *Subnet, err error) {
 	if s.SubnetCount == 0 {
 		return nil, nil, ErrNoAvailableSubnet
 	}
 
-	var (
-		v4Candidates []string
-		v6Candidates []string
-		v4Name       string
-		v6Name       string
-	)
-	_, _, v4Candidates, v6Candidates = s.classify()
+	lastIndex := s.SubnetIndex
+	var v4Selected, v6Selected = false, false
+	for {
+		var subnet = s.Subnets[s.SubnetIndex]
 
-	if len(v4Candidates) == 0 {
-		return nil, nil, ErrNoAvailableSubnet
+		if subnet.IsAvailable() {
+			if !v4Selected && subnet.IsIPv4() {
+				v4Subnet = subnet
+				v4Selected = true
+			}
+			if !v6Selected && subnet.IsIPv6() {
+				v6Subnet = subnet
+				v6Selected = true
+			}
+		}
+
+		if v4Selected && v6Selected {
+			return
+		}
+
+		s.SubnetIndex = (s.SubnetIndex + 1) % s.SubnetCount
+		if s.SubnetIndex == lastIndex {
+			return nil, nil, ErrNoAvailableSubnet
+		}
 	}
-
-	// TODO: support more selecting algorithms
-	v4Name, v6Name = v4Candidates[0], v6Candidates[0]
-
-	s.SubnetIndex = s.SubnetIndexMap[v4Name]
-
-	// fetch subnets
-	if v4Subnet, err = s.GetSubnet(v4Name); err != nil {
-		return
-	}
-	v6Subnet, err = s.GetSubnet(v6Name)
-	return
 }
 
 func (s *SubnetSlice) GetSubnetByIP(ip string) (*Subnet, error) {
@@ -182,118 +175,22 @@ func (s *SubnetSlice) CurrentSubnet() string {
 	return s.Subnets[s.SubnetIndex].Name
 }
 
-func (s *SubnetSlice) Usage() (string, map[string]*Usage, error) {
+func (s *SubnetSlice) Usage() (string, map[string]*Usage) {
 	usages := make(map[string]*Usage, len(s.Subnets))
 
 	for _, subnet := range s.Subnets {
 		usages[subnet.Name] = subnet.Usage()
 	}
 
-	return s.CurrentSubnet(), usages, nil
+	return s.CurrentSubnet(), usages
 }
 
-func (s *SubnetSlice) DualStackUsage() ([3]*Usage, map[string]*Usage, error) {
-	usage := [3]*Usage{
-		{}, {}, {},
-	}
-	subnetUsage := make(map[string]*Usage, len(s.Subnets))
-
-	type pairedUsage struct {
-		v4Usage Usage
-		v6Usage Usage
-	}
-
-	chooseAvailable := func(p *pairedUsage) uint32 {
-		if p.v4Usage.Available < p.v6Usage.Available {
-			return p.v4Usage.Available
-		}
-		return p.v6Usage.Available
-	}
-
-	netIDPairedUsage := make(map[uint32]*pairedUsage)
-
-	var currentIndex int
-	var subnet *Subnet
-	var netID uint32
-	for i := 0; i < s.SubnetCount; i++ {
-		currentIndex = (i + s.SubnetIndex) % s.SubnetCount
-		subnet = s.Subnets[currentIndex]
-		netID = unifyNetID(subnet.NetID)
-
-		subnetUsage[subnet.Name] = subnet.Usage()
-
-		if _, exist := netIDPairedUsage[netID]; !exist {
-			netIDPairedUsage[netID] = &pairedUsage{}
-		}
-
+func (s *SubnetSlice) Classify() (IPv4Subnets, IPv6Subnets []string) {
+	for _, subnet := range s.Subnets {
 		if subnet.IsIPv6() {
-			usage[1].Add(subnetUsage[subnet.Name])
-			netIDPairedUsage[netID].v6Usage.Add(subnetUsage[subnet.Name])
+			IPv6Subnets = append(IPv6Subnets, subnet.Name)
 		} else {
-			usage[0].Add(subnetUsage[subnet.Name])
-			netIDPairedUsage[netID].v4Usage.Add(subnetUsage[subnet.Name])
-		}
-	}
-
-	// count dual stack usage
-	for _, u := range netIDPairedUsage {
-		usage[2].Available += chooseAvailable(u)
-	}
-
-	return usage, subnetUsage, nil
-}
-
-func (s *SubnetSlice) classify() (onlyIPv4, onlyIPv6, pairedIPv4, pairedIPv6 []string) {
-	type netIDGroupedSubnets struct {
-		v4Subnets []string
-		v6Subnets []string
-	}
-
-	var (
-		netIDOrder        = make([]uint32, 0)
-		netIDMap          = make(map[uint32]*netIDGroupedSubnets)
-		currentIndex      int
-		currentSubnet     *Subnet
-		currentNetID      uint32
-		currentNetIDGroup *netIDGroupedSubnets
-	)
-	for i := 0; i < s.SubnetCount; i++ {
-		// locate subnet with current index
-		currentIndex = (i + s.SubnetIndex) % s.SubnetCount
-		currentSubnet = s.Subnets[currentIndex]
-
-		// ignore empty subnets
-		if !currentSubnet.IsAvailable() {
-			continue
-		}
-
-		// order and initialize net ID group
-		currentNetID = unifyNetID(currentSubnet.NetID)
-		if _, ok := netIDMap[currentNetID]; !ok {
-			netIDOrder = append(netIDOrder, currentNetID)
-			netIDMap[currentNetID] = &netIDGroupedSubnets{}
-		}
-
-		// fill net ID group
-		currentNetIDGroup = netIDMap[currentNetID]
-		if currentSubnet.IsIPv6() {
-			currentNetIDGroup.v6Subnets = append(currentNetIDGroup.v6Subnets, currentSubnet.Name)
-		} else {
-			currentNetIDGroup.v4Subnets = append(currentNetIDGroup.v4Subnets, currentSubnet.Name)
-		}
-
-	}
-
-	for _, netID := range netIDOrder {
-		currentNetIDGroup = netIDMap[netID]
-		switch {
-		case len(currentNetIDGroup.v4Subnets) > 0 && len(currentNetIDGroup.v6Subnets) == 0:
-			onlyIPv4 = append(onlyIPv4, currentNetIDGroup.v4Subnets...)
-		case len(currentNetIDGroup.v6Subnets) > 0 && len(currentNetIDGroup.v4Subnets) == 0:
-			onlyIPv6 = append(onlyIPv6, currentNetIDGroup.v6Subnets...)
-		case len(currentNetIDGroup.v4Subnets) > 0 && len(currentNetIDGroup.v6Subnets) > 0:
-			pairedIPv4 = append(pairedIPv4, currentNetIDGroup.v4Subnets...)
-			pairedIPv6 = append(pairedIPv6, currentNetIDGroup.v6Subnets...)
+			IPv4Subnets = append(IPv4Subnets, subnet.Name)
 		}
 	}
 	return
@@ -593,9 +490,6 @@ func (s *Subnet) IsIPv6() bool {
 	return s.IPv6
 }
 
-func unifyNetID(netID *uint32) uint32 {
-	if netID == nil {
-		return 0
-	}
-	return *netID
+func (s *Subnet) IsIPv4() bool {
+	return !s.IPv6
 }

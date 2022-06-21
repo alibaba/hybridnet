@@ -14,22 +14,36 @@
  limitations under the License.
 */
 
-package utils
+package types
 
-import "fmt"
+import "k8s.io/apimachinery/pkg/types"
 
-func PickFirstNonEmptyString(ss ...string) string {
-	for _, s := range ss {
-		if len(s) > 0 {
-			return s
-		}
-	}
-	return ""
+type PodInfo struct {
+	types.NamespacedName
+	IPFamily IPFamilyMode
 }
 
-func CheckNotEmpty(name, input string) error {
-	if len(input) == 0 {
-		return fmt.Errorf("%s must not be empty", name)
+type SubnetIPSuite struct {
+	Subnet string
+	IP     string
+}
+
+func AssignIPOfSubnet(subnet, ip string) SubnetIPSuite {
+	return SubnetIPSuite{
+		Subnet: subnet,
+		IP:     ip,
 	}
-	return nil
+}
+
+func AssignIP(ip string) SubnetIPSuite {
+	return SubnetIPSuite{
+		IP: ip,
+	}
+}
+
+func ReleaseIPOfSubnet(subnet, ip string) SubnetIPSuite {
+	return SubnetIPSuite{
+		Subnet: subnet,
+		IP:     ip,
+	}
 }

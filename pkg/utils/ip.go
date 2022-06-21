@@ -17,6 +17,7 @@
 package utils
 
 import (
+	"fmt"
 	"net"
 	"strings"
 
@@ -38,6 +39,35 @@ func NormalizedIP(ip string) string {
 		return ip
 	}
 	return ""
+}
+
+func ValidateIP(ip string) error {
+	if net.ParseIP(ip) != nil {
+		return nil
+	}
+	return fmt.Errorf("%s is not a valid IP", ip)
+}
+
+func ValidateIPv4(ip string) error {
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return fmt.Errorf("%s is not a valid IP", ip)
+	}
+	if parsedIP.To4() == nil {
+		return fmt.Errorf("%s is not an IPv4 address", ip)
+	}
+	return nil
+}
+
+func ValidateIPv6(ip string) error {
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return fmt.Errorf("%s is not a valid IP", ip)
+	}
+	if parsedIP.To4() != nil {
+		return fmt.Errorf("%s is not an IPv6 address", ip)
+	}
+	return nil
 }
 
 func ToDNSFormat(ip net.IP) string {

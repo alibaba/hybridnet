@@ -16,20 +16,39 @@
 
 package utils
 
-import "fmt"
+import "testing"
 
-func PickFirstNonEmptyString(ss ...string) string {
-	for _, s := range ss {
-		if len(s) > 0 {
-			return s
-		}
+func TestMinUint32(t *testing.T) {
+	tests := []struct {
+		name   string
+		a      uint32
+		b      uint32
+		theMin uint32
+	}{
+		{
+			name:   "a > b",
+			a:      10,
+			b:      2,
+			theMin: 2,
+		},
+		{
+			name:   "a < b",
+			a:      10,
+			b:      20020,
+			theMin: 10,
+		},
+		{
+			name:   "a == b",
+			a:      10,
+			b:      10,
+			theMin: 10,
+		},
 	}
-	return ""
-}
-
-func CheckNotEmpty(name, input string) error {
-	if len(input) == 0 {
-		return fmt.Errorf("%s must not be empty", name)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if result := MinUint32(test.a, test.b); result != test.theMin {
+				t.Errorf("test %s expected %d but got %d", test.name, test.theMin, result)
+			}
+		})
 	}
-	return nil
 }

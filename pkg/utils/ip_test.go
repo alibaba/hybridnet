@@ -17,6 +17,7 @@
 package utils
 
 import (
+	"errors"
 	"net"
 	"reflect"
 	"testing"
@@ -266,4 +267,102 @@ func TestIntersect(t *testing.T) {
 		})
 	}
 
+}
+
+func TestValidateIP(t *testing.T) {
+	tests := []struct {
+		name string
+		ip   string
+		err  error
+	}{
+		{
+			name: "normal ipv4",
+			ip:   "192.168.0.1",
+			err:  nil,
+		},
+		{
+			name: "invalid ipv4",
+			ip:   "192.168.1",
+			err:  errors.New("192.168.1 is not a valid IP"),
+		},
+		{
+			name: "normal ipv6",
+			ip:   "fe80::aede:48ff:fe00:1122",
+			err:  nil,
+		},
+		{
+			name: "invalid ipv6",
+			ip:   "fe80::aede:48ff:fe000:1122",
+			err:  errors.New("fe80::aede:48ff:fe000:1122 is not a valid IP"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := ValidateIP(test.ip); !reflect.DeepEqual(err, test.err) {
+				t.Errorf("test %s, expected err %v but got %v", test.name, test.err, err)
+			}
+		})
+	}
+}
+
+func TestValidateIPv4(t *testing.T) {
+	var tests = []struct {
+		name string
+		ip   string
+		err  error
+	}{
+		{
+			name: "normal ipv4",
+			ip:   "192.168.0.1",
+			err:  nil,
+		},
+		{
+			name: "ipv6 address",
+			ip:   "fe80::aede:48ff:fe00:1122",
+			err:  errors.New("fe80::aede:48ff:fe00:1122 is not an IPv4 address"),
+		},
+		{
+			name: "invalid ipv4 address",
+			ip:   "192.168.1",
+			err:  errors.New("192.168.1 is not a valid IP"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := ValidateIPv4(test.ip); !reflect.DeepEqual(err, test.err) {
+				t.Errorf("test %s, expected err %v but got %v", test.name, test.err, err)
+			}
+		})
+	}
+}
+
+func TestValidateIPv6(t *testing.T) {
+	var tests = []struct {
+		name string
+		ip   string
+		err  error
+	}{
+		{
+			name: "normal ipv6",
+			ip:   "fe80::aede:48ff:fe00:1122",
+			err:  nil,
+		},
+		{
+			name: "ipv4 address",
+			ip:   "192.168.0.1",
+			err:  errors.New("192.168.0.1 is not an IPv6 address"),
+		},
+		{
+			name: "invalid ipv6 address",
+			ip:   "fe80::aede:48ff:fe00:11223",
+			err:  errors.New("fe80::aede:48ff:fe00:11223 is not a valid IP"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := ValidateIPv6(test.ip); !reflect.DeepEqual(err, test.err) {
+				t.Errorf("test %s, expected err %v but got %v", test.name, test.err, err)
+			}
+		})
+	}
 }

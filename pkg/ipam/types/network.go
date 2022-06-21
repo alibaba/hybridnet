@@ -19,6 +19,8 @@ package types
 import (
 	"errors"
 	"fmt"
+
+	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 var (
@@ -63,6 +65,14 @@ func (n NetworkSet) MatchNetworkType(networkName string, networkType NetworkType
 	return false
 }
 
+func (n NetworkSet) ListNetwork() []string {
+	var names []string
+	for name, _ := range n {
+		names = append(names, name)
+	}
+	return names
+}
+
 func NewNetwork(name string, netID *uint32, lastAllocatedSubnet string, networkType NetworkType) *Network {
 	return &Network{
 		Name:                name,
@@ -85,7 +95,7 @@ func (n *Network) GetSubnet(subnetName string) (*Subnet, error) {
 	return n.Subnets.GetAvailableSubnet()
 }
 
-func (n *Network) GetSubnetByIP(subnetName, ip string) (*Subnet, error) {
+func (n *Network) GetSubnetByNameOrIP(subnetName, ip string) (*Subnet, error) {
 	if len(subnetName) > 0 {
 		return n.Subnets.GetSubnet(subnetName)
 	}
@@ -121,45 +131,41 @@ func (n *Network) GetIPv6Subnet(subnetName string) (sn *Subnet, err error) {
 	return n.Subnets.GetAvailableIPv6Subnet()
 }
 
-func (n *Network) GetPairedDualStackSubnets(v4Name, v6Name string) (v4Subnet *Subnet, v6Subnet *Subnet, err error) {
-	if len(v4Name) > 0 && len(v6Name) > 0 {
-		if v4Subnet, err = n.Subnets.GetSubnet(v4Name); err != nil {
-			return
-		}
-		if v4Subnet.IsIPv6() {
-			return nil, nil, fmt.Errorf("assigned v4 subnet %s is IPv6 family", v4Name)
-		}
-		if v6Subnet, err = n.Subnets.GetSubnet(v6Name); err != nil {
-			return
-		}
-		if !v6Subnet.IsIPv6() {
-			return nil, nil, fmt.Errorf("assigned v6 subnet %s is IPv4 family", v6Name)
-		}
-		if unifyNetID(v4Subnet.NetID) != unifyNetID(v6Subnet.NetID) {
-			return nil, nil, fmt.Errorf("assigned subnets %s and %s have mismatched net ID", v4Name, v6Name)
-		}
+func (n *Network) GetDualStackSubnets(v4SubnetName, v6SubnetName string) (v4Subnet *Subnet, v6Subnet *Subnet, err error) {
+	if len(v4SubnetName) == 0 && len(v6SubnetName) == 0 {
+		return n.Subnets.GetAvailableDualStackSubnets()
+	}
+	if v4Subnet, err = n.GetIPv4Subnet(v4SubnetName); err != nil {
 		return
 	}
-
-	return n.Subnets.GetAvailablePairedDualStackSubnets()
+	if v6Subnet, err = n.GetIPv6Subnet(v6SubnetName); err != nil {
+		return
+	}
+	return
 }
 
-func (n *Network) Usage() (*Usage, map[string]*Usage, error) {
-	lastAllocatedSubnet, subnetUsages, _ := n.Subnets.Usage()
+func (n *Network) Usage() *NetworkUsage {
+	lastAllocatedSubnet, subnetUsages := n.Subnets.Usage()
+	ipv4SubnetNames, ipv6SubnetNames := n.Subnets.Classify()
 
-	networkUsage := new(Usage)
-
-	for _, su := range subnetUsages {
-		networkUsage.Total += su.Total
-		networkUsage.Available += su.Available
-		networkUsage.Used += su.Used
+	networkUsage := &NetworkUsage{
+		LastAllocation: lastAllocatedSubnet,
+		Usages: map[IPFamilyMode]*Usage{
+			IPv4Only:  {},
+			IPv6Only:  {},
+			DualStack: {},
+		},
+		SubnetUsages: subnetUsages,
 	}
 
-	networkUsage.LastAllocation = lastAllocatedSubnet
+	for _, ipv4SubnetName := range ipv4SubnetNames {
+		networkUsage.Usages[IPv4Only].Add(subnetUsages[ipv4SubnetName])
+	}
+	for _, ipv6SubnetName := range ipv6SubnetNames {
+		networkUsage.Usages[IPv6Only].Add(subnetUsages[ipv6SubnetName])
+	}
 
-	return networkUsage, subnetUsages, nil
-}
+	networkUsage.Usages[DualStack].Available = utils.MinUint32(networkUsage.Usages[IPv4Only].Available, networkUsage.Usages[IPv6Only].Available)
 
-func (n *Network) DualStackUsage() ([3]*Usage, map[string]*Usage, error) {
-	return n.Subnets.DualStackUsage()
+	return networkUsage
 }

@@ -16,11 +16,42 @@
 
 package types
 
+type Usage struct {
+	Total          uint32
+	Used           uint32
+	Available      uint32
+	LastAllocation string
+}
+
 func (u *Usage) Add(in *Usage) {
+	if in == nil {
+		return
+	}
+
 	u.Total += in.Total
 	u.Used += in.Used
 	u.Available += in.Available
 	if len(u.LastAllocation) == 0 {
 		u.LastAllocation = in.LastAllocation
 	}
+}
+
+type NetworkUsage struct {
+	LastAllocation string
+	Usages         map[IPFamilyMode]*Usage
+	SubnetUsages   map[string]*Usage
+}
+
+func (n *NetworkUsage) GetByType(ipFamily IPFamilyMode) *Usage {
+	if len(n.Usages) > 0 {
+		return n.Usages[ipFamily]
+	}
+	return nil
+}
+
+func (n *NetworkUsage) GetBySubnet(subnetName string) *Usage {
+	if len(n.SubnetUsages) > 0 {
+		return n.SubnetUsages[subnetName]
+	}
+	return nil
 }

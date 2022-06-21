@@ -87,10 +87,3 @@ type IPSlice struct {
 	IPCount int
 	IPIndex int
 }
-
-type Usage struct {
-	Total          uint32
-	Used           uint32
-	Available      uint32
-	LastAllocation string
-}

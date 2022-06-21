@@ -21,11 +21,13 @@ import (
 	"net"
 	"testing"
 
+	apitypes "k8s.io/apimachinery/pkg/types"
+
 	"github.com/alibaba/hybridnet/pkg/ipam/allocator"
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
 )
 
-func TestDualStackAllocator(t *testing.T) {
+func TestManager(t *testing.T) {
 	var networkGetter = func(network string) (*types.Network, error) {
 		return &types.Network{
 			Name:                network,
@@ -70,9 +72,9 @@ func TestDualStackAllocator(t *testing.T) {
 	}
 
 	networkTest := "network-test-1"
-	allocator, err := allocator.NewDualStackAllocator([]string{networkTest}, networkGetter, subnetGetter, ipSetGetter)
+	manager, err := allocator.NewManager([]string{networkTest}, networkGetter, subnetGetter, ipSetGetter)
 	if err != nil {
-		t.Errorf("fail to new allocator: %v", err)
+		t.Errorf("fail to new manager: %v", err)
 		return
 	}
 
@@ -89,7 +91,13 @@ func TestDualStackAllocator(t *testing.T) {
 			ipFamilyMode = types.DualStack
 		}
 
-		ips, err := allocator.Allocate(ipFamilyMode, networkTest, nil, "hah", "hehe")
+		ips, err := manager.Allocate(networkTest, types.PodInfo{
+			NamespacedName: apitypes.NamespacedName{
+				Namespace: "testns",
+				Name:      "testname",
+			},
+			IPFamily: ipFamilyMode,
+		})
 		if err != nil {
 			t.Errorf("fail to allocate ip %s: %v", ipFamilyMode, err)
 			return
@@ -102,5 +110,8 @@ func TestDualStackAllocator(t *testing.T) {
 			break
 		}
 	}
+}
 
+func generatePointerInt(a uint32) *uint32 {
+	return &a
 }

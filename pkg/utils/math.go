@@ -16,20 +16,9 @@
 
 package utils
 
-import "fmt"
-
-func PickFirstNonEmptyString(ss ...string) string {
-	for _, s := range ss {
-		if len(s) > 0 {
-			return s
-		}
+func MinUint32(a, b uint32) uint32 {
+	if a > b {
+		return b
 	}
-	return ""
-}
-
-func CheckNotEmpty(name, input string) error {
-	if len(input) == 0 {
-		return fmt.Errorf("%s must not be empty", name)
-	}
-	return nil
+	return a
 }
