@@ -31,7 +31,6 @@ import (
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/utils"
@@ -185,24 +184,18 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		}
 		// quota label selector to make sure pod will be scheduled on nodes
 		// where capacity of network is enough
-		if feature.DualStackEnabled() {
-			switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
-			case ipamtypes.IPv4Only:
-				patchSelectorToPod(pod, map[string]string{
-					constants.LabelIPv4AddressQuota: constants.QuotaNonEmpty,
-				})
-			case ipamtypes.IPv6Only:
-				patchSelectorToPod(pod, map[string]string{
-					constants.LabelIPv6AddressQuota: constants.QuotaNonEmpty,
-				})
-			case ipamtypes.DualStack:
-				patchSelectorToPod(pod, map[string]string{
-					constants.LabelDualStackAddressQuota: constants.QuotaNonEmpty,
-				})
-			}
-		} else {
+		switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
+		case ipamtypes.IPv4Only:
 			patchSelectorToPod(pod, map[string]string{
-				constants.LabelAddressQuota: constants.QuotaNonEmpty,
+				constants.LabelIPv4AddressQuota: constants.QuotaNonEmpty,
+			})
+		case ipamtypes.IPv6Only:
+			patchSelectorToPod(pod, map[string]string{
+				constants.LabelIPv6AddressQuota: constants.QuotaNonEmpty,
+			})
+		case ipamtypes.DualStack:
+			patchSelectorToPod(pod, map[string]string{
+				constants.LabelDualStackAddressQuota: constants.QuotaNonEmpty,
 			})
 		}
 	case ipamtypes.Overlay:

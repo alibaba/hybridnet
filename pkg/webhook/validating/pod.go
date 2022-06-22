@@ -34,7 +34,6 @@ import (
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/feature"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
@@ -132,36 +131,74 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 			return webhookutils.AdmissionDeniedWithLog("ip pool and network(subnet) must be specified at the same time", logger)
 		}
 		ips := strings.Split(ipPool, ",")
-		for _, ip := range ips {
-			if utils.NormalizedIP(ip) != ip {
-				return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("ip pool has invalid ip %s", ip), logger)
+		for idx, ipSegment := range ips {
+			if len(ipSegment) == 0 {
+				return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("the %d ip in ip pool is empty", idx), logger)
+			}
+
+			// if dual stack IP family, more than one IP should be assigned
+			for _, ip := range strings.Split(ipPool, "/") {
+				if utils.NormalizedIP(ip) != ip {
+					return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("ip pool has an invalid ip %s", ip), logger)
+				}
 			}
 		}
 	}
 
-	// Global network capacity validation
-	if feature.DualStackEnabled() && networkingv1.IsGlobalUniqueNetworkType(networkingv1.NetworkType(networkType)) {
+	// Network type validation
+	switch networkType {
+	case ipamtypes.Underlay, ipamtypes.Overlay, ipamtypes.GlobalBGP:
+	default:
+		return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("unrecognized network type %s", networkType), logger)
+	}
+
+	// IP family validation
+	var ipFamily = ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
+	switch ipFamily {
+	case ipamtypes.IPv4Only, ipamtypes.IPv6Only, ipamtypes.DualStack:
+	default:
+		return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("unrecognized ip family %s", ipFamily), logger)
+	}
+
+	// Network availability validation
+	// For underlay network type, pod will be patched some quota labels when mutating to be scheduled on nodes which
+	// have available underlay network
+	// For other network types (now only some global unique network types), pod will be denied here if network is
+	// not available
+	var networkTypeInSpec = networkingv1.NetworkType(networkType)
+	switch networkTypeInSpec {
+	case networkingv1.NetworkTypeOverlay, networkingv1.NetworkTypeGlobalBGP:
 		networkList := &networkingv1.NetworkList{}
 		if err = handler.Client.List(ctx, networkList); err != nil {
 			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 		}
+
+		idx := -1
 		for i := range networkList.Items {
-			network := &networkList.Items[i]
-			if networkingv1.IsGlobalUniqueNetwork(network) {
-				switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
-				case ipamtypes.IPv4Only:
-					if network.Status.Statistics.Available <= 0 {
-						return webhookutils.AdmissionDeniedWithLog("lacking ipv4 addresses for overlay mode", logger)
-					}
-				case ipamtypes.IPv6Only:
-					if network.Status.IPv6Statistics.Available <= 0 {
-						return webhookutils.AdmissionDeniedWithLog("lacking ipv6 addresses for overlay mode", logger)
-					}
-				case ipamtypes.DualStack:
-					if network.Status.DualStackStatistics.Available <= 0 {
-						return webhookutils.AdmissionDeniedWithLog("lacking dual stack addresses for overlay mode", logger)
-					}
-				}
+			if networkingv1.GetNetworkType(&networkList.Items[i]) == networkTypeInSpec {
+				idx = i
+				break
+			}
+		}
+
+		if idx < 0 {
+			return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("no network found by type %s", networkTypeInSpec), logger)
+		}
+
+		network := &networkList.Items[idx]
+
+		switch ipFamily {
+		case ipamtypes.IPv4Only:
+			if !networkingv1.IsAvailable(network.Status.Statistics) {
+				return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("lacking ipv4 addresses by network type %s", networkTypeInSpec), logger)
+			}
+		case ipamtypes.IPv6Only:
+			if !networkingv1.IsAvailable(network.Status.IPv6Statistics) {
+				return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("lacking ipv6 addresses by network type %s", networkTypeInSpec), logger)
+			}
+		case ipamtypes.DualStack:
+			if !networkingv1.IsAvailable(network.Status.DualStackStatistics) {
+				return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("lacking dual stack addresses by network type %s", networkTypeInSpec), logger)
 			}
 		}
 	}

@@ -114,11 +114,6 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 		return webhookutils.AdmissionDeniedWithLog(err.Error(), logger)
 	}
 
-	// IP Family validation
-	if !feature.DualStackEnabled() && networkingv1.IsIPv6Subnet(subnet) {
-		return webhookutils.AdmissionDeniedWithLog("ipv6 subnet non-supported if dualstack not enabled", logger)
-	}
-
 	// Capacity validation
 	if capacity := networkingv1.CalculateCapacity(&subnet.Spec.Range); capacity > MaxSubnetCapacity {
 		return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("subnet contains more than %d IPs", MaxSubnetCapacity), logger)

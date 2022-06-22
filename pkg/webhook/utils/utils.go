@@ -3,19 +3,18 @@ package utils
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"strings"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/utils"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func SelectNetworkAndSubnetFromObject(ctx context.Context, c client.Reader, obj client.Object) (networkName string, subnetNameStr string, err error) {
@@ -77,11 +76,7 @@ func SelectNetworkAndSubnetFromObject(ctx context.Context, c client.Reader, obj 
 
 func specifiedSubnetStrToSubnetNames(specifiedSubnetString string) (subnetNames []string) {
 	if len(specifiedSubnetString) > 0 {
-		if feature.DualStackEnabled() {
-			subnetNames = strings.Split(specifiedSubnetString, "/")
-		} else {
-			subnetNames = []string{specifiedSubnetString}
-		}
+		subnetNames = strings.Split(specifiedSubnetString, "/")
 	}
 	return
 }

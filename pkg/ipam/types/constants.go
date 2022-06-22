@@ -20,8 +20,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-
-	"github.com/alibaba/hybridnet/pkg/feature"
 )
 
 type IPFamilyMode string
@@ -39,12 +37,6 @@ const (
 )
 
 func ParseIPFamilyFromString(in string) IPFamilyMode {
-	// if dual-stack not enabled, only ipv4 subnets will be
-	// recognized and promoted
-	if !feature.DualStackEnabled() {
-		return IPv4Only
-	}
-
 	switch strings.ToLower(in) {
 	case "":
 		return ParseIPFamilyFromEnvOnce()

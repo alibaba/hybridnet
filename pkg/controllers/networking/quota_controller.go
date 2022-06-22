@@ -37,7 +37,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
-	"github.com/alibaba/hybridnet/pkg/feature"
 )
 
 const ControllerQuota = "Quota"
@@ -69,29 +68,19 @@ func (r *QuotaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (resu
 		return ctrl.Result{}, nil
 	}
 
-	var quotaLabels map[string]string
-	if feature.DualStackEnabled() {
-		quotaLabels = map[string]string{
-			constants.LabelIPv4AddressQuota:      constants.QuotaEmpty,
-			constants.LabelIPv6AddressQuota:      constants.QuotaEmpty,
-			constants.LabelDualStackAddressQuota: constants.QuotaEmpty,
-		}
-		if networkingv1.IsAvailable(network.Status.Statistics) {
-			quotaLabels[constants.LabelIPv4AddressQuota] = constants.QuotaNonEmpty
-		}
-		if networkingv1.IsAvailable(network.Status.IPv6Statistics) {
-			quotaLabels[constants.LabelIPv6AddressQuota] = constants.QuotaNonEmpty
-		}
-		if networkingv1.IsAvailable(network.Status.DualStackStatistics) {
-			quotaLabels[constants.LabelDualStackAddressQuota] = constants.QuotaNonEmpty
-		}
-	} else {
-		quotaLabels = map[string]string{
-			constants.LabelAddressQuota: constants.QuotaEmpty,
-		}
-		if networkingv1.IsAvailable(network.Status.Statistics) {
-			quotaLabels[constants.LabelAddressQuota] = constants.QuotaNonEmpty
-		}
+	var quotaLabels = map[string]string{
+		constants.LabelIPv4AddressQuota:      constants.QuotaEmpty,
+		constants.LabelIPv6AddressQuota:      constants.QuotaEmpty,
+		constants.LabelDualStackAddressQuota: constants.QuotaEmpty,
+	}
+	if networkingv1.IsAvailable(network.Status.Statistics) {
+		quotaLabels[constants.LabelIPv4AddressQuota] = constants.QuotaNonEmpty
+	}
+	if networkingv1.IsAvailable(network.Status.IPv6Statistics) {
+		quotaLabels[constants.LabelIPv6AddressQuota] = constants.QuotaNonEmpty
+	}
+	if networkingv1.IsAvailable(network.Status.DualStackStatistics) {
+		quotaLabels[constants.LabelDualStackAddressQuota] = constants.QuotaNonEmpty
 	}
 
 	var patchFuncs []func() error
