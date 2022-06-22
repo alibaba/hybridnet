@@ -151,21 +151,21 @@ func (n *Network) Usage() *NetworkUsage {
 	networkUsage := &NetworkUsage{
 		LastAllocation: lastAllocatedSubnet,
 		Usages: map[IPFamilyMode]*Usage{
-			IPv4Only:  {},
-			IPv6Only:  {},
+			IPv4:      {},
+			IPv6:      {},
 			DualStack: {},
 		},
 		SubnetUsages: subnetUsages,
 	}
 
 	for _, ipv4SubnetName := range ipv4SubnetNames {
-		networkUsage.Usages[IPv4Only].Add(subnetUsages[ipv4SubnetName])
+		networkUsage.Usages[IPv4].Add(subnetUsages[ipv4SubnetName])
 	}
 	for _, ipv6SubnetName := range ipv6SubnetNames {
-		networkUsage.Usages[IPv6Only].Add(subnetUsages[ipv6SubnetName])
+		networkUsage.Usages[IPv6].Add(subnetUsages[ipv6SubnetName])
 	}
 
-	networkUsage.Usages[DualStack].Available = utils.MinUint32(networkUsage.Usages[IPv4Only].Available, networkUsage.Usages[IPv6Only].Available)
+	networkUsage.Usages[DualStack].Available = utils.MinUint32(networkUsage.Usages[IPv4].Available, networkUsage.Usages[IPv6].Available)
 
 	return networkUsage
 }

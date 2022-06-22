@@ -25,29 +25,29 @@ import (
 type IPFamilyMode string
 
 const (
-	IPv4Only  = IPFamilyMode("IPv4Only")
-	IPv6Only  = IPFamilyMode("IPv6Only")
+	IPv4      = IPFamilyMode("IPv4Only")
+	IPv6      = IPFamilyMode("IPv6Only")
 	DualStack = IPFamilyMode("DualStack")
 )
 
 // short aliases
 const (
-	IPv4OnlyAlias = "IPv4"
-	IPv6OnlyAlias = "IPv6"
+	IPv4Alias = "IPv4"
+	IPv6Alias = "IPv6"
 )
 
 func ParseIPFamilyFromString(in string) IPFamilyMode {
 	switch strings.ToLower(in) {
 	case "":
 		return ParseIPFamilyFromEnvOnce()
-	case strings.ToLower(string(IPv4Only)), strings.ToLower(IPv4OnlyAlias):
-		return IPv4Only
-	case strings.ToLower(string(IPv6Only)), strings.ToLower(IPv6OnlyAlias):
-		return IPv6Only
+	case strings.ToLower(string(IPv4)), strings.ToLower(IPv4Alias):
+		return IPv4
+	case strings.ToLower(string(IPv6)), strings.ToLower(IPv6Alias):
+		return IPv6
 	case strings.ToLower(string(DualStack)):
 		return DualStack
 	default:
-		return IPv4Only
+		return IPv4
 	}
 }
 
@@ -66,10 +66,10 @@ func ParseIPFamilyFromEnvOnce() IPFamilyMode {
 func ParseIPFamilyFromEnv() IPFamilyMode {
 	ipFamilyEnv := os.Getenv("DEFAULT_IP_FAMILY")
 	switch strings.ToLower(ipFamilyEnv) {
-	case strings.ToLower(string(IPv4Only)), strings.ToLower(IPv4OnlyAlias), "":
-		return IPv4Only
-	case strings.ToLower(string(IPv6Only)), strings.ToLower(IPv6OnlyAlias):
-		return IPv6Only
+	case strings.ToLower(string(IPv4)), strings.ToLower(IPv4Alias), "":
+		return IPv4
+	case strings.ToLower(string(IPv6)), strings.ToLower(IPv6Alias):
+		return IPv6
 	case strings.ToLower(string(DualStack)):
 		return DualStack
 	default:

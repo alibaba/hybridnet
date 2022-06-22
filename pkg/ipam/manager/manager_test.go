@@ -84,9 +84,9 @@ func TestManager(t *testing.T) {
 	for {
 		switch count % 3 {
 		case 0:
-			ipFamilyMode = types.IPv4Only
+			ipFamilyMode = types.IPv4
 		case 1:
-			ipFamilyMode = types.IPv6Only
+			ipFamilyMode = types.IPv6
 		case 2:
 			ipFamilyMode = types.DualStack
 		}

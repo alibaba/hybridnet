@@ -113,7 +113,7 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, wrapError("unable to fetch network usage", err)
 	}
 
-	if ipv4Usage := networkUsage.GetByType(ipamtypes.IPv4Only); ipv4Usage != nil {
+	if ipv4Usage := networkUsage.GetByType(ipamtypes.IPv4); ipv4Usage != nil {
 		networkStatus.LastAllocatedSubnet = ipv4Usage.LastAllocation
 		networkStatus.Statistics = &networkingv1.Count{
 			Total:     int32(ipv4Usage.Total),
@@ -121,7 +121,7 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			Available: int32(ipv4Usage.Available),
 		}
 	}
-	if ipv6Usage := networkUsage.GetByType(ipamtypes.IPv6Only); ipv6Usage != nil {
+	if ipv6Usage := networkUsage.GetByType(ipamtypes.IPv6); ipv6Usage != nil {
 		networkStatus.LastAllocatedIPv6Subnet = ipv6Usage.LastAllocation
 		networkStatus.IPv6Statistics = &networkingv1.Count{
 			Total:     int32(ipv6Usage.Total),

@@ -124,7 +124,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	if cacheExist && uid == pod.UID {
 		ipFamily := ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
 
-		if (len(ipInstanceList) == 1 && (ipFamily == ipamtypes.IPv4Only || ipFamily == ipamtypes.IPv6Only)) ||
+		if (len(ipInstanceList) == 1 && (ipFamily == ipamtypes.IPv4 || ipFamily == ipamtypes.IPv6)) ||
 			(len(ipInstanceList) == 2 && ipFamily == ipamtypes.DualStack) {
 			return ctrl.Result{}, nil
 		}

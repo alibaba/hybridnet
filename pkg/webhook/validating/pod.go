@@ -155,7 +155,7 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 	// IP family validation
 	var ipFamily = ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
 	switch ipFamily {
-	case ipamtypes.IPv4Only, ipamtypes.IPv6Only, ipamtypes.DualStack:
+	case ipamtypes.IPv4, ipamtypes.IPv6, ipamtypes.DualStack:
 	default:
 		return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("unrecognized ip family %s", ipFamily), logger)
 	}
@@ -188,11 +188,11 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 		network := &networkList.Items[idx]
 
 		switch ipFamily {
-		case ipamtypes.IPv4Only:
+		case ipamtypes.IPv4:
 			if !networkingv1.IsAvailable(network.Status.Statistics) {
 				return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("lacking ipv4 addresses by network type %s", networkTypeInSpec), logger)
 			}
-		case ipamtypes.IPv6Only:
+		case ipamtypes.IPv6:
 			if !networkingv1.IsAvailable(network.Status.IPv6Statistics) {
 				return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("lacking ipv6 addresses by network type %s", networkTypeInSpec), logger)
 			}

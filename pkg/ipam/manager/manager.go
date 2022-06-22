@@ -151,9 +151,9 @@ func (m *Manager) Allocate(networkName string, podInfo types.PodInfo, opts ...ty
 	}
 
 	switch podInfo.IPFamily {
-	case types.IPv4Only:
+	case types.IPv4:
 		return m.allocateIPv4(networkName, podInfo, *options)
-	case types.IPv6Only:
+	case types.IPv6:
 		return m.allocateIPv6(networkName, podInfo, *options)
 	case types.DualStack:
 		return m.allocateDualStack(networkName, podInfo, *options)
@@ -280,9 +280,9 @@ func (m *Manager) Assign(networkName string, podInfo types.PodInfo, assignedSuit
 	}
 
 	switch podInfo.IPFamily {
-	case types.IPv4Only:
+	case types.IPv4:
 		return m.assignIPv4(networkName, podInfo, assignedSuites, *options)
-	case types.IPv6Only:
+	case types.IPv6:
 		return m.assignIPv6(networkName, podInfo, assignedSuites, *options)
 	case types.DualStack:
 		return m.assignDualStack(networkName, podInfo, assignedSuites, *options)

@@ -185,11 +185,11 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		// quota label selector to make sure pod will be scheduled on nodes
 		// where capacity of network is enough
 		switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
-		case ipamtypes.IPv4Only:
+		case ipamtypes.IPv4:
 			patchSelectorToPod(pod, map[string]string{
 				constants.LabelIPv4AddressQuota: constants.QuotaNonEmpty,
 			})
-		case ipamtypes.IPv6Only:
+		case ipamtypes.IPv6:
 			patchSelectorToPod(pod, map[string]string{
 				constants.LabelIPv6AddressQuota: constants.QuotaNonEmpty,
 			})
