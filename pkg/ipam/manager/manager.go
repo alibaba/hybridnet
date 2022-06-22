@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package allocator
+package manager
 
 import (
 	"fmt"

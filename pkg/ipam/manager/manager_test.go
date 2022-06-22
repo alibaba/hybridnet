@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package allocator_test
+package manager_test
 
 import (
 	"fmt"
@@ -23,7 +23,7 @@ import (
 
 	apitypes "k8s.io/apimachinery/pkg/types"
 
-	"github.com/alibaba/hybridnet/pkg/ipam/allocator"
+	"github.com/alibaba/hybridnet/pkg/ipam/manager"
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
 )
 
@@ -72,7 +72,7 @@ func TestManager(t *testing.T) {
 	}
 
 	networkTest := "network-test-1"
-	manager, err := allocator.NewManager([]string{networkTest}, networkGetter, subnetGetter, ipSetGetter)
+	manager, err := manager.NewManager([]string{networkTest}, networkGetter, subnetGetter, ipSetGetter)
 	if err != nil {
 		t.Errorf("fail to new manager: %v", err)
 		return

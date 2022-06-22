@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package allocator
+package manager
 
 import (
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
