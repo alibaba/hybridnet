@@ -23,9 +23,8 @@ import (
 
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
-	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/ipam"
-	"github.com/alibaba/hybridnet/pkg/ipam/allocator"
+	"github.com/alibaba/hybridnet/pkg/ipam/manager"
 	"github.com/alibaba/hybridnet/pkg/ipam/store"
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
@@ -33,11 +32,10 @@ import (
 )
 
 type IPAMManager interface {
-	ipam.Interface
-	DualStack() ipam.DualStackInterface
+	ipam.Manager
 }
 
-func NewIPAMManager(ctx context.Context, c client.Reader) (IPAMManager, error) {
+func NewIPAMManager(ctx context.Context, c client.Client) (IPAMManager, error) {
 	networkList, err := utils.ListNetworks(ctx, c)
 	if err != nil {
 		return nil, err
@@ -48,25 +46,10 @@ func NewIPAMManager(ctx context.Context, c client.Reader) (IPAMManager, error) {
 		networkNames[i] = networkList.Items[i].Name
 	}
 
-	manager := &ipamManager{}
-	if feature.DualStackEnabled() {
-		manager.dualStack, err = allocator.NewDualStackAllocator(networkNames,
-			NetworkGetter(ctx, c), SubnetGetter(ctx, c), IPSetGetter(ctx, c))
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		manager.Interface, err = allocator.NewAllocator(networkNames,
-			NetworkGetter(ctx, c), SubnetGetter(ctx, c), IPSetGetter(ctx, c))
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return manager, nil
+	return manager.NewManager(networkNames, NetworkGetter(ctx, c), SubnetGetter(ctx, c), IPSetGetter(ctx, c))
 }
 
-func NetworkGetter(ctx context.Context, c client.Reader) allocator.NetworkGetter {
+func NetworkGetter(ctx context.Context, c client.Reader) manager.NetworkGetter {
 	return func(networkName string) (*types.Network, error) {
 		network, err := utils.GetNetwork(ctx, c, networkName)
 		if err != nil {
@@ -77,7 +60,7 @@ func NetworkGetter(ctx context.Context, c client.Reader) allocator.NetworkGetter
 	}
 }
 
-func SubnetGetter(ctx context.Context, c client.Reader) allocator.SubnetGetter {
+func SubnetGetter(ctx context.Context, c client.Reader) manager.SubnetGetter {
 	return func(networkName string) ([]*types.Subnet, error) {
 		subnetList, err := utils.ListSubnets(ctx, c)
 		if err != nil {
@@ -95,7 +78,7 @@ func SubnetGetter(ctx context.Context, c client.Reader) allocator.SubnetGetter {
 	}
 }
 
-func IPSetGetter(ctx context.Context, c client.Reader) allocator.IPSetGetter {
+func IPSetGetter(ctx context.Context, c client.Reader) manager.IPSetGetter {
 	return func(subnetName string) (ipamtypes.IPSet, error) {
 		ipList, err := utils.ListIPInstances(ctx, c, client.MatchingLabels{
 			constants.LabelSubnet: subnetName,
@@ -112,22 +95,6 @@ func IPSetGetter(ctx context.Context, c client.Reader) allocator.IPSetGetter {
 		}
 		return ipSet, nil
 	}
-}
-
-type ipamManager struct {
-	ipam.Interface
-	dualStack ipam.DualStackInterface
-}
-
-func (i *ipamManager) DualStack() ipam.DualStackInterface {
-	return i.dualStack
-}
-
-func (i *ipamManager) Refresh(networks []string) error {
-	if feature.DualStackEnabled() {
-		return i.DualStack().Refresh(networks)
-	}
-	return i.Interface.Refresh(networks)
 }
 
 type IPAMStore interface {

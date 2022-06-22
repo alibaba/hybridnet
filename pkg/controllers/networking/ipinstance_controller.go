@@ -28,7 +28,7 @@ import (
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
-	"github.com/alibaba/hybridnet/pkg/feature"
+	"github.com/alibaba/hybridnet/pkg/ipam/types"
 )
 
 const ControllerIPInstance = "IPInstance"
@@ -57,11 +57,6 @@ func (r *IPInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if !ip.DeletionTimestamp.IsZero() {
-		podName := networkingv1.FetchBindingPodName(&ip)
-		if len(podName) == 0 {
-			return ctrl.Result{}, wrapError("cannot release an IPInstance without pod label", err)
-		}
-
 		r.PodIPCache.Release(ip.Name, ip.Namespace)
 
 		if err = r.releaseIP(ctx, &ip); err != nil {
@@ -73,27 +68,16 @@ func (r *IPInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *IPInstanceReconciler) releaseIP(ctx context.Context, ipInstance *networkingv1.IPInstance) (err error) {
-	if feature.DualStackEnabled() {
-		if err = r.IPAMManager.DualStack().Release(utils.ToIPFamilyMode(networkingv1.IsIPv6IPInstance(ipInstance)),
-			ipInstance.Spec.Network,
-			[]string{
-				ipInstance.Spec.Subnet,
-			},
-			[]string{
-				utils.ToIPFormat(ipInstance.Name),
-			},
-		); err != nil {
-			return err
-		}
-	} else {
-		if err = r.IPAMManager.Release(ipInstance.Spec.Network, ipInstance.Spec.Subnet, utils.ToIPFormat(ipInstance.Name)); err != nil {
-			return err
-		}
+	if err = r.IPAMManager.Release(ipInstance.Spec.Network,
+		[]types.SubnetIPSuite{
+			types.ReleaseIPOfSubnet(ipInstance.Spec.Subnet, utils.ToIPFormat(ipInstance.Name)),
+		},
+	); err != nil {
+		return
 	}
-	if err = r.IPAMStore.IPUnBind(ctx, ipInstance.Namespace, ipInstance.Name); err != nil {
-		return err
-	}
-	return nil
+
+	err = r.IPAMStore.IPUnBind(ctx, ipInstance.Namespace, ipInstance.Name)
+	return
 }
 
 // SetupWithManager sets up the controller with the Manager.

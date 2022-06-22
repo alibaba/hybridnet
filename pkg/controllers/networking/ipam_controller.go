@@ -33,7 +33,7 @@ import (
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
-	"github.com/alibaba/hybridnet/pkg/ipam"
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 )
 
 const ControllerIPAM = "IPAM"
@@ -42,7 +42,7 @@ const ControllerIPAM = "IPAM"
 type IPAMReconciler struct {
 	client.Client
 
-	Refresh ipam.Refresh
+	IPAMManager IPAMManager
 
 	concurrency.ControllerConcurrency
 }
@@ -54,7 +54,7 @@ type IPAMReconciler struct {
 func (r *IPAMReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 
-	if err := r.Refresh.Refresh([]string{req.Name}); err != nil {
+	if err := r.IPAMManager.Refresh(ipamtypes.RefreshNetworks{req.Name}); err != nil {
 		log.Error(err, "unable to refresh IPAM Manager", "network", req.Name)
 		return ctrl.Result{}, err
 	}

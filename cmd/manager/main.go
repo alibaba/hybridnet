@@ -146,7 +146,7 @@ func main() {
 	// setup controllers
 	if err = (&networking.IPAMReconciler{
 		Client:                mgr.GetClient(),
-		Refresh:               ipamManager,
+		IPAMManager:           ipamManager,
 		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerIPAM]),
 	}).SetupWithManager(mgr); err != nil {
 		entryLog.Error(err, "unable to inject controller", "controller", networking.ControllerIPAM)

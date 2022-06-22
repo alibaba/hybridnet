@@ -131,7 +131,7 @@ var _ = BeforeSuite(func() {
 	// setup controllers
 	Expect((&networking.IPAMReconciler{
 		Client:                mgr.GetClient(),
-		Refresh:               ipamManager,
+		IPAMManager:           ipamManager,
 		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerIPAM]),
 	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
 
