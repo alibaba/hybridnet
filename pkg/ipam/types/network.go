@@ -67,7 +67,7 @@ func (n NetworkSet) MatchNetworkType(networkName string, networkType NetworkType
 
 func (n NetworkSet) ListNetwork() []string {
 	var names []string
-	for name, _ := range n {
+	for name := range n {
 		names = append(names, name)
 	}
 	return names
