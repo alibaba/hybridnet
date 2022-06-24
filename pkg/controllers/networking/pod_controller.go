@@ -317,21 +317,13 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 
 		// allocated reuse will have both subnet and IP, also IP candidates should follow
 		// ip family order, ipv4 before ipv6
+		networkingv1.SortIPInstancePointerSlice(allocatedIPInstances)
 		for i := range allocatedIPInstances {
 			var ipInstance = allocatedIPInstances[i]
-			if networkingv1.IsIPv6IPInstance(ipInstance) {
-				ipCandidates = append(ipCandidates, ipCandidate{
-					subnet: ipInstance.Spec.Subnet,
-					ip:     utils.ToIPFormat(ipInstance.Name),
-				})
-			} else {
-				ipCandidates = append([]ipCandidate{
-					{
-						subnet: ipInstance.Spec.Subnet,
-						ip:     utils.ToIPFormat(ipInstance.Name),
-					},
-				}, ipCandidates...)
-			}
+			ipCandidates = append(ipCandidates, ipCandidate{
+				subnet: ipInstance.Spec.Subnet,
+				ip:     utils.ToIPFormat(ipInstance.Name),
+			})
 		}
 
 		// when no valid ip found, it means that this is the first time of pod creation

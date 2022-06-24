@@ -245,24 +245,29 @@ func DetectNetworkAttachmentOfNode(ctx context.Context, client client.Reader, no
 	return underlayNetworkName != "", overlayNetworkName != "", nil
 }
 
-func ListAllocatedIPInstancesOfPod(ctx context.Context, c client.Reader, pod *corev1.Pod) (ips []*networkingv1.IPInstance, err error) {
+// ListAllocatedIPInstances will list allocated (non-terminating) IPInstances by some specified filters
+func ListAllocatedIPInstances(ctx context.Context, c client.Reader, opts ...client.ListOption) (ips []*networkingv1.IPInstance, err error) {
 	var ipList *networkingv1.IPInstanceList
-	if ipList, err = ListIPInstances(ctx, c,
-		client.MatchingLabels{
-			constants.LabelPod: pod.Name,
-		},
-		client.InNamespace(pod.Namespace),
-	); err != nil {
+	if ipList, err = ListIPInstances(ctx, c, opts...); err != nil {
 		return
 	}
 	for i := range ipList.Items {
 		var ip = &ipList.Items[i]
 		// terminating ip should not be picked ip
-		if networkingv1.FetchBindingPodName(ip) == pod.Name && ip.DeletionTimestamp == nil {
+		if ip.DeletionTimestamp == nil {
 			ips = append(ips, ip.DeepCopy())
 		}
 	}
 	return
+}
+
+func ListAllocatedIPInstancesOfPod(ctx context.Context, c client.Reader, pod *corev1.Pod) (ips []*networkingv1.IPInstance, err error) {
+	return ListAllocatedIPInstances(ctx, c,
+		client.MatchingLabels{
+			constants.LabelPod: pod.Name,
+		},
+		client.InNamespace(pod.Namespace),
+	)
 }
 
 func GetClusterUUID(ctx context.Context, c client.Reader) (types.UID, error) {
