@@ -47,3 +47,10 @@ func ReleaseIPOfSubnet(subnet, ip string) SubnetIPSuite {
 		IP:     ip,
 	}
 }
+
+func ReserveIPOfSubnet(subnet, ip string) SubnetIPSuite {
+	return SubnetIPSuite{
+		Subnet: subnet,
+		IP:     ip,
+	}
+}

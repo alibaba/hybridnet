@@ -445,6 +445,10 @@ func (s *Subnet) Release(ip string) {
 	}
 }
 
+func (s *Subnet) Reserve(ip string) {
+	s.UsingIPs.UpdateStatus(ip, IPStatusReserved)
+}
+
 func (s *Subnet) Assign(podName, podNamespace, ip string, forced bool) (*IP, error) {
 	if !s.Contains(net.ParseIP(ip)) {
 		return nil, ErrNotFoundAssignedIP

@@ -33,6 +33,7 @@ type Manager interface {
 	Allocate(networkName string, podInfo types.PodInfo, options ...types.AllocateOption) (allocatedIPs []*types.IP, err error)
 	Assign(networkName string, podInfo types.PodInfo, assignedSuites []types.SubnetIPSuite, options ...types.AssignOption) (assignedIPs []*types.IP, err error)
 	Release(networkName string, releaseSuites []types.SubnetIPSuite) (err error)
+	Reserve(networkName string, reserveSuites []types.SubnetIPSuite) (err error)
 }
 
 type Store interface {

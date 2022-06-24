@@ -35,15 +35,16 @@ func (s IPSet) Update(ip, podName, podNamespace, status string) {
 	if !s.Has(ip) {
 		return
 	}
-	if len(podName) > 0 {
-		s[ip].PodName = podName
+	s[ip].PodName = podName
+	s[ip].PodNamespace = podNamespace
+	s[ip].Status = status
+}
+
+func (s IPSet) UpdateStatus(ip, status string) {
+	if !s.Has(ip) {
+		return
 	}
-	if len(podNamespace) > 0 {
-		s[ip].PodNamespace = podNamespace
-	}
-	if len(status) > 0 {
-		s[ip].Status = status
-	}
+	s[ip].Status = status
 }
 
 func (s IPSet) Delete(ip string) {

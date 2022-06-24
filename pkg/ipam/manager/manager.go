@@ -412,10 +412,43 @@ func (m *Manager) Release(networkName string, releaseSuites []types.SubnetIPSuit
 
 		var subnet *types.Subnet
 		if subnet, err = network.GetSubnet(releaseSuite.Subnet); err != nil {
-			return
+			return fmt.Errorf("fail to get subnet %s: %v", releaseSuite.Subnet, err)
 		}
 
 		subnet.Release(releaseSuite.IP)
+	}
+
+	return
+}
+
+// Reserve will reserve some IPs from a binding pod
+func (m *Manager) Reserve(networkName string, reserveSuites []types.SubnetIPSuite) (err error) {
+	m.Lock()
+	defer m.Unlock()
+
+	validateFunctions := []func() error{
+		func() error { return utils.CheckNotEmpty("network name", networkName) },
+	}
+	if err = errors.AggregateGoroutines(validateFunctions...); err != nil {
+		return fmt.Errorf("validation fail: %v", err)
+	}
+
+	var network *types.Network
+	if network, err = m.Networks.GetNetwork(networkName); err != nil {
+		return fmt.Errorf("fail to get network %s: %v", networkName, err)
+	}
+
+	for _, reserveSuite := range reserveSuites {
+		if len(reserveSuite.Subnet) == 0 {
+			return fmt.Errorf("must assign subnet when reserving IP, but %v", reserveSuite)
+		}
+
+		var subnet *types.Subnet
+		if subnet, err = network.GetSubnet(reserveSuite.Subnet); err != nil {
+			return fmt.Errorf("fail to get subnet %s: %v", reserveSuite.Subnet, err)
+		}
+
+		subnet.Reserve(reserveSuite.IP)
 	}
 
 	return
