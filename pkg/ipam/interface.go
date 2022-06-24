@@ -36,10 +36,10 @@ type Manager interface {
 }
 
 type Store interface {
-	Couple(ctx context.Context, pod *v1.Pod, IPs []*types.IP) (err error)
-	ReCouple(ctx context.Context, pod *v1.Pod, IPs []*types.IP) (err error)
+	Couple(ctx context.Context, pod *v1.Pod, IPs []*types.IP, options ...types.CoupleOption) (err error)
+	ReCouple(ctx context.Context, pod *v1.Pod, IPs []*types.IP, options ...types.ReCoupleOption) (err error)
 	DeCouple(ctx context.Context, pod *v1.Pod) (err error)
-	IPReserve(ctx context.Context, pod *v1.Pod) (err error)
+	IPReserve(ctx context.Context, pod *v1.Pod, options ...types.ReserveOption) (err error)
 	IPRecycle(ctx context.Context, namespace string, ip *types.IP) (err error)
 	IPUnBind(ctx context.Context, namespace, ip string) (err error)
 }
