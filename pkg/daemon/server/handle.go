@@ -122,11 +122,24 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 			return
 		}
 
-		if (len(ipInstanceList) == 1 && (ipFamily == ipamtypes.IPv4 || ipFamily == ipamtypes.IPv6)) ||
-			(len(ipInstanceList) == 2 && ipFamily == ipamtypes.DualStack) {
+		var expectIPNumber int
+		switch ipFamily {
+		case ipamtypes.IPv4, ipamtypes.IPv6:
+			expectIPNumber = 1
+		case ipamtypes.DualStack:
+			expectIPNumber = 2
+		default:
+			errMsg := fmt.Errorf("invalid ip family %v for pod %v/%v",
+				ipFamily, podRequest.PodName, podRequest.PodNamespace)
+			cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
+			return
+		}
+
+		if len(ipInstanceList) == expectIPNumber {
 			break
 		} else if i == retries-1 {
-			errMsg := fmt.Errorf("failed to wait for pod %v/%v be coupled with ip: %v", podRequest.PodName, podRequest.PodNamespace, err)
+			errMsg := fmt.Errorf("failed to wait for pod %v/%v to be coupled with ip, expect %v and get %v",
+				podRequest.PodName, podRequest.PodNamespace, expectIPNumber, len(ipInstanceList))
 			cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
 			return
 		}
