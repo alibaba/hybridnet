@@ -314,3 +314,73 @@ func TestGetNetworkType(t *testing.T) {
 		})
 	}
 }
+
+func TestIsIPv6IPInstance(t *testing.T) {
+	tests := []struct {
+		name       string
+		ipInstance *IPInstance
+		expect     bool
+	}{
+		{
+			name:       "nil",
+			ipInstance: nil,
+			expect:     false,
+		},
+		{
+			name: "v4 version",
+			ipInstance: &IPInstance{
+				Spec: IPInstanceSpec{
+					Address: Address{
+						Version: IPv4,
+					},
+				},
+			},
+			expect: false,
+		},
+		{
+			name: "v6 version",
+			ipInstance: &IPInstance{
+				Spec: IPInstanceSpec{
+					Address: Address{
+						Version: IPv6,
+					},
+				},
+			},
+			expect: true,
+		},
+		{
+			name: "v4 address",
+			ipInstance: &IPInstance{
+				Spec: IPInstanceSpec{
+					Address: Address{
+						IP: "192.168.0.1/24",
+					},
+				},
+			},
+			expect: false,
+		},
+		{
+			name: "v6 address",
+			ipInstance: &IPInstance{
+				Spec: IPInstanceSpec{
+					Address: Address{
+						IP: "fe80::1/64",
+					},
+				},
+			},
+			expect: true,
+		},
+		{
+			name:       "empty",
+			ipInstance: &IPInstance{},
+			expect:     false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if result := IsIPv6IPInstance(test.ipInstance); result != test.expect {
+				t.Errorf("test %s fail, expect %t but got %t", test.name, test.expect, result)
+			}
+		})
+	}
+}

@@ -30,8 +30,10 @@ func (I IPInstancePointerSlice) Less(i, j int) bool {
 	}
 
 	// sorting IPInstance by order rule, ipv4 after ipv6
-	// so if i is ipv4, it must be less equal than j
-	return !IsIPv6IPInstance(I[i])
+	// if i is ipv4 and j is ipv6, less, return true
+	// if i and j are both ipv4 or ipv6, equal, return false
+	// if i is ipv6 and j is ipv4, greater, return false
+	return !IsIPv6IPInstance(I[i]) && IsIPv6IPInstance(I[j])
 }
 
 func (I IPInstancePointerSlice) Swap(i, j int) {
