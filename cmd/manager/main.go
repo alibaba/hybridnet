@@ -20,11 +20,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,11 +30,9 @@ import (
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/multicluster"
 	"github.com/alibaba/hybridnet/pkg/controllers/networking"
 	"github.com/alibaba/hybridnet/pkg/feature"
-	"github.com/alibaba/hybridnet/pkg/managerruntime"
 	zapinit "github.com/alibaba/hybridnet/pkg/zap"
 )
 
@@ -96,13 +92,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// pre-start hooks registration
-	var preStartHooks []func() error
-	preStartHooks = append(preStartHooks, func() error {
-		// TODO: this conversion will be removed in next major version
-		return networkingv1.CanonicalizeIPInstance(mgr.GetClient())
-	})
-
 	// indexers need to be injected be for informer is running
 	if err = networking.InitIndexers(mgr); err != nil {
 		entryLog.Error(err, "unable to init indexers")
@@ -122,150 +111,14 @@ func main() {
 	// wait for manager cache client ready
 	mgr.GetCache().WaitForCacheSync(globalContext)
 
-	// run pre-start hooks
-	if err = errors.AggregateGoroutines(preStartHooks...); err != nil {
-		entryLog.Error(err, "unable to run start hooks")
-		os.Exit(1)
-	}
-
-	// init IPAM manager and start
-	ipamManager, err := networking.NewIPAMManager(globalContext, mgr.GetClient())
-	if err != nil {
-		entryLog.Error(err, "unable to create IPAM manager")
-		os.Exit(1)
-	}
-
-	podIPCache, err := networking.NewPodIPCache(globalContext, mgr.GetClient(), ctrllog.Log.WithName("pod-ip-cache"))
-	if err != nil {
-		entryLog.Error(err, "unable to create Pod IP cache")
-		os.Exit(1)
-	}
-
-	ipamStore := networking.NewIPAMStore(mgr.GetClient())
-
-	// setup controllers
-	if err = (&networking.IPAMReconciler{
-		Client:                mgr.GetClient(),
-		IPAMManager:           ipamManager,
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerIPAM]),
-	}).SetupWithManager(mgr); err != nil {
-		entryLog.Error(err, "unable to inject controller", "controller", networking.ControllerIPAM)
-		os.Exit(1)
-	}
-
-	if err = (&networking.IPInstanceReconciler{
-		Client:                mgr.GetClient(),
-		PodIPCache:            podIPCache,
-		IPAMManager:           ipamManager,
-		IPAMStore:             ipamStore,
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerIPInstance]),
-	}).SetupWithManager(mgr); err != nil {
-		entryLog.Error(err, "unable to inject controller", "controller", networking.ControllerIPInstance)
-		os.Exit(1)
-	}
-
-	if err = (&networking.NodeReconciler{
-		Context:               globalContext,
-		Client:                mgr.GetClient(),
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerNode]),
-	}).SetupWithManager(mgr); err != nil {
-		entryLog.Error(err, "unable to inject controller", "controller", networking.ControllerNode)
-		os.Exit(1)
-	}
-
-	if err = (&networking.PodReconciler{
-		APIReader:             mgr.GetAPIReader(),
-		Client:                mgr.GetClient(),
-		Recorder:              mgr.GetEventRecorderFor(networking.ControllerPod + "Controller"),
-		PodIPCache:            podIPCache,
-		IPAMStore:             ipamStore,
-		IPAMManager:           ipamManager,
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerPod]),
-	}).SetupWithManager(mgr); err != nil {
-		entryLog.Error(err, "unable to inject controller", "controller", networking.ControllerPod)
-		os.Exit(1)
-	}
-
-	if err = (&networking.NetworkStatusReconciler{
-		Context:               globalContext,
-		Client:                mgr.GetClient(),
-		IPAMManager:           ipamManager,
-		Recorder:              mgr.GetEventRecorderFor(networking.ControllerNetworkStatus + "Controller"),
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerNetworkStatus]),
-	}).SetupWithManager(mgr); err != nil {
-		entryLog.Error(err, "unable to inject controller", "controller", networking.ControllerNetworkStatus)
-		os.Exit(1)
-	}
-
-	if err = (&networking.SubnetStatusReconciler{
-		Client:                mgr.GetClient(),
-		IPAMManager:           ipamManager,
-		Recorder:              mgr.GetEventRecorderFor(networking.ControllerSubnetStatus + "Controller"),
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerSubnetStatus]),
-	}).SetupWithManager(mgr); err != nil {
-		entryLog.Error(err, "unable to inject controller", "controller", networking.ControllerSubnetStatus)
-		os.Exit(1)
-	}
-
-	if err = (&networking.QuotaReconciler{
-		Client:                mgr.GetClient(),
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerQuota]),
-	}).SetupWithManager(mgr); err != nil {
-		entryLog.Error(err, "unable to inject controller", "controller", networking.ControllerQuota)
+	if err = networking.RegisterToManager(globalContext, mgr, controllerConcurrency); err != nil {
+		entryLog.Error(err, "unable to register networking controllers")
 		os.Exit(1)
 	}
 
 	if feature.MultiClusterEnabled() {
-		clusterCheckEvent := make(chan multicluster.ClusterCheckEvent, 5)
-
-		uuidMutex, err := multicluster.NewUUIDMutexFromClient(globalContext, mgr.GetClient())
-		if err != nil {
-			entryLog.Error(err, "unable to create cluster UUID mutex")
-			os.Exit(1)
-		}
-
-		daemonHub := managerruntime.NewDaemonHub(globalContext)
-
-		clusterStatusChecker, err := multicluster.InitClusterStatusChecker(globalContext, mgr)
-		if err != nil {
-			entryLog.Error(err, "unable to init cluster status checker")
-			os.Exit(1)
-		}
-
-		if err = (&multicluster.RemoteClusterUUIDReconciler{
-			Client:                mgr.GetClient(),
-			Recorder:              mgr.GetEventRecorderFor(multicluster.ControllerRemoteClusterUUID + "Controller"),
-			UUIDMutex:             uuidMutex,
-			ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[multicluster.ControllerRemoteClusterUUID]),
-		}).SetupWithManager(mgr); err != nil {
-			entryLog.Error(err, "unable to inject controller", "controller", multicluster.ControllerRemoteClusterUUID)
-			os.Exit(1)
-		}
-
-		if err = (&multicluster.RemoteClusterReconciler{
-			Context:               globalContext,
-			Client:                mgr.GetClient(),
-			Recorder:              mgr.GetEventRecorderFor(multicluster.ControllerRemoteCluster + "Controller"),
-			UUIDMutex:             uuidMutex,
-			DaemonHub:             daemonHub,
-			LocalManager:          mgr,
-			Event:                 clusterCheckEvent,
-			ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[multicluster.ControllerRemoteCluster]),
-		}).SetupWithManager(mgr); err != nil {
-			entryLog.Error(err, "unable to inject controller", "controller", multicluster.ControllerRemoteCluster)
-			os.Exit(1)
-		}
-
-		if err = mgr.Add(&multicluster.RemoteClusterStatusChecker{
-			Client:      mgr.GetClient(),
-			Logger:      mgr.GetLogger().WithName("checker").WithName(multicluster.CheckerRemoteClusterStatus),
-			CheckPeriod: 30 * time.Second,
-			DaemonHub:   daemonHub,
-			Checker:     clusterStatusChecker,
-			Event:       clusterCheckEvent,
-			Recorder:    mgr.GetEventRecorderFor(multicluster.CheckerRemoteClusterStatus + "Checker"),
-		}); err != nil {
-			entryLog.Error(err, "unable to inject checker", "checker", multicluster.CheckerRemoteClusterStatus)
+		if err = multicluster.RegisterToManager(globalContext, mgr, controllerConcurrency); err != nil {
+			entryLog.Error(err, "unable to register multi-cluster controllers")
 			os.Exit(1)
 		}
 	}

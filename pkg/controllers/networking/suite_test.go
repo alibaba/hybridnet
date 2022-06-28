@@ -18,7 +18,6 @@ package networking_test
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -27,9 +26,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -41,7 +38,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -64,7 +60,7 @@ func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecsWithDefaultAndCustomReporters(t,
-		"Controller Suite",
+		"Networking Controllers Suite",
 		[]Reporter{printer.NewlineReporter{}})
 }
 
@@ -97,13 +93,6 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	// pre-start hooks registration
-	var preStartHooks []func() error
-	preStartHooks = append(preStartHooks, func() error {
-		// TODO: this conversion will be removed in next major version
-		return networkingv1.CanonicalizeIPInstance(mgr.GetClient())
-	})
-
 	// indexers need to be injected be for informer is running
 	Expect(networking.InitIndexers(mgr)).ToNot(HaveOccurred())
 
@@ -114,70 +103,8 @@ var _ = BeforeSuite(func() {
 	// wait for manager cache client ready
 	mgr.GetCache().WaitForCacheSync(context.TODO())
 
-	// run pre-start hooks
-	Expect(errors.AggregateGoroutines(preStartHooks...)).ToNot(HaveOccurred())
-
-	// init IPAM manager and stort
-	ipamManager, err := networking.NewIPAMManager(context.TODO(), mgr.GetClient())
-	if err != nil {
-		os.Exit(1)
-	}
-
-	podIPCache, err := networking.NewPodIPCache(context.TODO(), mgr.GetClient(), ctrl.Log.WithName("pod-ip-cache"))
-	Expect(err).ToNot(HaveOccurred())
-
-	ipamStore := networking.NewIPAMStore(mgr.GetClient())
-
-	// setup controllers
-	Expect((&networking.IPAMReconciler{
-		Client:                mgr.GetClient(),
-		IPAMManager:           ipamManager,
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerIPAM]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
-
-	Expect((&networking.IPInstanceReconciler{
-		Client:                mgr.GetClient(),
-		PodIPCache:            podIPCache,
-		IPAMManager:           ipamManager,
-		IPAMStore:             ipamStore,
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerIPInstance]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
-
-	Expect((&networking.NodeReconciler{
-		Context:               context.TODO(),
-		Client:                mgr.GetClient(),
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerNode]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
-
-	Expect((&networking.PodReconciler{
-		APIReader:             mgr.GetAPIReader(),
-		Client:                mgr.GetClient(),
-		PodIPCache:            podIPCache,
-		IPAMStore:             ipamStore,
-		IPAMManager:           ipamManager,
-		Recorder:              &record.FakeRecorder{},
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerPod]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
-
-	Expect((&networking.NetworkStatusReconciler{
-		Context:               context.TODO(),
-		Client:                mgr.GetClient(),
-		IPAMManager:           ipamManager,
-		Recorder:              &record.FakeRecorder{},
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerNetworkStatus]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
-
-	Expect((&networking.SubnetStatusReconciler{
-		Client:                mgr.GetClient(),
-		IPAMManager:           ipamManager,
-		Recorder:              &record.FakeRecorder{},
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerSubnetStatus]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
-
-	Expect((&networking.QuotaReconciler{
-		Client:                mgr.GetClient(),
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerQuota]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
+	// register all controllers to manager
+	Expect(networking.RegisterToManager(context.TODO(), mgr, map[string]int{})).ShouldNot(HaveOccurred())
 
 	// An underlay network and an overlay network.
 	// Two nodes, only one with underlay network attached.
