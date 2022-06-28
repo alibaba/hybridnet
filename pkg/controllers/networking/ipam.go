@@ -31,6 +31,8 @@ import (
 	"github.com/alibaba/hybridnet/pkg/utils/transform"
 )
 
+type NewIPAMManagerFunction func(context.Context, client.Client) (IPAMManager, error)
+
 type IPAMManager interface {
 	ipam.Manager
 }

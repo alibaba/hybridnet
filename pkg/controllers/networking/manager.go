@@ -26,9 +26,21 @@ import (
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 )
 
-func RegisterToManager(ctx context.Context, mgr manager.Manager, concurrencyMap map[string]int) error {
+type RegisterOptions struct {
+	NewIPAMManager NewIPAMManagerFunction
+	ConcurrencyMap map[string]int
+}
+
+func RegisterToManager(ctx context.Context, mgr manager.Manager, options RegisterOptions) error {
+	if options.NewIPAMManager == nil {
+		options.NewIPAMManager = NewIPAMManager
+	}
+	if len(options.ConcurrencyMap) == 0 {
+		options.ConcurrencyMap = map[string]int{}
+	}
+
 	// init IPAM manager and start
-	ipamManager, err := NewIPAMManager(ctx, mgr.GetClient())
+	ipamManager, err := options.NewIPAMManager(ctx, mgr.GetClient())
 	if err != nil {
 		return fmt.Errorf("unable to create IPAM manager: %v", err)
 	}
@@ -44,7 +56,7 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, concurrencyMap 
 	if err = (&IPAMReconciler{
 		Client:                mgr.GetClient(),
 		IPAMManager:           ipamManager,
-		ControllerConcurrency: concurrency.ControllerConcurrency(concurrencyMap[ControllerIPAM]),
+		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerIPAM]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerIPAM, err)
 	}
@@ -54,7 +66,7 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, concurrencyMap 
 		PodIPCache:            podIPCache,
 		IPAMManager:           ipamManager,
 		IPAMStore:             ipamStore,
-		ControllerConcurrency: concurrency.ControllerConcurrency(concurrencyMap[ControllerIPInstance]),
+		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerIPInstance]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerIPInstance, err)
 	}
@@ -62,7 +74,7 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, concurrencyMap 
 	if err = (&NodeReconciler{
 		Context:               ctx,
 		Client:                mgr.GetClient(),
-		ControllerConcurrency: concurrency.ControllerConcurrency(concurrencyMap[ControllerNode]),
+		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerNode]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerNode, err)
 	}
@@ -74,7 +86,7 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, concurrencyMap 
 		PodIPCache:            podIPCache,
 		IPAMStore:             ipamStore,
 		IPAMManager:           ipamManager,
-		ControllerConcurrency: concurrency.ControllerConcurrency(concurrencyMap[ControllerPod]),
+		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerPod]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerPod, err)
 	}
@@ -84,7 +96,7 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, concurrencyMap 
 		Client:                mgr.GetClient(),
 		IPAMManager:           ipamManager,
 		Recorder:              mgr.GetEventRecorderFor(ControllerNetworkStatus + "Controller"),
-		ControllerConcurrency: concurrency.ControllerConcurrency(concurrencyMap[ControllerNetworkStatus]),
+		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerNetworkStatus]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerNetworkStatus, err)
 	}
@@ -93,14 +105,14 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, concurrencyMap 
 		Client:                mgr.GetClient(),
 		IPAMManager:           ipamManager,
 		Recorder:              mgr.GetEventRecorderFor(ControllerSubnetStatus + "Controller"),
-		ControllerConcurrency: concurrency.ControllerConcurrency(concurrencyMap[ControllerSubnetStatus]),
+		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerSubnetStatus]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerSubnetStatus, err)
 	}
 
 	if err = (&QuotaReconciler{
 		Client:                mgr.GetClient(),
-		ControllerConcurrency: concurrency.ControllerConcurrency(concurrencyMap[ControllerQuota]),
+		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerQuota]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerQuota, err)
 	}

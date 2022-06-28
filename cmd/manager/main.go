@@ -111,13 +111,17 @@ func main() {
 	// wait for manager cache client ready
 	mgr.GetCache().WaitForCacheSync(globalContext)
 
-	if err = networking.RegisterToManager(globalContext, mgr, controllerConcurrency); err != nil {
+	if err = networking.RegisterToManager(globalContext, mgr, networking.RegisterOptions{
+		ConcurrencyMap: controllerConcurrency,
+	}); err != nil {
 		entryLog.Error(err, "unable to register networking controllers")
 		os.Exit(1)
 	}
 
 	if feature.MultiClusterEnabled() {
-		if err = multicluster.RegisterToManager(globalContext, mgr, controllerConcurrency); err != nil {
+		if err = multicluster.RegisterToManager(globalContext, mgr, multicluster.RegisterOptions{
+			ConcurrencyMap: controllerConcurrency,
+		}); err != nil {
 			entryLog.Error(err, "unable to register multi-cluster controllers")
 			os.Exit(1)
 		}

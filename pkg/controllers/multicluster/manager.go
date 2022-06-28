@@ -27,7 +27,15 @@ import (
 	"github.com/alibaba/hybridnet/pkg/managerruntime"
 )
 
-func RegisterToManager(ctx context.Context, mgr manager.Manager, concurrencyMap map[string]int) error {
+type RegisterOptions struct {
+	ConcurrencyMap map[string]int
+}
+
+func RegisterToManager(ctx context.Context, mgr manager.Manager, options RegisterOptions) error {
+	if len(options.ConcurrencyMap) == 0 {
+		options.ConcurrencyMap = map[string]int{}
+	}
+
 	clusterCheckEvent := make(chan ClusterCheckEvent, 5)
 
 	uuidMutex, err := NewUUIDMutexFromClient(ctx, mgr.GetClient())
@@ -46,7 +54,7 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, concurrencyMap 
 		Client:                mgr.GetClient(),
 		Recorder:              mgr.GetEventRecorderFor(ControllerRemoteClusterUUID + "Controller"),
 		UUIDMutex:             uuidMutex,
-		ControllerConcurrency: concurrency.ControllerConcurrency(concurrencyMap[ControllerRemoteClusterUUID]),
+		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerRemoteClusterUUID]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerRemoteClusterUUID, err)
 	}
@@ -59,7 +67,7 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, concurrencyMap 
 		DaemonHub:             daemonHub,
 		LocalManager:          mgr,
 		Event:                 clusterCheckEvent,
-		ControllerConcurrency: concurrency.ControllerConcurrency(concurrencyMap[ControllerRemoteCluster]),
+		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerRemoteCluster]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerRemoteCluster, err)
 	}

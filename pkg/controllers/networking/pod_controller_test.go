@@ -25,10 +25,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/constants"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -45,7 +46,7 @@ var _ = Describe("IP allocation test", func() {
 				Namespace: "default",
 			},
 			Spec: corev1.PodSpec{
-				NodeName: "test-node1",
+				NodeName: "node1",
 				Containers: []corev1.Container{
 					{
 						Name:  "test",

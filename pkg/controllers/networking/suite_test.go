@@ -18,15 +18,18 @@ package networking_test
 
 import (
 	"context"
+	"net"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/alibaba/hybridnet/pkg/controllers/networking"
-
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -34,10 +37,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/controllers/networking"
+	"github.com/alibaba/hybridnet/pkg/utils"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -45,15 +47,21 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	k8sClient client.Client
-	testEnv   *envtest.Environment
-
-	controllerConcurrency map[string]int
+	k8sClient   client.Client
+	testEnv     *envtest.Environment
+	ipamManager networking.IPAMManager
 )
 
 const (
 	timeout  = time.Second * 30
 	interval = time.Second * 1
+
+	underlayNetworkName   = "underlay-network"
+	overlayNetworkName    = "overlay-network"
+	underlaySubnetName    = "underlay-subnet"
+	overlayIPv4SubnetName = "overlay-ipv4-subnet"
+	overlayIPv6SubnetName = "overlay-ipv6-subnet"
+	netID                 = 100
 )
 
 func TestAPIs(t *testing.T) {
@@ -71,27 +79,31 @@ var _ = BeforeSuite(func() {
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "charts", "hybridnet", "crds")},
 		ErrorIfCRDPathMissing: true,
-		BinaryAssetsDirectory: "/Users/hhy/go/src/github.com/hhyasdf/hybridnet/bin",
 	}
 
 	cfg, err := testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	err = networkingv1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
+	scheme := runtime.NewScheme()
+	Expect(scheme).NotTo(BeNil())
+	Expect(clientgoscheme.AddToScheme(scheme)).NotTo(HaveOccurred())
+	Expect(networkingv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme.Scheme,
-		Logger: ctrl.Log.WithName("manager"),
+		Scheme:                  scheme,
+		Logger:                  ctrl.Log.WithName("manager"),
+		LeaderElection:          true,
+		LeaderElectionID:        "hybridnet-manager-election",
+		LeaderElectionNamespace: "kube-system",
 	})
-	Expect(err).ToNot(HaveOccurred())
+	Expect(err).NotTo(HaveOccurred())
 
 	// indexers need to be injected be for informer is running
 	Expect(networking.InitIndexers(mgr)).ToNot(HaveOccurred())
@@ -101,95 +113,43 @@ var _ = BeforeSuite(func() {
 	}()
 
 	// wait for manager cache client ready
-	mgr.GetCache().WaitForCacheSync(context.TODO())
+	Eventually(mgr.GetCache().WaitForCacheSync(context.TODO())).
+		WithTimeout(time.Minute).
+		WithPolling(3 * time.Second).
+		Should(BeTrue())
 
 	// register all controllers to manager
-	Expect(networking.RegisterToManager(context.TODO(), mgr, map[string]int{})).ShouldNot(HaveOccurred())
+	Expect(networking.RegisterToManager(context.TODO(), mgr, networking.RegisterOptions{
+		// use custom IPAM manager constructor to fetch IPAM manager
+		NewIPAMManager: func(ctx context.Context, c client.Client) (networking.IPAMManager, error) {
+			ipamManager, err = networking.NewIPAMManager(ctx, c)
+			return ipamManager, err
+		},
+	})).NotTo(HaveOccurred())
 
 	// An underlay network and an overlay network.
-	// Two nodes, only one with underlay network attached.
+	// Three nodes, two with underlay network attached.
 	ctx := context.Background()
-	netID := int32(100)
-
-	underlayNetworkName := "underlay-network"
-	overlayNetworkName := "overlay-network"
 
 	networkList := []*networkingv1.Network{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: underlayNetworkName,
-			},
-			Spec: networkingv1.NetworkSpec{
-				NetID: &netID,
-				Type:  networkingv1.NetworkTypeUnderlay,
-				Mode:  networkingv1.NetworkModeVlan,
-				NodeSelector: map[string]string{
-					"network": underlayNetworkName,
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: overlayNetworkName,
-			},
-			Spec: networkingv1.NetworkSpec{
-				NetID: &netID,
-				Type:  networkingv1.NetworkTypeOverlay,
-				Mode:  networkingv1.NetworkModeVxlan,
-			},
-		},
+		underlayNetworkRender(underlayNetworkName, netID),
+		overlayNetworkRender(overlayNetworkName, netID),
 	}
 
 	subnetList := []*networkingv1.Subnet{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "underlay-subnet1",
-			},
-			Spec: networkingv1.SubnetSpec{
-				Network: underlayNetworkName,
-				Range: networkingv1.AddressRange{
-					Version: "4",
-					CIDR:    "192.168.56.0/24",
-					Gateway: "192.168.56.1",
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "overlay-subnet1",
-			},
-			Spec: networkingv1.SubnetSpec{
-				Network: overlayNetworkName,
-				Range: networkingv1.AddressRange{
-					Version: "4",
-					CIDR:    "100.10.0.0/16",
-				},
-			},
-		},
+		subnetRender(underlaySubnetName, underlayNetworkName, "192.168.56.0/24", nil, true),
+		subnetRender(overlayIPv4SubnetName, overlayNetworkName, "100.10.0.0/24", pointer.Int32Ptr(44), false),
+		subnetRender(overlayIPv6SubnetName, overlayNetworkName, "fe80::aede:48ff:fe00:1122/120", pointer.Int32Ptr(66), false),
 	}
 
 	nodeList := []*corev1.Node{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-node1",
-				Labels: map[string]string{
-					"network": "underlay-network",
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-node2",
-				Labels: map[string]string{
-					"network": "underlay-network",
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-node3",
-			},
-		},
+		nodeRender("node1", map[string]string{
+			"network": underlayNetworkName,
+		}),
+		nodeRender("node2", map[string]string{
+			"network": underlayNetworkName,
+		}),
+		nodeRender("node3", nil),
 	}
 
 	for _, network := range networkList {
@@ -202,10 +162,79 @@ var _ = BeforeSuite(func() {
 		Expect(k8sClient.Create(ctx, node)).Should(Succeed())
 	}
 
-}, 60)
+})
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
-	err := testEnv.Stop()
-	Expect(err).NotTo(HaveOccurred())
+	Expect(testEnv.Stop()).NotTo(HaveOccurred())
 })
+
+// underlayNetworkRender will render a simple underlay network of vlan mode
+func underlayNetworkRender(name string, netID int32) *networkingv1.Network {
+	return &networkingv1.Network{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: networkingv1.NetworkSpec{
+			NodeSelector: map[string]string{
+				"network": name,
+			},
+			NetID: &netID,
+			Type:  networkingv1.NetworkTypeUnderlay,
+			Mode:  networkingv1.NetworkModeVlan,
+		},
+	}
+}
+
+// overlayNetworkRender will render a simple overlay network of vxlan mode
+func overlayNetworkRender(name string, netID int32) *networkingv1.Network {
+	return &networkingv1.Network{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: networkingv1.NetworkSpec{
+			NetID: &netID,
+			Type:  networkingv1.NetworkTypeOverlay,
+			Mode:  networkingv1.NetworkModeVxlan,
+		},
+	}
+}
+
+// subnetRender will render a simple subnet of a specified network
+func subnetRender(name, networkName string, cidr string, netID *int32, hasGateway bool) *networkingv1.Subnet {
+	tempIP, cidrNet, _ := net.ParseCIDR(cidr)
+	return &networkingv1.Subnet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: networkingv1.SubnetSpec{
+			Range: networkingv1.AddressRange{
+				Version: func() networkingv1.IPVersion {
+					if tempIP.To4() == nil {
+						return networkingv1.IPv6
+					}
+					return networkingv1.IPv4
+				}(),
+				CIDR: cidr,
+				Gateway: func() string {
+					if hasGateway {
+						return utils.LastIP(cidrNet).String()
+					}
+					return ""
+				}(),
+			},
+			NetID:   netID,
+			Network: networkName,
+		},
+	}
+}
+
+// nodeRender will render a simple node with assigned labels
+func nodeRender(name string, labels map[string]string) *corev1.Node {
+	return &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: labels,
+		},
+	}
+}
