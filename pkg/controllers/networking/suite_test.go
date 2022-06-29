@@ -57,9 +57,6 @@ var (
 var testLock = sync.Mutex{}
 
 const (
-	timeout  = time.Second * 30
-	interval = time.Second * 1
-
 	underlayNetworkName   = "underlay-network"
 	overlayNetworkName    = "overlay-network"
 	underlaySubnetName    = "underlay-subnet"

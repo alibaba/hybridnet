@@ -170,6 +170,11 @@ func (s *crdStore) IPReserve(ctx context.Context, pod *corev1.Pod, opts ...ipamt
 	var reserveFunctions []func() error
 	for i := range ipInstanceList.Items {
 		var ipInstance = &ipInstanceList.Items[i]
+		// if ip instance is terminating, no need to reserve it,
+		// just skip
+		if ipInstance.DeletionTimestamp != nil {
+			continue
+		}
 		reserveFunctions = append(reserveFunctions, func() error {
 			return s.reserveIPInstance(ctx, ipInstance, options.DropPodName)
 		})
