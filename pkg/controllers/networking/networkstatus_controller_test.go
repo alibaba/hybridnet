@@ -18,174 +18,197 @@ package networking_test
 
 import (
 	"context"
-	"fmt"
+	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	//+kubebuilder:scaffold:imports
 )
 
-// These tests use Ginkgo (BDD-style Go testing framework). Refer to
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
+const underlayNetworkNameForStatus = "underlay-network-for-status"
 
-var _ = Describe("Network status test", func() {
-	It("Node list update", func() {
-		By("Expecting to have two node fo underlay network status")
-		Eventually(func() error {
-			network := &networkingv1.Network{}
-			if err := k8sClient.Get(context.TODO(), types.NamespacedName{
-				Name: "underlay-network",
-			}, network); err != nil {
-				return err
-			}
-
-			if len(network.Status.NodeList) != 2 {
-				return fmt.Errorf("error number of network node list, supposed to be 2, but is %v",
-					len(network.Status.NodeList))
-			}
-
-			return nil
-		}, timeout, interval).Should(Succeed())
-
-		By("Expecting update node list of network status after create new nodes")
-		ctx := context.Background()
-		testNodeList := []*corev1.Node{
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "tmp-node1",
-					Labels: map[string]string{
-						"network": "underlay-network",
-					},
-				},
-			},
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "tmp-node2",
-					Labels: map[string]string{
-						"network": "underlay-network",
-					},
-				},
-			},
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "tmp-node3",
-					Labels: map[string]string{
-						"network": "underlay-network",
-					},
-				},
-			},
-		}
-
-		for _, node := range testNodeList {
-			Expect(k8sClient.Create(ctx, node)).Should(Succeed())
-		}
-
-		Eventually(func() error {
-			network := &networkingv1.Network{}
-			if err := k8sClient.Get(context.TODO(), types.NamespacedName{
-				Name: "underlay-network",
-			}, network); err != nil {
-				return err
-			}
-
-			// the target number should not be less than actual node number
-			if len(network.Status.NodeList) != 5 {
-				return fmt.Errorf("error number of network node list, supposed to be 4, but is %v",
-					len(network.Status.NodeList))
-			}
-
-			return nil
-		}, timeout, interval).Should(Succeed())
-
-		for _, node := range testNodeList {
-			Expect(k8sClient.Delete(ctx, node)).Should(Succeed())
-		}
+var _ = Describe("Network status controller integration test suite", func() {
+	Context("Lock", func() {
+		testLock.Lock()
 	})
 
-	It("Subnet list and statistics update", func() {
-		By("Expecting to have two node fo underlay network status")
-		Eventually(func() error {
-			network := &networkingv1.Network{}
-			if err := k8sClient.Get(context.TODO(), types.NamespacedName{
-				Name: "underlay-network",
-			}, network); err != nil {
-				return err
+	Context("Initialization check", func() {
+		It("Check initialized network status", func() {
+			By("check initialized underlay network status")
+			Eventually(
+				func(g Gomega) {
+					network, err := utils.GetNetwork(context.Background(), k8sClient, underlayNetworkName)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(network).NotTo(BeNil())
+
+					g.Expect(network.Status.NodeList).To(HaveLen(2))
+					g.Expect(network.Status.NodeList).To(ConsistOf(node1Name, node2Name))
+
+					g.Expect(network.Status.SubnetList).To(HaveLen(1))
+					g.Expect(network.Status.SubnetList).To(ConsistOf(underlaySubnetName))
+
+					g.Expect(network.Status.Statistics).NotTo(BeNil())
+					g.Expect(network.Status.Statistics.Total).Should(Equal(int32(253)))
+					g.Expect(network.Status.Statistics.Available).Should(Equal(int32(253)))
+					g.Expect(network.Status.Statistics.Used).Should(Equal(int32(0)))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("check initialized overlay network status")
+			Eventually(
+				func(g Gomega) {
+					network, err := utils.GetNetwork(context.Background(), k8sClient, overlayNetworkName)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(network).NotTo(BeNil())
+
+					g.Expect(network.Status.NodeList).To(HaveLen(3))
+					g.Expect(network.Status.NodeList).To(ConsistOf(node1Name, node2Name, node3Name))
+
+					g.Expect(network.Status.Statistics).NotTo(BeNil())
+					g.Expect(network.Status.Statistics.Total).Should(Equal(int32(254)))
+					g.Expect(network.Status.Statistics.Available).Should(Equal(int32(254)))
+					g.Expect(network.Status.Statistics.Used).Should(Equal(int32(0)))
+
+					g.Expect(network.Status.IPv6Statistics).NotTo(BeNil())
+					g.Expect(network.Status.IPv6Statistics.Total).Should(Equal(int32(255)))
+					g.Expect(network.Status.IPv6Statistics.Available).Should(Equal(int32(255)))
+					g.Expect(network.Status.IPv6Statistics.Used).Should(Equal(int32(0)))
+
+					g.Expect(network.Status.DualStackStatistics).NotTo(BeNil())
+					g.Expect(network.Status.DualStackStatistics.Total).Should(Equal(int32(0)))
+					g.Expect(network.Status.DualStackStatistics.Available).Should(Equal(int32(254)))
+					g.Expect(network.Status.DualStackStatistics.Used).Should(Equal(int32(0)))
+
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+	})
+
+	Context("Check status dynamic update", func() {
+		It("Prepare", func() {
+			By("create a new underlay network for checking status dynamic update")
+			Expect(k8sClient.Create(context.Background(), underlayNetworkRender(underlayNetworkNameForStatus, 30))).NotTo(HaveOccurred())
+		})
+
+		It("Check node list after creating nodes", func() {
+			const node1, node2, node3 = "node1-status", "node2-status", "node3-status"
+			newNodes := []*corev1.Node{
+				nodeRender(node1, map[string]string{
+					"network": underlayNetworkNameForStatus,
+				}),
+				nodeRender(node2, map[string]string{
+					"network": underlayNetworkNameForStatus,
+				}),
+				nodeRender(node3, map[string]string{
+					"network": underlayNetworkNameForStatus,
+				}),
 			}
 
-			if len(network.Status.SubnetList) != 1 {
-				return fmt.Errorf("error number of network node list, supposed to be 2, but is %v",
-					len(network.Status.SubnetList))
+			By("creating nodes")
+			for _, node := range newNodes {
+				Expect(k8sClient.Create(context.Background(), node)).NotTo(HaveOccurred())
 			}
 
-			return nil
-		}, timeout, interval).Should(Succeed())
+			By("checking node list of status")
+			Eventually(
+				func(g Gomega) {
+					network, err := utils.GetNetwork(context.Background(), k8sClient, underlayNetworkNameForStatus)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(network).NotTo(BeNil())
 
-		By("Expecting update node list of network status after create new subnets")
-		ctx := context.Background()
-		testSubnetList := []*networkingv1.Subnet{
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "tmp-subnet1",
-				},
-				Spec: networkingv1.SubnetSpec{
-					Network: "underlay-network",
-					Range: networkingv1.AddressRange{
-						Version: "4",
-						CIDR:    "192.168.57.0/24",
-						Gateway: "192.168.57.1",
-					},
-				},
-			},
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "tmp-subnet2",
-				},
-				Spec: networkingv1.SubnetSpec{
-					Network: "underlay-network",
-					Range: networkingv1.AddressRange{
-						Version: "4",
-						CIDR:    "192.168.58.0/24",
-						Gateway: "192.168.58.1",
-					},
-				},
-			},
-		}
+					g.Expect(network.Status.NodeList).To(HaveLen(3))
+					g.Expect(network.Status.NodeList).To(ConsistOf(node1, node2, node3))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
 
-		for _, subnet := range testSubnetList {
-			Expect(k8sClient.Create(ctx, subnet)).Should(Succeed())
-		}
+			By("removing nodes")
+			for _, node := range newNodes {
+				Expect(k8sClient.Delete(context.Background(), node)).NotTo(HaveOccurred())
+			}
+		})
 
-		Eventually(func() error {
-			network := &networkingv1.Network{}
-			if err := k8sClient.Get(context.TODO(), types.NamespacedName{
-				Name: "underlay-network",
-			}, network); err != nil {
-				return err
+		It("check subnet list and statistics after creating subnets", func() {
+			const subnet1, subnet2, subnet3 = "subnet1-status", "subnet2-status", "subnet3-status"
+			newSubnets := []*networkingv1.Subnet{
+				subnetRender(subnet1, underlayNetworkNameForStatus, "192.168.57.0/24", pointer.Int32Ptr(57), true),
+				subnetRender(subnet2, underlayNetworkNameForStatus, "192.168.58.0/24", pointer.Int32Ptr(58), true),
+				subnetRender(subnet3, underlayNetworkNameForStatus, "fe81::0/120", pointer.Int32Ptr(59), false),
 			}
 
-			// the target number should not be less than actual node number
-			if len(network.Status.SubnetList) != 3 {
-				return fmt.Errorf("error number of network node list, supposed to be 4, but is %v",
-					len(network.Status.NodeList))
+			By("creating subnets")
+			for _, subnet := range newSubnets {
+				Expect(k8sClient.Create(context.Background(), subnet)).NotTo(HaveOccurred())
 			}
 
-			if network.Status.Statistics.Total != 253*3 {
-				return fmt.Errorf("error number of network statistics total ip, supposed to be %v, but is %v", 253*3,
-					network.Status.Statistics.Total)
+			By("checking subnet list and statistics of status")
+			Eventually(
+				func(g Gomega) {
+					network, err := utils.GetNetwork(context.Background(), k8sClient, underlayNetworkNameForStatus)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(network).NotTo(BeNil())
+
+					g.Expect(network.Status.SubnetList).To(HaveLen(3))
+					g.Expect(network.Status.SubnetList).To(ConsistOf(subnet1, subnet2, subnet3))
+
+					g.Expect(network.Status.Statistics).NotTo(BeNil())
+					g.Expect(network.Status.Statistics.Total).Should(Equal(int32(253 * 2)))
+					g.Expect(network.Status.Statistics.Available).Should(Equal(int32(253 * 2)))
+					g.Expect(network.Status.Statistics.Used).Should(Equal(int32(0)))
+
+					g.Expect(network.Status.IPv6Statistics).NotTo(BeNil())
+					g.Expect(network.Status.IPv6Statistics.Total).Should(Equal(int32(255)))
+					g.Expect(network.Status.IPv6Statistics.Available).Should(Equal(int32(255)))
+					g.Expect(network.Status.IPv6Statistics.Used).Should(Equal(int32(0)))
+
+					g.Expect(network.Status.DualStackStatistics).NotTo(BeNil())
+					g.Expect(network.Status.DualStackStatistics.Total).Should(Equal(int32(0)))
+					g.Expect(network.Status.DualStackStatistics.Available).Should(Equal(int32(255)))
+					g.Expect(network.Status.DualStackStatistics.Used).Should(Equal(int32(0)))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("removing subnets")
+			for _, subnet := range newSubnets {
+				Expect(k8sClient.Delete(context.Background(), subnet)).NotTo(HaveOccurred())
 			}
+		})
 
-			// TODO: test updating of "used" and "available" statistics
+		It("Recycle", func() {
+			By("remove overlay network for status test")
+			network := overlayNetworkRender(underlayNetworkNameForStatus, 30)
+			Expect(k8sClient.Delete(context.Background(), network)).NotTo(HaveOccurred())
 
-			return nil
-		}, timeout, interval).Should(Succeed())
+			By("check overlay network removed from apiserver")
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(context.Background(), types.NamespacedName{
+						Name: underlayNetworkNameForStatus,
+					}, network)
 
-		for _, subnet := range testSubnetList {
-			Expect(k8sClient.Delete(ctx, subnet)).Should(Succeed())
-		}
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+	})
+
+	Context("Unlock", func() {
+		testLock.Unlock()
 	})
 })

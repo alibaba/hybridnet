@@ -20,6 +20,7 @@ import (
 	"context"
 	"net"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,7 +51,10 @@ var (
 	k8sClient   client.Client
 	testEnv     *envtest.Environment
 	ipamManager networking.IPAMManager
+	ipamStore   networking.IPAMStore
 )
+
+var testLock = sync.Mutex{}
 
 const (
 	timeout  = time.Second * 30
@@ -61,6 +65,9 @@ const (
 	underlaySubnetName    = "underlay-subnet"
 	overlayIPv4SubnetName = "overlay-ipv4-subnet"
 	overlayIPv6SubnetName = "overlay-ipv6-subnet"
+	node1Name             = "node1"
+	node2Name             = "node2"
+	node3Name             = "node3"
 	netID                 = 100
 )
 
@@ -126,6 +133,7 @@ var _ = BeforeSuite(func() {
 			return ipamManager, err
 		},
 	})).NotTo(HaveOccurred())
+	ipamStore = networking.NewIPAMStore(mgr.GetClient())
 
 	// An underlay network and an overlay network.
 	// Three nodes, two with underlay network attached.
@@ -139,17 +147,17 @@ var _ = BeforeSuite(func() {
 	subnetList := []*networkingv1.Subnet{
 		subnetRender(underlaySubnetName, underlayNetworkName, "192.168.56.0/24", nil, true),
 		subnetRender(overlayIPv4SubnetName, overlayNetworkName, "100.10.0.0/24", pointer.Int32Ptr(44), false),
-		subnetRender(overlayIPv6SubnetName, overlayNetworkName, "fe80::aede:48ff:fe00:1122/120", pointer.Int32Ptr(66), false),
+		subnetRender(overlayIPv6SubnetName, overlayNetworkName, "fe80::0/120", pointer.Int32Ptr(66), false),
 	}
 
 	nodeList := []*corev1.Node{
-		nodeRender("node1", map[string]string{
+		nodeRender(node1Name, map[string]string{
 			"network": underlayNetworkName,
 		}),
-		nodeRender("node2", map[string]string{
+		nodeRender(node2Name, map[string]string{
 			"network": underlayNetworkName,
 		}),
-		nodeRender("node3", nil),
+		nodeRender(node3Name, map[string]string{}),
 	}
 
 	for _, network := range networkList {
@@ -202,7 +210,7 @@ func overlayNetworkRender(name string, netID int32) *networkingv1.Network {
 
 // subnetRender will render a simple subnet of a specified network
 func subnetRender(name, networkName string, cidr string, netID *int32, hasGateway bool) *networkingv1.Subnet {
-	tempIP, cidrNet, _ := net.ParseCIDR(cidr)
+	tempIP, _, _ := net.ParseCIDR(cidr)
 	return &networkingv1.Subnet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -218,7 +226,7 @@ func subnetRender(name, networkName string, cidr string, netID *int32, hasGatewa
 				CIDR: cidr,
 				Gateway: func() string {
 					if hasGateway {
-						return utils.LastIP(cidrNet).String()
+						return utils.NextIP(tempIP).String()
 					}
 					return ""
 				}(),
