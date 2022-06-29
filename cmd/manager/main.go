@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"os"
 
+	kubevirtv1 "kubevirt.io/api/core/v1"
+
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -45,6 +47,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(multiclusterv1.AddToScheme(scheme))
 	utilruntime.Must(networkingv1.AddToScheme(scheme))
+	utilruntime.Must(kubevirtv1.AddToScheme(scheme))
 }
 
 func main() {

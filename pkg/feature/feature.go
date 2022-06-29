@@ -43,6 +43,8 @@ const (
 	// Enable multi-cluster network connection.
 
 	MultiCluster featuregate.Feature = "MultiCluster"
+
+	VMIPRetain featuregate.Feature = "VMIPRetain"
 )
 
 var DefaultHybridnetFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
@@ -50,10 +52,18 @@ var DefaultHybridnetFeatureGates = map[featuregate.Feature]featuregate.FeatureSp
 		Default:    false,
 		PreRelease: featuregate.Alpha,
 	},
+	VMIPRetain: {
+		Default:    false,
+		PreRelease: featuregate.Alpha,
+	},
 }
 
 func MultiClusterEnabled() bool {
 	return feature.DefaultMutableFeatureGate.Enabled(MultiCluster)
+}
+
+func VMIPRetainEnabled() bool {
+	return feature.DefaultMutableFeatureGate.Enabled(VMIPRetain)
 }
 
 func KnownFeatures() []string {

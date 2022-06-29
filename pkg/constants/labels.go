@@ -19,6 +19,7 @@ package constants
 const (
 	LabelCluster = "networking.alibaba.com/cluster"
 	LabelSubnet  = "networking.alibaba.com/subnet"
+	LabelVM      = "networking.alibaba.com/vm"
 	LabelNetwork = "networking.alibaba.com/network"
 	LabelNode    = "networking.alibaba.com/node"
 	LabelPod     = "networking.alibaba.com/pod"

@@ -32,7 +32,8 @@ import (
 
 type PodIPCache interface {
 	Record(podUID types.UID, podName, namespace string, ipInstanceNames []string)
-	Release(ipInstanceName, namespace string)
+	ReleaseIP(ipInstanceName, namespace string)
+	ReleasePod(podName, namespace string)
 	Get(podName, namespace string) (bool, types.UID, []string)
 }
 
@@ -134,13 +135,13 @@ func (c *podIPCache) Record(podUID types.UID, podName, namespace string, ipInsta
 		"ip instances", ipInstanceNames)
 }
 
-func (c *podIPCache) Release(ipInstanceName, namespace string) {
+func (c *podIPCache) ReleaseIP(ipInstanceName, namespace string) {
 	c.Lock()
 	defer c.Unlock()
 
 	podName, exist := c.ipToPod[namespacedKey(ipInstanceName, namespace)]
 	if !exist {
-		c.logger.V(1).Info("skip deleting a no exist pod cache", "ip instance", ipInstanceName,
+		c.logger.V(1).Info("skip deleting a no exist ip instance cache", "ip instance", ipInstanceName,
 			"namespace", namespace)
 		return
 	}
@@ -149,7 +150,7 @@ func (c *podIPCache) Release(ipInstanceName, namespace string) {
 
 	info, exist := c.podToIP[namespacedKey(podName, namespace)]
 	if !exist {
-		c.logger.V(1).Info("skip deleting a no exist ip instance cache", "ip instance", ipInstanceName,
+		c.logger.V(1).Info("skip deleting a no exist pod cache", "ip instance", ipInstanceName,
 			"namespace", namespace, "pod name", podName)
 		return
 	}
@@ -167,6 +168,26 @@ func (c *podIPCache) Release(ipInstanceName, namespace string) {
 
 	c.logger.V(1).Info("delete cache", "ip instance", ipInstanceName,
 		"namespace", namespace, "pod name", podName)
+}
+
+func (c *podIPCache) ReleasePod(podName, namespace string) {
+	c.Lock()
+	defer c.Unlock()
+
+	info, exist := c.podToIP[namespacedKey(podName, namespace)]
+	if !exist {
+		c.logger.V(1).Info("skip deleting a no exist pod cache", "pod name", podName,
+			"namespace", namespace)
+		return
+	}
+
+	for _, name := range info.ipInstanceNames {
+		delete(c.ipToPod, namespacedKey(name, namespace))
+	}
+
+	delete(c.podToIP, namespacedKey(podName, namespace))
+
+	c.logger.V(1).Info("delete cache", "namespace", namespace, "pod name", podName)
 }
 
 func (c *podIPCache) Get(podName, namespace string) (bool, types.UID, []string) {

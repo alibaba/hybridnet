@@ -17,7 +17,11 @@
 package strategy
 
 import (
+	"context"
+	"fmt"
 	"sync"
+
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/spf13/pflag"
 	v1 "k8s.io/api/core/v1"
@@ -25,6 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	kubevirtv1 "kubevirt.io/api/core/v1"
 )
 
 var (
@@ -56,6 +62,48 @@ func OwnByStatefulWorkload(obj client.Object) bool {
 	})
 
 	return statefulWorkloadKindSet.Has(ref.Kind)
+}
+
+func OwnByVirtualMachineInstance(obj client.Object) (bool, string) {
+	ref := metav1.GetControllerOf(obj)
+	if ref == nil {
+		return false, ""
+	}
+
+	if ref.Kind != kubevirtv1.VirtualMachineInstanceGroupVersionKind.Kind {
+		return false, ""
+	}
+
+	return true, ref.Name
+}
+
+func OwnByVirtualMachine(ctx context.Context, pod *v1.Pod, client client.Reader) (bool, string, *metav1.OwnerReference, error) {
+	ownByVMI, vmiName := OwnByVirtualMachineInstance(pod)
+	if !ownByVMI {
+		return false, "", nil, nil
+	}
+
+	vmi := &kubevirtv1.VirtualMachineInstance{}
+	if err := client.Get(ctx, types.NamespacedName{
+		Name:      vmiName,
+		Namespace: pod.Namespace,
+	}, vmi); err != nil {
+		return false, "", nil, fmt.Errorf("failed to get kubevirt VMI %v/%v: %v", pod.Namespace, vmiName, err)
+	}
+
+	vmiRef := metav1.GetControllerOf(vmi)
+	if vmiRef == nil {
+		return false, "", nil, nil
+	}
+
+	if vmiRef.Kind != kubevirtv1.VirtualMachineGroupVersionKind.Kind {
+		return false, "", nil, nil
+	}
+
+	ifBlockOwnerDeletion := false
+	vmiRef.BlockOwnerDeletion = &ifBlockOwnerDeletion
+
+	return true, vmiRef.Name, vmiRef, nil
 }
 
 func GetKnownOwnReference(pod *v1.Pod) *metav1.OwnerReference {
