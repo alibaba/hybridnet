@@ -230,26 +230,41 @@ func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) (err error)
 				&utils.IgnoreUpdatePredicate{},
 			)).
 		Watches(&source.Kind{Type: &corev1.Node{}},
-			handler.EnqueueRequestsFromMapFunc(func(object client.Object) []reconcile.Request {
+			handler.EnqueueRequestsFromMapFunc(func(object client.Object) (ret []reconcile.Request) {
 				node, ok := object.(*corev1.Node)
 				if !ok {
 					return nil
 				}
-				underlayNetworkName, err := utils.FindUnderlayNetworkForNode(r.Context, r, node.GetLabels())
-				if err != nil {
-					// TODO: handle error
-					return nil
-				}
-				if len(underlayNetworkName) == 0 {
-					return nil
-				}
-				return []reconcile.Request{
-					{
+				// ignore error
+				underlayNetworkName, _ := utils.FindUnderlayNetworkForNode(r.Context, r, node.GetLabels())
+				if len(underlayNetworkName) > 0 {
+					ret = append(ret, reconcile.Request{
 						NamespacedName: types.NamespacedName{
 							Name: underlayNetworkName,
 						},
-					},
+					})
 				}
+
+				// ignore error
+				overlayNetworkName, _ := utils.FindOverlayNetwork(r.Context, r)
+				if len(overlayNetworkName) > 0 {
+					ret = append(ret, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Name: overlayNetworkName,
+						},
+					})
+				}
+
+				// ignore error
+				globalBGPNetworkName, _ := utils.FindGlobalBGPNetwork(r.Context, r)
+				if len(globalBGPNetworkName) > 0 {
+					ret = append(ret, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Name: globalBGPNetworkName,
+						},
+					})
+				}
+				return
 			}),
 			builder.WithPredicates(
 				&predicate.ResourceVersionChangedPredicate{},
