@@ -23,6 +23,13 @@ import (
 	"strings"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	kubevirtv1 "kubevirt.io/api/core/v1"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/alibaba/hybridnet/pkg/feature"
+
 	corev1 "k8s.io/api/core/v1"
 	apitypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -109,8 +116,54 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 			if err = r.reserve(ctx, pod); err != nil {
 				return ctrl.Result{}, wrapError("unable to reserve pod", err)
 			}
-			return ctrl.Result{}, wrapError("unable to remote finalizer", r.removeFinalizer(ctx, pod))
+			return ctrl.Result{}, wrapError("unable to remove finalizer", r.removeFinalizer(ctx, pod))
 		}
+
+		if feature.VMIPRetainEnabled() {
+			// TODO: use APIReader to get VM/VMI object, because watch v1.VirtualMachine and v1.VirtualMachineInstance will always get errors
+			if isVMPod, vmName, _, err := strategy.OwnByVirtualMachine(ctx, pod, r.APIReader); isVMPod {
+				vm := &kubevirtv1.VirtualMachine{}
+				if err = r.APIReader.Get(ctx, apitypes.NamespacedName{
+					Name:      vmName,
+					Namespace: pod.Namespace,
+				}, vm); err != nil && !apierrors.IsNotFound(err) {
+					return ctrl.Result{}, fmt.Errorf("failed to get vm %v: %v", vmName, err)
+				}
+
+				if apierrors.IsNotFound(err) || !vm.DeletionTimestamp.IsZero() {
+					// if vm is deleted, should not reserve pod ips any more
+					return ctrl.Result{}, wrapError("unable to remove finalizer", r.removeFinalizer(ctx, pod))
+				}
+
+				log.V(1).Info("reserve ip for VM pod")
+				if err = r.reserve(ctx, pod, types.DropPodName(true)); err != nil {
+					return ctrl.Result{}, wrapError("unable to reserve pod", err)
+				}
+
+				vmIPInstances, err := utils.ListAllocatedIPInstances(ctx, r, client.MatchingLabels{
+					constants.LabelVM: vmName,
+				}, client.InNamespace(pod.Namespace))
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to list allocated ip instances for vm %v to reserve: %v",
+						vmName, err)
+				}
+
+				for _, ipInstance := range vmIPInstances {
+					if err := r.IPAMManager.Reserve(ipInstance.Spec.Network, []types.SubnetIPSuite{
+						ipamtypes.ReserveIPOfSubnet(ipInstance.Spec.Subnet, utils.ToIPFormat(ipInstance.Name)),
+					}); err != nil {
+						return ctrl.Result{}, fmt.Errorf("failed to reserve ip %v for vm %v: %v",
+							ipInstance.Spec.Address.IP, vmName, err)
+					}
+				}
+
+				r.PodIPCache.ReleasePod(pod.Name, pod.Namespace)
+				return ctrl.Result{}, wrapError("unable to remove finalizer", r.removeFinalizer(ctx, pod))
+			} else if err != nil {
+				return ctrl.Result{}, fmt.Errorf("unable to check if pod %v/%v is for VM: %v", pod.Namespace, pod.Name, err)
+			}
+		}
+
 		return ctrl.Result{}, nil
 	}
 
@@ -141,8 +194,18 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	}
 
 	if strategy.OwnByStatefulWorkload(pod) {
-		log.V(1).Info("strategic allocation for pod")
+		log.V(1).Info("strategic allocation for stateful pod")
 		return ctrl.Result{}, wrapError("unable to stateful allocate", r.statefulAllocate(ctx, pod, networkName))
+	}
+
+	if feature.VMIPRetainEnabled() {
+		if isVMPod, vmName, vmiOwnerReference, err := strategy.OwnByVirtualMachine(ctx, pod, r.APIReader); isVMPod {
+			log.V(1).Info("strategic allocation for VM pod")
+			return ctrl.Result{}, wrapError("unable to vm allocate",
+				r.vmAllocate(ctx, pod, vmName, networkName, vmiOwnerReference))
+		} else if err != nil {
+			return ctrl.Result{}, fmt.Errorf("unable to check if pod %v/%v is for VM: %v", pod.Namespace, pod.Name, err)
+		}
 	}
 
 	return ctrl.Result{}, wrapError("unable to allocate", r.allocate(ctx, pod, networkName))
@@ -159,8 +222,8 @@ func (r *PodReconciler) decouple(ctx context.Context, pod *corev1.Pod) (err erro
 }
 
 // reserve will reserve IP instances with Pod
-func (r *PodReconciler) reserve(ctx context.Context, pod *corev1.Pod) (err error) {
-	if err = r.IPAMStore.IPReserve(ctx, pod); err != nil {
+func (r *PodReconciler) reserve(ctx context.Context, pod *corev1.Pod, reserveOptions ...types.ReserveOption) (err error) {
+	if err = r.IPAMStore.IPReserve(ctx, pod, reserveOptions...); err != nil {
 		return fmt.Errorf("unable to reserve ips for pod: %v", err)
 	}
 
@@ -338,8 +401,49 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 	return wrapError("unable to assign", r.assign(ctx, pod, networkName, ipCandidates, forceAssign))
 }
 
+func (r *PodReconciler) vmAllocate(ctx context.Context, pod *corev1.Pod, vmName, networkName string,
+	vmiOwnerReference *metav1.OwnerReference) (err error) {
+	if err = r.addFinalizer(ctx, pod); err != nil {
+		return wrapError("unable to add finalizer for stateful pod", err)
+	}
+
+	vmLabels := client.MatchingLabels{
+		constants.LabelVM: vmName,
+	}
+
+	var ipCandidates []ipCandidate
+	var allocatedIPInstances []*networkingv1.IPInstance
+
+	if allocatedIPInstances, err = utils.ListAllocatedIPInstances(ctx, r, vmLabels,
+		client.InNamespace(pod.Namespace)); err != nil {
+		return fmt.Errorf("failed to list allocated ip instances for vm %v: %v", vmName, err)
+	}
+
+	// allocated reuse will have both subnet and IP, also IP candidates should follow
+	// ip family order, ipv4 before ipv6
+	networkingv1.SortIPInstancePointerSlice(allocatedIPInstances)
+	for i := range allocatedIPInstances {
+		var ipInstance = allocatedIPInstances[i]
+		ipCandidates = append(ipCandidates, ipCandidate{
+			subnet: ipInstance.Spec.Subnet,
+			ip:     utils.ToIPFormat(ipInstance.Name),
+		})
+	}
+
+	// when no valid ip found, it means that this is the first time of pod creation
+	if len(ipCandidates) == 0 {
+		return wrapError("unable to allocate", r.allocate(ctx, pod, networkName,
+			types.AdditionalLabels(vmLabels), types.OwnerReference(*vmiOwnerReference)))
+	}
+
+	// forced assign for using reserved ips
+	return wrapError("unable to multi-assign", r.assign(ctx, pod, networkName, ipCandidates, true,
+		types.AdditionalLabels(vmLabels), types.OwnerReference(*vmiOwnerReference)))
+}
+
 // assign means some allocated or pre-assigned IPs will be assigned to a specified pod
-func (r *PodReconciler) assign(ctx context.Context, pod *corev1.Pod, networkName string, ipCandidates []ipCandidate, force bool) (err error) {
+func (r *PodReconciler) assign(ctx context.Context, pod *corev1.Pod, networkName string, ipCandidates []ipCandidate, force bool,
+	reCoupleOptions ...types.ReCoupleOption) (err error) {
 	// try to assign candidate IPs to pod
 	var AssignedIPs []*types.IP
 	if AssignedIPs, err = r.IPAMManager.Assign(networkName,
@@ -362,7 +466,7 @@ func (r *PodReconciler) assign(ctx context.Context, pod *corev1.Pod, networkName
 		}
 	}()
 
-	if err = r.IPAMStore.ReCouple(ctx, pod, AssignedIPs); err != nil {
+	if err = r.IPAMStore.ReCouple(ctx, pod, AssignedIPs, reCoupleOptions...); err != nil {
 		return fmt.Errorf("fail to force-couple IPs %+v with pod: %v", AssignedIPs, err)
 	}
 
@@ -386,7 +490,8 @@ func (r *PodReconciler) release(ctx context.Context, pod *corev1.Pod, allocatedI
 }
 
 // allocate will allocate new IPs for pod
-func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkName string) (err error) {
+func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkName string,
+	coupleOptions ...types.CoupleOption) (err error) {
 	var startTime = time.Now()
 	defer func() {
 		metrics.IPAllocationPeriodSummary.
@@ -419,7 +524,7 @@ func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkNa
 		}
 	}()
 
-	if err = r.IPAMStore.Couple(ctx, pod, allocatedIPs); err != nil {
+	if err = r.IPAMStore.Couple(ctx, pod, allocatedIPs, coupleOptions...); err != nil {
 		return fmt.Errorf("unable to couple IPs %v with pod: %v", allocatedIPs, err)
 	}
 
@@ -509,8 +614,10 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 						return len(pod.Spec.NodeName) > 0
 					}
 
-					// terminating pods owned by stateful workloads should be processed for IP reservation
-					return strategy.OwnByStatefulWorkload(pod)
+					ownByVMI, _ := strategy.OwnByVirtualMachineInstance(pod)
+
+					// terminating pods owned by stateful workloads and VMs should be processed for IP reservation
+					return strategy.OwnByStatefulWorkload(pod) || ownByVMI
 				}),
 			),
 		).

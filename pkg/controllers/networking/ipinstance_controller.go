@@ -57,7 +57,7 @@ func (r *IPInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if !ip.DeletionTimestamp.IsZero() {
-		r.PodIPCache.Release(ip.Name, ip.Namespace)
+		r.PodIPCache.ReleaseIP(ip.Name, ip.Namespace)
 
 		if err = r.releaseIP(ctx, &ip); err != nil {
 			return ctrl.Result{}, wrapError("unable to release IPInstance", err)
