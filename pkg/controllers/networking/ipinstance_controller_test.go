@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
@@ -90,7 +91,7 @@ var _ = Describe("IPInstance controller integration test suite", func() {
 			Expect(availableAfterAllocation).To(Equal(availableOld - 1))
 
 			By("deleting pod and IPInstance")
-			Expect(k8sClient.Delete(context.Background(), pod)).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
 			Expect(k8sClient.Delete(context.Background(),
 				&networkingv1.IPInstance{
 					ObjectMeta: metav1.ObjectMeta{

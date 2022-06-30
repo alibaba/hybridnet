@@ -83,7 +83,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				Should(Succeed())
 
 			By("remove the test pod")
-			Expect(k8sClient.Delete(context.Background(), pod)).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
 		})
 
 		It("Allocate IPv6 address of overlay network for single pod", func() {
@@ -120,7 +120,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				Should(Succeed())
 
 			By("remove the test pod")
-			Expect(k8sClient.Delete(context.Background(), pod)).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
 		})
 
 		It("Allocate DualStack addresses of overlay network for single pod", func() {
@@ -171,7 +171,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				Should(Succeed())
 
 			By("remove the test pod")
-			Expect(k8sClient.Delete(context.Background(), pod)).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
 		})
 
 		AfterEach(func() {
@@ -196,8 +196,6 @@ var _ = Describe("Pod controller integration test suite", func() {
 		})
 
 		It("Allocate and retain IPv4 address of underlay network for single stateful pod", func() {
-			Skip("skip this until pod can be deleted from apiserver")
-
 			By("create a stateful pod requiring IPv4 address")
 			var ipInstanceName string
 			pod := simplePodRender(podName, node1Name)
@@ -237,7 +235,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				Should(Succeed())
 
 			By("remove stateful pod")
-			Expect(k8sClient.Delete(context.Background(), pod)).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
 
 			By("check the allocated IPv4 address is reserved")
 			Eventually(
@@ -332,7 +330,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				Should(Succeed())
 
 			By("remove the test pod")
-			Expect(k8sClient.Delete(context.Background(), pod)).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
 		})
 
 		AfterEach(func() {
