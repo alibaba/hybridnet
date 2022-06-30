@@ -40,26 +40,16 @@ const (
 	// owner: @bruce.mwj
 	// alpha: v0.1
 	//
-	// Enable dual stack allocation in IPAM.
-
-	DualStack featuregate.Feature = "DualStack"
+	// Enable multi-cluster network connection.
 
 	MultiCluster featuregate.Feature = "MultiCluster"
 )
 
 var DefaultHybridnetFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
-	DualStack: {
-		Default:    false,
-		PreRelease: featuregate.Alpha,
-	},
 	MultiCluster: {
 		Default:    false,
 		PreRelease: featuregate.Alpha,
 	},
-}
-
-func DualStackEnabled() bool {
-	return feature.DefaultMutableFeatureGate.Enabled(DualStack)
 }
 
 func MultiClusterEnabled() bool {

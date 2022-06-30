@@ -40,7 +40,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
-	"github.com/alibaba/hybridnet/pkg/feature"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/metrics"
 )
@@ -109,37 +108,30 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	sort.Strings(networkStatus.SubnetList)
 
-	// update statistics
-	if feature.DualStackEnabled() {
-		var usages [3]*ipamtypes.Usage
-		if usages, _, err = r.IPAMManager.DualStack().Usage(network.GetName()); err != nil {
-			return ctrl.Result{}, wrapError("unable to fetch usages on dual stack", err)
-		}
-		networkStatus.LastAllocatedSubnet = usages[0].LastAllocation
-		networkStatus.LastAllocatedIPv6Subnet = usages[1].LastAllocation
+	var networkUsage *ipamtypes.NetworkUsage
+	if networkUsage, err = r.IPAMManager.GetNetworkUsage(network.GetName()); err != nil {
+		return ctrl.Result{}, wrapError("unable to fetch network usage", err)
+	}
+
+	if ipv4Usage := networkUsage.GetByType(ipamtypes.IPv4); ipv4Usage != nil {
+		networkStatus.LastAllocatedSubnet = ipv4Usage.LastAllocation
 		networkStatus.Statistics = &networkingv1.Count{
-			Total:     int32(usages[0].Total),
-			Used:      int32(usages[0].Used),
-			Available: int32(usages[0].Available),
+			Total:     int32(ipv4Usage.Total),
+			Used:      int32(ipv4Usage.Used),
+			Available: int32(ipv4Usage.Available),
 		}
+	}
+	if ipv6Usage := networkUsage.GetByType(ipamtypes.IPv6); ipv6Usage != nil {
+		networkStatus.LastAllocatedIPv6Subnet = ipv6Usage.LastAllocation
 		networkStatus.IPv6Statistics = &networkingv1.Count{
-			Total:     int32(usages[1].Total),
-			Used:      int32(usages[1].Used),
-			Available: int32(usages[1].Available),
+			Total:     int32(ipv6Usage.Total),
+			Used:      int32(ipv6Usage.Used),
+			Available: int32(ipv6Usage.Available),
 		}
+	}
+	if dualStackUsage := networkUsage.GetByType(ipamtypes.DualStack); dualStackUsage != nil {
 		networkStatus.DualStackStatistics = &networkingv1.Count{
-			Available: int32(usages[2].Available),
-		}
-	} else {
-		var usage *ipamtypes.Usage
-		if usage, _, err = r.IPAMManager.Usage(network.GetName()); err != nil {
-			return ctrl.Result{}, wrapError("unable to fetch usage", err)
-		}
-		networkStatus.LastAllocatedSubnet = usage.LastAllocation
-		networkStatus.Statistics = &networkingv1.Count{
-			Total:     int32(usage.Total),
-			Used:      int32(usage.Used),
-			Available: int32(usage.Available),
+			Available: int32(dualStackUsage.Available),
 		}
 	}
 
@@ -168,30 +160,28 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func updateUsageMetrics(networkName string, networkStatus *networkingv1.NetworkStatus) {
-	if feature.DualStackEnabled() {
+	if networkStatus.Statistics != nil {
 		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv4, metrics.IPTotalUsageType).
 			Set(float64(networkStatus.Statistics.Total))
 		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv4, metrics.IPUsedUsageType).
 			Set(float64(networkStatus.Statistics.Used))
 		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv4, metrics.IPAvailableUsageType).
 			Set(float64(networkStatus.Statistics.Available))
+	}
+
+	if networkStatus.IPv6Statistics != nil {
 		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv6, metrics.IPTotalUsageType).
 			Set(float64(networkStatus.IPv6Statistics.Total))
 		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv6, metrics.IPUsedUsageType).
 			Set(float64(networkStatus.IPv6Statistics.Used))
 		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv6, metrics.IPAvailableUsageType).
 			Set(float64(networkStatus.IPv6Statistics.Available))
-		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.DualStack, metrics.IPAvailableUsageType).
-			Set(float64(networkStatus.DualStackStatistics.Available))
-		return
 	}
 
-	metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv4, metrics.IPTotalUsageType).
-		Set(float64(networkStatus.Statistics.Total))
-	metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv4, metrics.IPUsedUsageType).
-		Set(float64(networkStatus.Statistics.Used))
-	metrics.IPUsageGauge.WithLabelValues(networkName, metrics.IPv4, metrics.IPAvailableUsageType).
-		Set(float64(networkStatus.Statistics.Available))
+	if networkStatus.DualStackStatistics != nil {
+		metrics.IPUsageGauge.WithLabelValues(networkName, metrics.DualStack, metrics.IPAvailableUsageType).
+			Set(float64(networkStatus.DualStackStatistics.Available))
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -240,26 +230,41 @@ func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) (err error)
 				&utils.IgnoreUpdatePredicate{},
 			)).
 		Watches(&source.Kind{Type: &corev1.Node{}},
-			handler.EnqueueRequestsFromMapFunc(func(object client.Object) []reconcile.Request {
+			handler.EnqueueRequestsFromMapFunc(func(object client.Object) (ret []reconcile.Request) {
 				node, ok := object.(*corev1.Node)
 				if !ok {
 					return nil
 				}
-				underlayNetworkName, err := utils.FindUnderlayNetworkForNode(r.Context, r, node.GetLabels())
-				if err != nil {
-					// TODO: handle error
-					return nil
-				}
-				if len(underlayNetworkName) == 0 {
-					return nil
-				}
-				return []reconcile.Request{
-					{
+				// ignore error
+				underlayNetworkName, _ := utils.FindUnderlayNetworkForNode(r.Context, r, node.GetLabels())
+				if len(underlayNetworkName) > 0 {
+					ret = append(ret, reconcile.Request{
 						NamespacedName: types.NamespacedName{
 							Name: underlayNetworkName,
 						},
-					},
+					})
 				}
+
+				// ignore error
+				overlayNetworkName, _ := utils.FindOverlayNetwork(r.Context, r)
+				if len(overlayNetworkName) > 0 {
+					ret = append(ret, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Name: overlayNetworkName,
+						},
+					})
+				}
+
+				// ignore error
+				globalBGPNetworkName, _ := utils.FindGlobalBGPNetwork(r.Context, r)
+				if len(globalBGPNetworkName) > 0 {
+					ret = append(ret, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Name: globalBGPNetworkName,
+						},
+					})
+				}
+				return
 			}),
 			builder.WithPredicates(
 				&predicate.ResourceVersionChangedPredicate{},

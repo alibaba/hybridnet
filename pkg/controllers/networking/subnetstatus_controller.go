@@ -38,7 +38,6 @@ import (
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
-	"github.com/alibaba/hybridnet/pkg/feature"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 )
 
@@ -78,14 +77,8 @@ func (r *SubnetStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// fetch subnet usage from manager
 	var usage *ipamtypes.Usage
-	if feature.DualStackEnabled() {
-		if usage, err = r.IPAMManager.DualStack().SubnetUsage(subnet.Spec.Network, subnet.Name); err != nil {
-			return ctrl.Result{}, wrapError("unable to fetch subnet usage", err)
-		}
-	} else {
-		if usage, err = r.IPAMManager.SubnetUsage(subnet.Spec.Network, subnet.Name); err != nil {
-			return ctrl.Result{}, wrapError("unable to fetch subnet usage", err)
-		}
+	if usage, err = r.IPAMManager.GetSubnetUsage(subnet.Spec.Network, subnet.Name); err != nil {
+		return ctrl.Result{}, wrapError("unable to fetch subnet usage", err)
 	}
 
 	var subnetStatus = &networkingv1.SubnetStatus{

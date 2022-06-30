@@ -92,11 +92,15 @@ func IsIPv6IPInstance(ip *IPInstance) bool {
 	if ip == nil {
 		return false
 	}
-	if ip.Spec.Address.Version == IPv6 {
+	switch ip.Spec.Address.Version {
+	case IPv4:
+		return false
+	case IPv6:
 		return true
-	}
-	if tempIP, _, _ := net.ParseCIDR(ip.Spec.Address.IP); tempIP != nil {
-		return tempIP.To4() == nil
+	default:
+		if tempIP, _, _ := net.ParseCIDR(ip.Spec.Address.IP); tempIP != nil {
+			return tempIP.To4() == nil
+		}
 	}
 	return false
 }

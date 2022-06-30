@@ -27,6 +27,7 @@ import (
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
 )
 
 func ListNetworks(ctx context.Context, client client.Reader, opts ...client.ListOption) (*networkingv1.NetworkList, error) {
@@ -244,57 +245,29 @@ func DetectNetworkAttachmentOfNode(ctx context.Context, client client.Reader, no
 	return underlayNetworkName != "", overlayNetworkName != "", nil
 }
 
-func ListAllocatedIPInstancesOfPod(ctx context.Context, c client.Reader, pod *corev1.Pod) (ips []*networkingv1.IPInstance, err error) {
+// ListAllocatedIPInstances will list allocated (non-terminating) IPInstances by some specified filters
+func ListAllocatedIPInstances(ctx context.Context, c client.Reader, opts ...client.ListOption) (ips []*networkingv1.IPInstance, err error) {
 	var ipList *networkingv1.IPInstanceList
-	if ipList, err = ListIPInstances(ctx, c, client.InNamespace(pod.Namespace)); err != nil {
+	if ipList, err = ListIPInstances(ctx, c, opts...); err != nil {
 		return
 	}
 	for i := range ipList.Items {
 		var ip = &ipList.Items[i]
 		// terminating ip should not be picked ip
-		if networkingv1.FetchBindingPodName(ip) == pod.Name && ip.DeletionTimestamp == nil {
+		if ip.DeletionTimestamp == nil {
 			ips = append(ips, ip.DeepCopy())
 		}
 	}
 	return
 }
 
-func GetIPOfPod(ctx context.Context, c client.Reader, pod *corev1.Pod) (string, error) {
-	ipList, err := ListIPInstances(ctx, c, client.InNamespace(pod.Namespace))
-	if err != nil {
-		return "", err
-	}
-
-	for i := range ipList.Items {
-		var ip = &ipList.Items[i]
-		// terminating ip should not be picked ip
-		if networkingv1.FetchBindingPodName(ip) == pod.Name && ip.DeletionTimestamp == nil {
-			return ToIPFormat(ip.Name), nil
-		}
-	}
-	return "", nil
-}
-
-func ListIPsOfPod(ctx context.Context, c client.Reader, pod *corev1.Pod) ([]string, error) {
-	ipList, err := ListIPInstances(ctx, c, client.InNamespace(pod.Namespace))
-	if err != nil {
-		return nil, err
-	}
-
-	var v4, v6 []string
-	for i := range ipList.Items {
-		var ip = &ipList.Items[i]
-		// terminating ip should not be picked ip
-		if networkingv1.FetchBindingPodName(ip) == pod.Name && ip.DeletionTimestamp == nil {
-			ipStr, isIPv6 := ToIPFormatWithFamily(ip.Name)
-			if isIPv6 {
-				v6 = append(v6, ipStr)
-			} else {
-				v4 = append(v4, ipStr)
-			}
-		}
-	}
-	return append(v4, v6...), nil
+func ListAllocatedIPInstancesOfPod(ctx context.Context, c client.Reader, pod *corev1.Pod) (ips []*networkingv1.IPInstance, err error) {
+	return ListAllocatedIPInstances(ctx, c,
+		client.MatchingLabels{
+			constants.LabelPod: pod.Name,
+		},
+		client.InNamespace(pod.Namespace),
+	)
 }
 
 func GetClusterUUID(ctx context.Context, c client.Reader) (types.UID, error) {

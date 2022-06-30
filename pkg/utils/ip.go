@@ -17,6 +17,8 @@
 package utils
 
 import (
+	"fmt"
+	"math/big"
 	"net"
 	"strings"
 
@@ -38,6 +40,35 @@ func NormalizedIP(ip string) string {
 		return ip
 	}
 	return ""
+}
+
+func ValidateIP(ip string) error {
+	if net.ParseIP(ip) != nil {
+		return nil
+	}
+	return fmt.Errorf("%s is not a valid IP", ip)
+}
+
+func ValidateIPv4(ip string) error {
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return fmt.Errorf("%s is not a valid IP", ip)
+	}
+	if parsedIP.To4() == nil {
+		return fmt.Errorf("%s is not an IPv4 address", ip)
+	}
+	return nil
+}
+
+func ValidateIPv6(ip string) error {
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return fmt.Errorf("%s is not a valid IP", ip)
+	}
+	if parsedIP.To4() != nil {
+		return fmt.Errorf("%s is not an IPv6 address", ip)
+	}
+	return nil
 }
 
 func ToDNSFormat(ip net.IP) string {
@@ -129,4 +160,21 @@ func unifyIPv6AddressString(ip string) string {
 	}
 
 	return ip
+}
+
+// NextIP returns IP incremented by 1
+func NextIP(ip net.IP) net.IP {
+	i := ipToInt(ip)
+	return intToIP(i.Add(i, big.NewInt(1)))
+}
+
+func ipToInt(ip net.IP) *big.Int {
+	if v := ip.To4(); v != nil {
+		return big.NewInt(0).SetBytes(v)
+	}
+	return big.NewInt(0).SetBytes(ip.To16())
+}
+
+func intToIP(i *big.Int) net.IP {
+	return net.IP(i.Bytes())
 }

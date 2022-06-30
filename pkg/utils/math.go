@@ -14,14 +14,11 @@
  limitations under the License.
 */
 
-package allocator
+package utils
 
-import (
-	"github.com/alibaba/hybridnet/pkg/ipam/types"
-)
-
-type NetworkGetter func(network string) (*types.Network, error)
-
-type SubnetGetter func(network string) ([]*types.Subnet, error)
-
-type IPSetGetter func(subnet string) (types.IPSet, error)
+func MinUint32(a, b uint32) uint32 {
+	if a > b {
+		return b
+	}
+	return a
+}

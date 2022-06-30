@@ -49,9 +49,9 @@ func ToIPFormatWithFamily(name string) (string, bool) {
 
 func ToIPFamilyMode(isIPv6 bool) types.IPFamilyMode {
 	if isIPv6 {
-		return types.IPv6Only
+		return types.IPv6
 	}
-	return types.IPv4Only
+	return types.IPv4
 }
 
 func GetIndexFromName(name string) int {

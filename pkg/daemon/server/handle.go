@@ -25,9 +25,10 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/util/retry"
+
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 
 	"github.com/alibaba/hybridnet/pkg/daemon/utils"
 
@@ -121,7 +122,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 			return
 		}
 
-		if (len(ipInstanceList) == 1 && (ipFamily == ipamtypes.IPv4Only || ipFamily == ipamtypes.IPv6Only)) ||
+		if (len(ipInstanceList) == 1 && (ipFamily == ipamtypes.IPv4 || ipFamily == ipamtypes.IPv6)) ||
 			(len(ipInstanceList) == 2 && ipFamily == ipamtypes.DualStack) {
 			break
 		} else if i == retries-1 {

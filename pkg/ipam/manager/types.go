@@ -14,22 +14,14 @@
  limitations under the License.
 */
 
-package utils
+package manager
 
-import "fmt"
+import (
+	"github.com/alibaba/hybridnet/pkg/ipam/types"
+)
 
-func PickFirstNonEmptyString(ss ...string) string {
-	for _, s := range ss {
-		if len(s) > 0 {
-			return s
-		}
-	}
-	return ""
-}
+type NetworkGetter func(network string) (*types.Network, error)
 
-func CheckNotEmpty(name, input string) error {
-	if len(input) == 0 {
-		return fmt.Errorf("%s must not be empty", name)
-	}
-	return nil
-}
+type SubnetGetter func(network string) ([]*types.Subnet, error)
+
+type IPSetGetter func(subnet string) (types.IPSet, error)

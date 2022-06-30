@@ -14,22 +14,9 @@
  limitations under the License.
 */
 
-package utils
+package networking
 
-import "fmt"
-
-func PickFirstNonEmptyString(ss ...string) string {
-	for _, s := range ss {
-		if len(s) > 0 {
-			return s
-		}
-	}
-	return ""
-}
-
-func CheckNotEmpty(name, input string) error {
-	if len(input) == 0 {
-		return fmt.Errorf("%s must not be empty", name)
-	}
-	return nil
+type ipCandidate struct {
+	subnet string
+	ip     string
 }

@@ -18,18 +18,19 @@ package networking_test
 
 import (
 	"context"
-	"os"
+	"net"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/alibaba/hybridnet/pkg/controllers/networking"
-
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -37,11 +38,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
+	"github.com/alibaba/hybridnet/pkg/controllers/networking"
+	"github.com/alibaba/hybridnet/pkg/utils"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -49,22 +48,37 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	k8sClient client.Client
-	testEnv   *envtest.Environment
+	k8sClient   client.Client
+	testEnv     *envtest.Environment
+	ipamManager networking.IPAMManager
+)
 
-	controllerConcurrency map[string]int
+var testLock = sync.Mutex{}
+
+const (
+	underlayNetworkName   = "underlay-network"
+	overlayNetworkName    = "overlay-network"
+	underlaySubnetName    = "underlay-subnet"
+	overlayIPv4SubnetName = "overlay-ipv4-subnet"
+	overlayIPv6SubnetName = "overlay-ipv6-subnet"
+	node1Name             = "node1"
+	node2Name             = "node2"
+	node3Name             = "node3"
+	netID                 = 100
 )
 
 const (
-	timeout  = time.Second * 30
-	interval = time.Second * 1
+	basicIPQuantity  int32 = 256
+	networkAddress   int32 = 1
+	gatewayAddress   int32 = 1
+	broadcastAddress int32 = 1
 )
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecsWithDefaultAndCustomReporters(t,
-		"Controller Suite",
+		"Networking Controllers Suite",
 		[]Reporter{printer.NewlineReporter{}})
 }
 
@@ -75,34 +89,31 @@ var _ = BeforeSuite(func() {
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "charts", "hybridnet", "crds")},
 		ErrorIfCRDPathMissing: true,
-		BinaryAssetsDirectory: "/Users/hhy/go/src/github.com/hhyasdf/hybridnet/bin",
 	}
 
 	cfg, err := testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	err = networkingv1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
+	scheme := runtime.NewScheme()
+	Expect(scheme).NotTo(BeNil())
+	Expect(clientgoscheme.AddToScheme(scheme)).NotTo(HaveOccurred())
+	Expect(networkingv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme.Scheme,
-		Logger: ctrl.Log.WithName("manager"),
+		Scheme:                  scheme,
+		Logger:                  ctrl.Log.WithName("manager"),
+		LeaderElection:          true,
+		LeaderElectionID:        "hybridnet-manager-election",
+		LeaderElectionNamespace: "kube-system",
 	})
-	Expect(err).ToNot(HaveOccurred())
-
-	// pre-start hooks registration
-	var preStartHooks []func() error
-	preStartHooks = append(preStartHooks, func() error {
-		// TODO: this conversion will be removed in next major version
-		return networkingv1.CanonicalizeIPInstance(mgr.GetClient())
-	})
+	Expect(err).NotTo(HaveOccurred())
 
 	// indexers need to be injected be for informer is running
 	Expect(networking.InitIndexers(mgr)).ToNot(HaveOccurred())
@@ -112,157 +123,43 @@ var _ = BeforeSuite(func() {
 	}()
 
 	// wait for manager cache client ready
-	mgr.GetCache().WaitForCacheSync(context.TODO())
+	Eventually(mgr.GetCache().WaitForCacheSync(context.TODO())).
+		WithTimeout(time.Minute).
+		WithPolling(3 * time.Second).
+		Should(BeTrue())
 
-	// run pre-start hooks
-	Expect(errors.AggregateGoroutines(preStartHooks...)).ToNot(HaveOccurred())
-
-	// init IPAM manager and stort
-	ipamManager, err := networking.NewIPAMManager(context.TODO(), mgr.GetClient())
-	if err != nil {
-		os.Exit(1)
-	}
-
-	podIPCache, err := networking.NewPodIPCache(context.TODO(), mgr.GetClient(), ctrl.Log.WithName("pod-ip-cache"))
-	Expect(err).ToNot(HaveOccurred())
-
-	ipamStore := networking.NewIPAMStore(mgr.GetClient())
-
-	// setup controllers
-	Expect((&networking.IPAMReconciler{
-		Client:                mgr.GetClient(),
-		Refresh:               ipamManager,
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerIPAM]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
-
-	Expect((&networking.IPInstanceReconciler{
-		Client:                mgr.GetClient(),
-		PodIPCache:            podIPCache,
-		IPAMManager:           ipamManager,
-		IPAMStore:             ipamStore,
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerIPInstance]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
-
-	Expect((&networking.NodeReconciler{
-		Context:               context.TODO(),
-		Client:                mgr.GetClient(),
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerNode]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
-
-	Expect((&networking.PodReconciler{
-		APIReader:             mgr.GetAPIReader(),
-		Client:                mgr.GetClient(),
-		PodIPCache:            podIPCache,
-		IPAMStore:             ipamStore,
-		IPAMManager:           ipamManager,
-		Recorder:              &record.FakeRecorder{},
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerPod]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
-
-	Expect((&networking.NetworkStatusReconciler{
-		Context:               context.TODO(),
-		Client:                mgr.GetClient(),
-		IPAMManager:           ipamManager,
-		Recorder:              &record.FakeRecorder{},
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerNetworkStatus]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
-
-	Expect((&networking.SubnetStatusReconciler{
-		Client:                mgr.GetClient(),
-		IPAMManager:           ipamManager,
-		Recorder:              &record.FakeRecorder{},
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerSubnetStatus]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
-
-	Expect((&networking.QuotaReconciler{
-		Client:                mgr.GetClient(),
-		ControllerConcurrency: concurrency.ControllerConcurrency(controllerConcurrency[networking.ControllerQuota]),
-	}).SetupWithManager(mgr)).ToNot(HaveOccurred())
+	// register all controllers to manager
+	Expect(networking.RegisterToManager(context.TODO(), mgr, networking.RegisterOptions{
+		// use custom IPAM manager constructor to fetch IPAM manager
+		NewIPAMManager: func(ctx context.Context, c client.Client) (networking.IPAMManager, error) {
+			ipamManager, err = networking.NewIPAMManager(ctx, c)
+			return ipamManager, err
+		},
+	})).NotTo(HaveOccurred())
 
 	// An underlay network and an overlay network.
-	// Two nodes, only one with underlay network attached.
+	// Three nodes, two with underlay network attached.
 	ctx := context.Background()
-	netID := int32(100)
-
-	underlayNetworkName := "underlay-network"
-	overlayNetworkName := "overlay-network"
 
 	networkList := []*networkingv1.Network{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: underlayNetworkName,
-			},
-			Spec: networkingv1.NetworkSpec{
-				NetID: &netID,
-				Type:  networkingv1.NetworkTypeUnderlay,
-				Mode:  networkingv1.NetworkModeVlan,
-				NodeSelector: map[string]string{
-					"network": underlayNetworkName,
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: overlayNetworkName,
-			},
-			Spec: networkingv1.NetworkSpec{
-				NetID: &netID,
-				Type:  networkingv1.NetworkTypeOverlay,
-				Mode:  networkingv1.NetworkModeVxlan,
-			},
-		},
+		underlayNetworkRender(underlayNetworkName, netID),
+		overlayNetworkRender(overlayNetworkName, netID),
 	}
 
 	subnetList := []*networkingv1.Subnet{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "underlay-subnet1",
-			},
-			Spec: networkingv1.SubnetSpec{
-				Network: underlayNetworkName,
-				Range: networkingv1.AddressRange{
-					Version: "4",
-					CIDR:    "192.168.56.0/24",
-					Gateway: "192.168.56.1",
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "overlay-subnet1",
-			},
-			Spec: networkingv1.SubnetSpec{
-				Network: overlayNetworkName,
-				Range: networkingv1.AddressRange{
-					Version: "4",
-					CIDR:    "100.10.0.0/16",
-				},
-			},
-		},
+		subnetRender(underlaySubnetName, underlayNetworkName, "192.168.56.0/24", nil, true),
+		subnetRender(overlayIPv4SubnetName, overlayNetworkName, "100.10.0.0/24", pointer.Int32Ptr(44), false),
+		subnetRender(overlayIPv6SubnetName, overlayNetworkName, "fe80::0/120", pointer.Int32Ptr(66), false),
 	}
 
 	nodeList := []*corev1.Node{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-node1",
-				Labels: map[string]string{
-					"network": "underlay-network",
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-node2",
-				Labels: map[string]string{
-					"network": "underlay-network",
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-node3",
-			},
-		},
+		nodeRender(node1Name, map[string]string{
+			"network": underlayNetworkName,
+		}),
+		nodeRender(node2Name, map[string]string{
+			"network": underlayNetworkName,
+		}),
+		nodeRender(node3Name, map[string]string{}),
 	}
 
 	for _, network := range networkList {
@@ -275,10 +172,79 @@ var _ = BeforeSuite(func() {
 		Expect(k8sClient.Create(ctx, node)).Should(Succeed())
 	}
 
-}, 60)
+})
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
-	err := testEnv.Stop()
-	Expect(err).NotTo(HaveOccurred())
+	Expect(testEnv.Stop()).NotTo(HaveOccurred())
 })
+
+// underlayNetworkRender will render a simple underlay network of vlan mode
+func underlayNetworkRender(name string, netID int32) *networkingv1.Network {
+	return &networkingv1.Network{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: networkingv1.NetworkSpec{
+			NodeSelector: map[string]string{
+				"network": name,
+			},
+			NetID: &netID,
+			Type:  networkingv1.NetworkTypeUnderlay,
+			Mode:  networkingv1.NetworkModeVlan,
+		},
+	}
+}
+
+// overlayNetworkRender will render a simple overlay network of vxlan mode
+func overlayNetworkRender(name string, netID int32) *networkingv1.Network {
+	return &networkingv1.Network{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: networkingv1.NetworkSpec{
+			NetID: &netID,
+			Type:  networkingv1.NetworkTypeOverlay,
+			Mode:  networkingv1.NetworkModeVxlan,
+		},
+	}
+}
+
+// subnetRender will render a simple subnet of a specified network
+func subnetRender(name, networkName string, cidr string, netID *int32, hasGateway bool) *networkingv1.Subnet {
+	tempIP, _, _ := net.ParseCIDR(cidr)
+	return &networkingv1.Subnet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: networkingv1.SubnetSpec{
+			Range: networkingv1.AddressRange{
+				Version: func() networkingv1.IPVersion {
+					if tempIP.To4() == nil {
+						return networkingv1.IPv6
+					}
+					return networkingv1.IPv4
+				}(),
+				CIDR: cidr,
+				Gateway: func() string {
+					if hasGateway {
+						return utils.NextIP(tempIP).String()
+					}
+					return ""
+				}(),
+			},
+			NetID:   netID,
+			Network: networkName,
+		},
+	}
+}
+
+// nodeRender will render a simple node with assigned labels
+func nodeRender(name string, labels map[string]string) *corev1.Node {
+	return &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: labels,
+		},
+	}
+}
