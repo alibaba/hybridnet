@@ -274,13 +274,12 @@ var _ = Describe("Pod controller integration test suite", func() {
 			By("make sure pod deleted")
 			Eventually(
 				func(g Gomega) {
-					tempPod := &corev1.Pod{}
 					err := k8sClient.Get(context.Background(),
 						types.NamespacedName{
 							Namespace: pod.Namespace,
 							Name:      podName,
 						},
-						tempPod)
+						&corev1.Pod{})
 					g.Expect(err).NotTo(BeNil())
 					g.Expect(errors.IsNotFound(err)).To(BeTrue())
 				}).
@@ -412,13 +411,12 @@ var _ = Describe("Pod controller integration test suite", func() {
 			By("make sure pod deleted")
 			Eventually(
 				func(g Gomega) {
-					tempPod := &corev1.Pod{}
 					err := k8sClient.Get(context.Background(),
 						types.NamespacedName{
 							Namespace: pod.Namespace,
 							Name:      podName,
 						},
-						tempPod)
+						&corev1.Pod{})
 					g.Expect(err).NotTo(BeNil())
 					g.Expect(errors.IsNotFound(err)).To(BeTrue())
 				}).
@@ -613,13 +611,12 @@ var _ = Describe("Pod controller integration test suite", func() {
 			By("make sure pod deleted")
 			Eventually(
 				func(g Gomega) {
-					tempPod := &corev1.Pod{}
 					err := k8sClient.Get(context.Background(),
 						types.NamespacedName{
 							Namespace: pod.Namespace,
 							Name:      podName,
 						},
-						tempPod)
+						&corev1.Pod{})
 					g.Expect(err).NotTo(BeNil())
 					g.Expect(errors.IsNotFound(err)).To(BeTrue())
 				}).
@@ -702,6 +699,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 		})
 
 		AfterEach(func() {
+			By("make sure test ip instances cleaned up")
 			Expect(k8sClient.DeleteAllOf(
 				context.Background(),
 				&networkingv1.IPInstance{},
@@ -710,6 +708,22 @@ var _ = Describe("Pod controller integration test suite", func() {
 				},
 				client.InNamespace("default"),
 			))
+
+			By("make sure test pod cleaned up")
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(context.Background(),
+						types.NamespacedName{
+							Namespace: "default",
+							Name:      podName,
+						},
+						&corev1.Pod{})
+					g.Expect(err).NotTo(BeNil())
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
 		})
 	})
 
