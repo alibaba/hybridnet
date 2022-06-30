@@ -298,6 +298,7 @@ func (m *Manager) SyncRoutes() error {
 	}
 
 	// Find excluded ip ranges.
+	// TODO: if CIDRs are different but overlapped, exclude IP blocks might be conflicted
 	localUnderlayExcludeIPBlockMap, err := findExcludeIPBlockMap(m.localClusterUnderlaySubnetInfoMap)
 	if err != nil {
 		return fmt.Errorf("failed to find exclude ip blocks for underlay subnet: %v", err)
@@ -317,7 +318,7 @@ func (m *Manager) SyncRoutes() error {
 	}
 
 	// Sync to-overlay-pod-subnet routes
-	if err := m.ensureToOverlaySubnetRoutes(combineLocalAndRemoteExcludeIPBlockMap(localOverlayExcludeIPBlockMap, remoteOverlayExcludeIPBlockMap)); err != nil {
+	if err := m.ensureToOverlaySubnetRoutes(combineNetMap(localOverlayExcludeIPBlockMap, remoteOverlayExcludeIPBlockMap)); err != nil {
 		return fmt.Errorf("failed to ensure to-overlay-pod-subnet routes: %v", err)
 	}
 
@@ -356,8 +357,8 @@ func (m *Manager) SyncRoutes() error {
 	for _, info := range m.localClusterOverlaySubnetInfoMap {
 		// Append overlay from pod subnet rules which don't exist and adapt to subnet configuration
 		if err := ensureFromPodSubnetRuleAndRoutes(info.forwardNodeIfName, info.cidr, info.gateway, info.autoNatOutgoing, m.family,
-			combineLocalAndRemoteSubnetInfoMap(m.localClusterUnderlaySubnetInfoMap, m.remoteUnderlaySubnetInfoMap),
-			combineLocalAndRemoteExcludeIPBlockMap(localUnderlayExcludeIPBlockMap, remoteUnderlayExcludeIPBlockMap),
+			combineSubnetInfoMap(m.localClusterUnderlaySubnetInfoMap, m.remoteUnderlaySubnetInfoMap),
+			combineNetMap(localUnderlayExcludeIPBlockMap, remoteUnderlayExcludeIPBlockMap),
 			info.mode,
 		); err != nil {
 			return fmt.Errorf("failed to add overlay subnet %v rule and routes: %v", info.cidr, err)
