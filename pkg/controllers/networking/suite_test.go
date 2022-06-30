@@ -51,7 +51,6 @@ var (
 	k8sClient   client.Client
 	testEnv     *envtest.Environment
 	ipamManager networking.IPAMManager
-	ipamStore   networking.IPAMStore
 )
 
 var testLock = sync.Mutex{}
@@ -66,6 +65,13 @@ const (
 	node2Name             = "node2"
 	node3Name             = "node3"
 	netID                 = 100
+)
+
+const (
+	basicIPQuantity  int32 = 256
+	networkAddress   int32 = 1
+	gatewayAddress   int32 = 1
+	broadcastAddress int32 = 1
 )
 
 func TestAPIs(t *testing.T) {
@@ -130,7 +136,6 @@ var _ = BeforeSuite(func() {
 			return ipamManager, err
 		},
 	})).NotTo(HaveOccurred())
-	ipamStore = networking.NewIPAMStore(mgr.GetClient())
 
 	// An underlay network and an overlay network.
 	// Three nodes, two with underlay network attached.

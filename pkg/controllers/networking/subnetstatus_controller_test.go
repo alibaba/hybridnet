@@ -40,8 +40,8 @@ var _ = Describe("Subnet status controller integration test suite", func() {
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(subnet).NotTo(BeNil())
 
-					g.Expect(subnet.Status.Total).To(Equal(int32(253)))
-					g.Expect(subnet.Status.Available).To(Equal(int32(253)))
+					g.Expect(subnet.Status.Total).To(Equal(basicIPQuantity - networkAddress - gatewayAddress - broadcastAddress))
+					g.Expect(subnet.Status.Available).To(Equal(subnet.Status.Total))
 					g.Expect(subnet.Status.Used).To(Equal(int32(0)))
 				}).
 				WithTimeout(30 * time.Second).
@@ -55,8 +55,8 @@ var _ = Describe("Subnet status controller integration test suite", func() {
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(subnet).NotTo(BeNil())
 
-					g.Expect(subnet.Status.Total).To(Equal(int32(254)))
-					g.Expect(subnet.Status.Available).To(Equal(int32(254)))
+					g.Expect(subnet.Status.Total).To(Equal(basicIPQuantity - networkAddress - broadcastAddress))
+					g.Expect(subnet.Status.Available).To(Equal(subnet.Status.Total))
 					g.Expect(subnet.Status.Used).To(Equal(int32(0)))
 				}).
 				WithTimeout(30 * time.Second).
@@ -70,8 +70,9 @@ var _ = Describe("Subnet status controller integration test suite", func() {
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(subnet).NotTo(BeNil())
 
-					g.Expect(subnet.Status.Total).To(Equal(int32(255)))
-					g.Expect(subnet.Status.Available).To(Equal(int32(255)))
+					// IPv6 does not have broadcast address
+					g.Expect(subnet.Status.Total).To(Equal(basicIPQuantity - networkAddress))
+					g.Expect(subnet.Status.Available).To(Equal(subnet.Status.Total))
 					g.Expect(subnet.Status.Used).To(Equal(int32(0)))
 				}).
 				WithTimeout(30 * time.Second).

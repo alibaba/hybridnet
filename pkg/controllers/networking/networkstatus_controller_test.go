@@ -55,8 +55,8 @@ var _ = Describe("Network status controller integration test suite", func() {
 					g.Expect(network.Status.SubnetList).To(ConsistOf(underlaySubnetName))
 
 					g.Expect(network.Status.Statistics).NotTo(BeNil())
-					g.Expect(network.Status.Statistics.Total).Should(Equal(int32(253)))
-					g.Expect(network.Status.Statistics.Available).Should(Equal(int32(253)))
+					g.Expect(network.Status.Statistics.Total).Should(Equal(basicIPQuantity - networkAddress - gatewayAddress - broadcastAddress))
+					g.Expect(network.Status.Statistics.Available).Should(Equal(network.Status.Statistics.Total))
 					g.Expect(network.Status.Statistics.Used).Should(Equal(int32(0)))
 				}).
 				WithTimeout(30 * time.Second).
@@ -74,18 +74,18 @@ var _ = Describe("Network status controller integration test suite", func() {
 					g.Expect(network.Status.NodeList).To(ConsistOf(node1Name, node2Name, node3Name))
 
 					g.Expect(network.Status.Statistics).NotTo(BeNil())
-					g.Expect(network.Status.Statistics.Total).Should(Equal(int32(254)))
-					g.Expect(network.Status.Statistics.Available).Should(Equal(int32(254)))
+					g.Expect(network.Status.Statistics.Total).Should(Equal(basicIPQuantity - networkAddress - broadcastAddress))
+					g.Expect(network.Status.Statistics.Available).Should(Equal(network.Status.Statistics.Total))
 					g.Expect(network.Status.Statistics.Used).Should(Equal(int32(0)))
 
 					g.Expect(network.Status.IPv6Statistics).NotTo(BeNil())
-					g.Expect(network.Status.IPv6Statistics.Total).Should(Equal(int32(255)))
-					g.Expect(network.Status.IPv6Statistics.Available).Should(Equal(int32(255)))
+					g.Expect(network.Status.IPv6Statistics.Total).Should(Equal(basicIPQuantity - networkAddress))
+					g.Expect(network.Status.IPv6Statistics.Available).Should(Equal(network.Status.IPv6Statistics.Total))
 					g.Expect(network.Status.IPv6Statistics.Used).Should(Equal(int32(0)))
 
 					g.Expect(network.Status.DualStackStatistics).NotTo(BeNil())
 					g.Expect(network.Status.DualStackStatistics.Total).Should(Equal(int32(0)))
-					g.Expect(network.Status.DualStackStatistics.Available).Should(Equal(int32(254)))
+					g.Expect(network.Status.DualStackStatistics.Available).Should(Equal(minInt32(network.Status.Statistics.Available, network.Status.IPv6Statistics.Available)))
 					g.Expect(network.Status.DualStackStatistics.Used).Should(Equal(int32(0)))
 
 				}).
@@ -164,18 +164,18 @@ var _ = Describe("Network status controller integration test suite", func() {
 					g.Expect(network.Status.SubnetList).To(ConsistOf(subnet1, subnet2, subnet3))
 
 					g.Expect(network.Status.Statistics).NotTo(BeNil())
-					g.Expect(network.Status.Statistics.Total).Should(Equal(int32(253 * 2)))
-					g.Expect(network.Status.Statistics.Available).Should(Equal(int32(253 * 2)))
+					g.Expect(network.Status.Statistics.Total).Should(Equal(int32(2) * (basicIPQuantity - networkAddress - gatewayAddress - broadcastAddress)))
+					g.Expect(network.Status.Statistics.Available).Should(Equal(network.Status.Statistics.Total))
 					g.Expect(network.Status.Statistics.Used).Should(Equal(int32(0)))
 
 					g.Expect(network.Status.IPv6Statistics).NotTo(BeNil())
-					g.Expect(network.Status.IPv6Statistics.Total).Should(Equal(int32(255)))
-					g.Expect(network.Status.IPv6Statistics.Available).Should(Equal(int32(255)))
+					g.Expect(network.Status.IPv6Statistics.Total).Should(Equal(basicIPQuantity - networkAddress))
+					g.Expect(network.Status.IPv6Statistics.Available).Should(Equal(network.Status.IPv6Statistics.Total))
 					g.Expect(network.Status.IPv6Statistics.Used).Should(Equal(int32(0)))
 
 					g.Expect(network.Status.DualStackStatistics).NotTo(BeNil())
 					g.Expect(network.Status.DualStackStatistics.Total).Should(Equal(int32(0)))
-					g.Expect(network.Status.DualStackStatistics.Available).Should(Equal(int32(255)))
+					g.Expect(network.Status.DualStackStatistics.Available).Should(Equal(minInt32(network.Status.Statistics.Available, network.Status.IPv6Statistics.Available)))
 					g.Expect(network.Status.DualStackStatistics.Used).Should(Equal(int32(0)))
 				}).
 				WithTimeout(30 * time.Second).
@@ -212,3 +212,10 @@ var _ = Describe("Network status controller integration test suite", func() {
 		testLock.Unlock()
 	})
 })
+
+func minInt32(a, b int32) int32 {
+	if a < b {
+		return a
+	}
+	return b
+}

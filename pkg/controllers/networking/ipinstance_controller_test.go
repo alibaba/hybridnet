@@ -22,7 +22,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -49,21 +48,7 @@ var _ = Describe("IPInstance controller integration test suite", func() {
 			availableOld := networkUsage.GetByType(ipamtypes.IPv4).Available
 
 			By("create a pod for IP allocation")
-			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pod-for-ipinstance",
-					Namespace: "default",
-				},
-				Spec: corev1.PodSpec{
-					NodeName: "node1",
-					Containers: []corev1.Container{
-						{
-							Name:  "fake",
-							Image: "fake",
-						},
-					},
-				},
-			}
+			pod := simplePodRender("test-pod-for-ipinstance", node1Name)
 
 			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
 
