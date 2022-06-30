@@ -245,7 +245,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 					g.Expect(ipInstances).To(HaveLen(1))
 
 					ipInstance := ipInstances[0]
-					Expect(ipInstance.Name).To(Equal(ipInstanceName))
+					g.Expect(ipInstance.Name).To(Equal(ipInstanceName))
 					g.Expect(ipInstance.Spec.Address.Version).To(Equal(networkingv1.IPv4))
 					g.Expect(ipInstance.Spec.Binding.PodUID).To(BeEmpty())
 					g.Expect(ipInstance.Spec.Binding.PodName).To(Equal(pod.Name))
@@ -271,7 +271,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 
 			// TODO: check status in IPAM manager
 
-			By("check pod deleted")
+			By("make sure pod deleted")
 			Eventually(
 				func(g Gomega) {
 					tempPod := &corev1.Pod{}
@@ -281,10 +281,6 @@ var _ = Describe("Pod controller integration test suite", func() {
 							Name:      podName,
 						},
 						tempPod)
-					if err == nil {
-						g.Expect(tempPod.Finalizers).To(BeEmpty())
-						g.Expect(tempPod.DeletionTimestamp).NotTo(BeNil())
-					}
 					g.Expect(err).NotTo(BeNil())
 					g.Expect(errors.IsNotFound(err)).To(BeTrue())
 				}).
@@ -305,7 +301,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 					g.Expect(ipInstances).To(HaveLen(1))
 
 					ipInstance := ipInstances[0]
-					Expect(ipInstance.Name).To(Equal(ipInstanceName))
+					g.Expect(ipInstance.Name).To(Equal(ipInstanceName))
 					g.Expect(ipInstance.Spec.Address.Version).To(Equal(networkingv1.IPv4))
 					g.Expect(ipInstance.Spec.Binding.PodUID).To(Equal(pod.UID))
 					g.Expect(ipInstance.Spec.Binding.PodName).To(Equal(pod.Name))
@@ -324,6 +320,378 @@ var _ = Describe("Pod controller integration test suite", func() {
 
 					g.Expect(ipInstance.Spec.Network).To(Equal(underlayNetworkName))
 					g.Expect(ipInstance.Spec.Subnet).To(BeElementOf(underlaySubnetName))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("remove the test pod")
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+		})
+
+		It("Allocate and retain IPv6 address of overlay network for single stateful pod", func() {
+			By("create a stateful pod requiring IPv6 address and overlay network")
+			var ipInstanceName string
+			pod := simplePodRender(podName, node3Name)
+			pod.OwnerReferences = []metav1.OwnerReference{ownerReference}
+			pod.Annotations = map[string]string{
+				constants.AnnotationNetworkType: "Overlay",
+				constants.AnnotationIPFamily:    "IPv6",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).Should(Succeed())
+
+			By("check the first allocated IPv6 address")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					ipInstanceName = ipInstance.Name
+					g.Expect(ipInstance.Spec.Address.Version).To(Equal(networkingv1.IPv6))
+					g.Expect(ipInstance.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstance.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstance.Spec.Binding.NodeName).To(Equal(node3Name))
+					g.Expect(ipInstance.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstance.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstance.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx := *ipInstance.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstance.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstance.Spec.Subnet).To(BeElementOf(overlayIPv6SubnetName))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("remove stateful pod")
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+
+			By("check the allocated IPv6 address is reserved")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Name).To(Equal(ipInstanceName))
+					g.Expect(ipInstance.Spec.Address.Version).To(Equal(networkingv1.IPv6))
+					g.Expect(ipInstance.Spec.Binding.PodUID).To(BeEmpty())
+					g.Expect(ipInstance.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstance.Spec.Binding.NodeName).To(BeEmpty())
+					g.Expect(ipInstance.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstance.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstance.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx := *ipInstance.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstance.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstance.Spec.Subnet).To(BeElementOf(overlayIPv6SubnetName))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			// TODO: check status in IPAM manager
+
+			By("make sure pod deleted")
+			Eventually(
+				func(g Gomega) {
+					tempPod := &corev1.Pod{}
+					err := k8sClient.Get(context.Background(),
+						types.NamespacedName{
+							Namespace: pod.Namespace,
+							Name:      podName,
+						},
+						tempPod)
+					g.Expect(err).NotTo(BeNil())
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("recreate the stateful pod on another node")
+			pod = simplePodRender(podName, node1Name)
+			pod.OwnerReferences = []metav1.OwnerReference{ownerReference}
+			pod.Annotations = map[string]string{
+				constants.AnnotationNetworkType: "Overlay",
+				constants.AnnotationIPFamily:    "IPv6",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check the allocated IPv6 address is retained and reused")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Name).To(Equal(ipInstanceName))
+					g.Expect(ipInstance.Spec.Address.Version).To(Equal(networkingv1.IPv6))
+					g.Expect(ipInstance.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstance.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstance.Spec.Binding.NodeName).To(Equal(node1Name))
+					g.Expect(ipInstance.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstance.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstance.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx := *ipInstance.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstance.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstance.Spec.Subnet).To(BeElementOf(overlayIPv6SubnetName))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("remove the test pod")
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+		})
+
+		It("Allocate and retain DualStack addresses of overlay network for single stateful pod", func() {
+			By("create a stateful pod requiring DualStack addresses and overlay network")
+			var ipInstanceIPv4Name string
+			var ipInstanceIPv6Name string
+			pod := simplePodRender(podName, node3Name)
+			pod.OwnerReferences = []metav1.OwnerReference{ownerReference}
+			pod.Annotations = map[string]string{
+				constants.AnnotationNetworkType: "Overlay",
+				constants.AnnotationIPFamily:    "DualStack",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).Should(Succeed())
+
+			By("check the first allocated DualStack addresses")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(2))
+
+					// sort by ip family order
+					networkingv1.SortIPInstancePointerSlice(ipInstances)
+
+					// check IPv4 IPInstance
+					ipInstanceIPv4 := ipInstances[0]
+					ipInstanceIPv4Name = ipInstanceIPv4.Name
+					g.Expect(ipInstanceIPv4.Spec.Address.Version).To(Equal(networkingv1.IPv4))
+					g.Expect(ipInstanceIPv4.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstanceIPv4.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstanceIPv4.Spec.Binding.NodeName).To(Equal(node3Name))
+					g.Expect(ipInstanceIPv4.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstanceIPv4.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstanceIPv4.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx := *ipInstanceIPv4.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstanceIPv4.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstanceIPv4.Spec.Subnet).To(BeElementOf(overlayIPv4SubnetName))
+
+					// check IPv6 IPInstance
+					ipInstanceIPv6 := ipInstances[1]
+					ipInstanceIPv6Name = ipInstanceIPv6.Name
+					g.Expect(ipInstanceIPv6.Spec.Address.Version).To(Equal(networkingv1.IPv6))
+					g.Expect(ipInstanceIPv6.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstanceIPv6.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstanceIPv6.Spec.Binding.NodeName).To(Equal(node3Name))
+					g.Expect(ipInstanceIPv6.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstanceIPv6.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstanceIPv6.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx = *ipInstanceIPv6.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstanceIPv6.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstanceIPv6.Spec.Subnet).To(BeElementOf(overlayIPv6SubnetName))
+
+					// check MAC address
+					g.Expect(ipInstanceIPv4.Spec.Address.MAC).To(Equal(ipInstanceIPv6.Spec.Address.MAC))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("remove stateful pod")
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+
+			By("check the allocated DualStack addresses are reserved")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(2))
+
+					// sort by ip family order
+					networkingv1.SortIPInstancePointerSlice(ipInstances)
+
+					// check IPv4 IPInstance
+					ipInstanceIPv4 := ipInstances[0]
+					g.Expect(ipInstanceIPv4.Name).To(Equal(ipInstanceIPv4Name))
+					g.Expect(ipInstanceIPv4.Spec.Address.Version).To(Equal(networkingv1.IPv4))
+					g.Expect(ipInstanceIPv4.Spec.Binding.PodUID).To(BeEmpty())
+					g.Expect(ipInstanceIPv4.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstanceIPv4.Spec.Binding.NodeName).To(BeEmpty())
+					g.Expect(ipInstanceIPv4.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstanceIPv4.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstanceIPv4.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx := *ipInstanceIPv4.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstanceIPv4.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstanceIPv4.Spec.Subnet).To(BeElementOf(overlayIPv4SubnetName))
+
+					// check IPv6 IPInstance
+					ipInstanceIPv6 := ipInstances[1]
+					g.Expect(ipInstanceIPv6.Name).To(Equal(ipInstanceIPv6Name))
+					g.Expect(ipInstanceIPv6.Spec.Address.Version).To(Equal(networkingv1.IPv6))
+					g.Expect(ipInstanceIPv6.Spec.Binding.PodUID).To(BeEmpty())
+					g.Expect(ipInstanceIPv6.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstanceIPv6.Spec.Binding.NodeName).To(BeEmpty())
+					g.Expect(ipInstanceIPv6.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstanceIPv6.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstanceIPv6.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx = *ipInstanceIPv6.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstanceIPv6.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstanceIPv6.Spec.Subnet).To(BeElementOf(overlayIPv6SubnetName))
+
+					// check MAC address
+					g.Expect(ipInstanceIPv4.Spec.Address.MAC).To(Equal(ipInstanceIPv6.Spec.Address.MAC))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			// TODO: check status in IPAM manager
+
+			By("make sure pod deleted")
+			Eventually(
+				func(g Gomega) {
+					tempPod := &corev1.Pod{}
+					err := k8sClient.Get(context.Background(),
+						types.NamespacedName{
+							Namespace: pod.Namespace,
+							Name:      podName,
+						},
+						tempPod)
+					g.Expect(err).NotTo(BeNil())
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("recreate the stateful pod on another node")
+			pod = simplePodRender(podName, node1Name)
+			pod.OwnerReferences = []metav1.OwnerReference{ownerReference}
+			pod.Annotations = map[string]string{
+				constants.AnnotationNetworkType: "Overlay",
+				constants.AnnotationIPFamily:    "DualStack",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check the allocated DualStack addresses are retained and reused")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(2))
+
+					// sort by ip family order
+					networkingv1.SortIPInstancePointerSlice(ipInstances)
+
+					// check IPv4 IPInstance
+					ipInstanceIPv4 := ipInstances[0]
+					g.Expect(ipInstanceIPv4.Name).To(Equal(ipInstanceIPv4Name))
+					g.Expect(ipInstanceIPv4.Spec.Address.Version).To(Equal(networkingv1.IPv4))
+					g.Expect(ipInstanceIPv4.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstanceIPv4.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstanceIPv4.Spec.Binding.NodeName).To(Equal(node1Name))
+					g.Expect(ipInstanceIPv4.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstanceIPv4.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstanceIPv4.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx := *ipInstanceIPv4.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstanceIPv4.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstanceIPv4.Spec.Subnet).To(BeElementOf(overlayIPv4SubnetName))
+
+					// check IPv6 IPInstance
+					ipInstanceIPv6 := ipInstances[1]
+					g.Expect(ipInstanceIPv6.Name).To(Equal(ipInstanceIPv6Name))
+					g.Expect(ipInstanceIPv6.Spec.Address.Version).To(Equal(networkingv1.IPv6))
+					g.Expect(ipInstanceIPv6.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstanceIPv6.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstanceIPv6.Spec.Binding.NodeName).To(Equal(node1Name))
+					g.Expect(ipInstanceIPv6.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstanceIPv6.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstanceIPv6.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx = *ipInstanceIPv6.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstanceIPv6.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstanceIPv6.Spec.Subnet).To(BeElementOf(overlayIPv6SubnetName))
+
+					// check MAC address
+					g.Expect(ipInstanceIPv4.Spec.Address.MAC).To(Equal(ipInstanceIPv6.Spec.Address.MAC))
 				}).
 				WithTimeout(30 * time.Second).
 				WithPolling(time.Second).
