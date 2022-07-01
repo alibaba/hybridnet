@@ -36,7 +36,7 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, options Registe
 		options.ConcurrencyMap = map[string]int{}
 	}
 
-	clusterCheckEvent := make(chan ClusterCheckEvent, 5)
+	clusterStatusCheckChan := make(chan string, 10)
 
 	uuidMutex, err := NewUUIDMutexFromClient(ctx, mgr.GetClient())
 	if err != nil {
@@ -60,26 +60,27 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, options Registe
 	}
 
 	if err = (&RemoteClusterReconciler{
-		Context:               ctx,
-		Client:                mgr.GetClient(),
-		Recorder:              mgr.GetEventRecorderFor(ControllerRemoteCluster + "Controller"),
-		UUIDMutex:             uuidMutex,
-		DaemonHub:             daemonHub,
-		LocalManager:          mgr,
-		Event:                 clusterCheckEvent,
-		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerRemoteCluster]),
+		Context:                ctx,
+		Client:                 mgr.GetClient(),
+		Recorder:               mgr.GetEventRecorderFor(ControllerRemoteCluster + "Controller"),
+		UUIDMutex:              uuidMutex,
+		DaemonHub:              daemonHub,
+		LocalManager:           mgr,
+		ClusterStatusCheckChan: clusterStatusCheckChan,
+		ControllerConcurrency:  concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerRemoteCluster]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerRemoteCluster, err)
 	}
 
 	if err = mgr.Add(&RemoteClusterStatusChecker{
-		Client:      mgr.GetClient(),
-		Logger:      mgr.GetLogger().WithName("checker").WithName(CheckerRemoteClusterStatus),
-		CheckPeriod: 30 * time.Second,
-		DaemonHub:   daemonHub,
-		Checker:     clusterStatusChecker,
-		Event:       clusterCheckEvent,
-		Recorder:    mgr.GetEventRecorderFor(CheckerRemoteClusterStatus + "Checker"),
+		Client:                 mgr.GetClient(),
+		Logger:                 mgr.GetLogger().WithName("checker").WithName(CheckerRemoteClusterStatus),
+		CheckPeriod:            30 * time.Second,
+		DaemonHub:              daemonHub,
+		Checker:                clusterStatusChecker,
+		ClusterStatusCheckChan: clusterStatusCheckChan,
+		Recorder:               mgr.GetEventRecorderFor(CheckerRemoteClusterStatus + "Checker"),
+		Concurrency:            concurrency.ControllerConcurrency(options.ConcurrencyMap[CheckerRemoteClusterStatus]),
 	}); err != nil {
 		return fmt.Errorf("unable to inject checker %s: %v", CheckerRemoteClusterStatus, err)
 	}
