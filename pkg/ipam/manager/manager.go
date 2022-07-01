@@ -124,7 +124,7 @@ func (m *Manager) GetSubnetUsage(networkName, subnetName string) (*types.Usage, 
 	}
 
 	var subnet *types.Subnet
-	if subnet, err = network.GetSubnet(subnetName); err != nil {
+	if subnet, err = network.GetSubnetByName(subnetName); err != nil {
 		return nil, fmt.Errorf("fail to get subnet %s: %v", subnetName, err)
 	}
 
@@ -180,7 +180,7 @@ func (m *Manager) allocateIPv4(networkName string, podInfo types.PodInfo, option
 	}
 
 	var subnet *types.Subnet
-	if subnet, err = network.GetIPv4Subnet(specifiedSubnetName); err != nil {
+	if subnet, err = network.GetIPv4SubnetByNameOrAvailable(specifiedSubnetName); err != nil {
 		return nil, fmt.Errorf("fail to get ipv4 subnet: %v", err)
 	}
 
@@ -211,7 +211,7 @@ func (m *Manager) allocateIPv6(networkName string, podInfo types.PodInfo, option
 	}
 
 	var subnet *types.Subnet
-	if subnet, err = network.GetIPv6Subnet(specifiedSubnetName); err != nil {
+	if subnet, err = network.GetIPv6SubnetByNameOrAvailable(specifiedSubnetName); err != nil {
 		return nil, fmt.Errorf("fail to get ipv6 subnet: %v", err)
 	}
 
@@ -242,7 +242,7 @@ func (m *Manager) allocateDualStack(networkName string, podInfo types.PodInfo, o
 	}
 
 	var ipv4Subnet, ipv6Subnet *types.Subnet
-	if ipv4Subnet, ipv6Subnet, err = network.GetDualStackSubnets(specifiedIPv4SubnetName, specifiedIPv6SubnetName); err != nil {
+	if ipv4Subnet, ipv6Subnet, err = network.GetDualStackSubnetsByNameOrAvailable(specifiedIPv4SubnetName, specifiedIPv6SubnetName); err != nil {
 		return nil, fmt.Errorf("fail to get paired subnets: %v", err)
 	}
 
@@ -411,7 +411,7 @@ func (m *Manager) Release(networkName string, releaseSuites []types.SubnetIPSuit
 		}
 
 		var subnet *types.Subnet
-		if subnet, err = network.GetSubnet(releaseSuite.Subnet); err != nil {
+		if subnet, err = network.GetSubnetByName(releaseSuite.Subnet); err != nil {
 			return fmt.Errorf("fail to get subnet %s: %v", releaseSuite.Subnet, err)
 		}
 
@@ -444,7 +444,7 @@ func (m *Manager) Reserve(networkName string, reserveSuites []types.SubnetIPSuit
 		}
 
 		var subnet *types.Subnet
-		if subnet, err = network.GetSubnet(reserveSuite.Subnet); err != nil {
+		if subnet, err = network.GetSubnetByName(reserveSuite.Subnet); err != nil {
 			return fmt.Errorf("fail to get subnet %s: %v", reserveSuite.Subnet, err)
 		}
 
