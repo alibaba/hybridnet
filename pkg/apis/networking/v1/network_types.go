@@ -62,6 +62,14 @@ type NetworkStatus struct {
 // +kubebuilder:printcolumn:name="NetID",type=integer,JSONPath=`.spec.netID`
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
 // +kubebuilder:printcolumn:name="Mode",type=string,JSONPath=`.spec.mode`
+// +kubebuilder:printcolumn:name="V4Total",type=integer,JSONPath=`.status.statistics.total`
+// +kubebuilder:printcolumn:name="V4Used",type=integer,JSONPath=`.status.statistics.used`
+// +kubebuilder:printcolumn:name="V4Available",type=integer,JSONPath=`.status.statistics.available`
+// +kubebuilder:printcolumn:name="LastAllocatedV4Subnet",type=string,JSONPath=`.status.lastAllocatedSubnet`
+// +kubebuilder:printcolumn:name="V6Total",type=integer,JSONPath=`.status.ipv6Statistics.total`
+// +kubebuilder:printcolumn:name="V6Used",type=integer,JSONPath=`.status.ipv6Statistics.used`
+// +kubebuilder:printcolumn:name="V6Available",type=integer,JSONPath=`.status.ipv6Statistics.available`
+// +kubebuilder:printcolumn:name="LastAllocatedV6Subnet",type=string,JSONPath=`.status.lastAllocatedIPv6Subnet`
 
 // Network is the Schema for the networks API
 type Network struct {
