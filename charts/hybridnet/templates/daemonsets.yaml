@@ -54,7 +54,7 @@ spec:
             - --vtep-address-cidrs={{ .Values.daemon.vtepAddressCIDRs }}
             {{ end }}
             - --enable-vlan-arp-enhancement={{ .Values.daemon.enableVlanARPEnhancement }}
-            - --feature-gates=MultiCluster={{ .Values.multiCluster }},DualStack={{ .Values.dualStack }}
+            - --feature-gates=MultiCluster={{ .Values.multiCluster }}
           securityContext:
             runAsUser: 0
             privileged: true
