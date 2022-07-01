@@ -46,6 +46,7 @@ func TransferNetworkForIPAM(in *v1.Network) *ipamtypes.Network {
 	return ipamtypes.NewNetwork(in.Name,
 		int32pToUint32p(in.Spec.NetID),
 		in.Status.LastAllocatedSubnet,
+		in.Status.LastAllocatedIPv6Subnet,
 		ipamtypes.ParseNetworkTypeFromString(string(v1.GetNetworkType(in))),
 	)
 }

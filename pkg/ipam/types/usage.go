@@ -37,9 +37,8 @@ func (u *Usage) Add(in *Usage) {
 }
 
 type NetworkUsage struct {
-	LastAllocation string
-	Usages         map[IPFamilyMode]*Usage
-	SubnetUsages   map[string]*Usage
+	Usages       map[IPFamilyMode]*Usage
+	SubnetUsages map[string]*Usage
 }
 
 func (n *NetworkUsage) GetByType(ipFamily IPFamilyMode) *Usage {

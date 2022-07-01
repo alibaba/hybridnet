@@ -73,26 +73,27 @@ func (n NetworkSet) ListNetwork() []string {
 	return names
 }
 
-func NewNetwork(name string, netID *uint32, lastAllocatedSubnet string, networkType NetworkType) *Network {
+func NewNetwork(name string, netID *uint32, lastAllocatedSubnet, lastAllocatedIPv6Subnet string, networkType NetworkType) *Network {
 	return &Network{
-		Name:                name,
-		NetID:               netID,
-		LastAllocatedSubnet: lastAllocatedSubnet,
-		Type:                networkType,
-		Subnets:             NewSubnetSlice(),
+		Name:                    name,
+		NetID:                   netID,
+		LastAllocatedSubnet:     lastAllocatedSubnet,
+		LastAllocatedIPv6Subnet: lastAllocatedIPv6Subnet,
+		Type:                    networkType,
+		Subnets:                 NewSubnetSlice(),
 	}
 }
 
 func (n *Network) AddSubnet(subnet *Subnet, ips IPSet) error {
-	return n.Subnets.AddSubnet(subnet, n.NetID, ips, subnet.Name == n.LastAllocatedSubnet)
+	// TODO: separate IPv4 and IPv6 subnets registration
+	return n.Subnets.AddSubnet(subnet, n.NetID, ips, subnet.Name == n.LastAllocatedSubnet || subnet.Name == n.LastAllocatedIPv6Subnet)
 }
 
-func (n *Network) GetSubnet(subnetName string) (*Subnet, error) {
-	if len(subnetName) > 0 {
-		return n.Subnets.GetSubnet(subnetName)
+func (n *Network) GetSubnetByName(subnetName string) (*Subnet, error) {
+	if len(subnetName) == 0 {
+		return nil, fmt.Errorf("subnet name must be specified")
 	}
-
-	return n.Subnets.GetAvailableSubnet()
+	return n.Subnets.GetSubnet(subnetName)
 }
 
 func (n *Network) GetSubnetByNameOrIP(subnetName, ip string) (*Subnet, error) {
@@ -103,7 +104,13 @@ func (n *Network) GetSubnetByNameOrIP(subnetName, ip string) (*Subnet, error) {
 	return n.Subnets.GetSubnetByIP(ip)
 }
 
-func (n *Network) GetIPv4Subnet(subnetName string) (sn *Subnet, err error) {
+func (n *Network) GetIPv4SubnetByNameOrAvailable(subnetName string) (sn *Subnet, err error) {
+	defer func() {
+		if sn != nil {
+			n.LastAllocatedSubnet = sn.Name
+		}
+	}()
+
 	if len(subnetName) > 0 {
 		if sn, err = n.Subnets.GetSubnet(subnetName); err != nil {
 			return nil, err
@@ -117,7 +124,13 @@ func (n *Network) GetIPv4Subnet(subnetName string) (sn *Subnet, err error) {
 	return n.Subnets.GetAvailableIPv4Subnet()
 }
 
-func (n *Network) GetIPv6Subnet(subnetName string) (sn *Subnet, err error) {
+func (n *Network) GetIPv6SubnetByNameOrAvailable(subnetName string) (sn *Subnet, err error) {
+	defer func() {
+		if sn != nil {
+			n.LastAllocatedIPv6Subnet = sn.Name
+		}
+	}()
+
 	if len(subnetName) > 0 {
 		if sn, err = n.Subnets.GetSubnet(subnetName); err != nil {
 			return nil, err
@@ -131,25 +144,33 @@ func (n *Network) GetIPv6Subnet(subnetName string) (sn *Subnet, err error) {
 	return n.Subnets.GetAvailableIPv6Subnet()
 }
 
-func (n *Network) GetDualStackSubnets(v4SubnetName, v6SubnetName string) (v4Subnet *Subnet, v6Subnet *Subnet, err error) {
+func (n *Network) GetDualStackSubnetsByNameOrAvailable(v4SubnetName, v6SubnetName string) (v4Subnet *Subnet, v6Subnet *Subnet, err error) {
+	defer func() {
+		if v4Subnet != nil {
+			n.LastAllocatedSubnet = v4Subnet.Name
+		}
+		if v6Subnet != nil {
+			n.LastAllocatedIPv6Subnet = v6Subnet.Name
+		}
+	}()
+
 	if len(v4SubnetName) == 0 && len(v6SubnetName) == 0 {
 		return n.Subnets.GetAvailableDualStackSubnets()
 	}
-	if v4Subnet, err = n.GetIPv4Subnet(v4SubnetName); err != nil {
+	if v4Subnet, err = n.GetIPv4SubnetByNameOrAvailable(v4SubnetName); err != nil {
 		return
 	}
-	if v6Subnet, err = n.GetIPv6Subnet(v6SubnetName); err != nil {
+	if v6Subnet, err = n.GetIPv6SubnetByNameOrAvailable(v6SubnetName); err != nil {
 		return
 	}
 	return
 }
 
 func (n *Network) Usage() *NetworkUsage {
-	lastAllocatedSubnet, subnetUsages := n.Subnets.Usage()
+	_, subnetUsages := n.Subnets.Usage()
 	ipv4SubnetNames, ipv6SubnetNames := n.Subnets.Classify()
 
 	networkUsage := &NetworkUsage{
-		LastAllocation: lastAllocatedSubnet,
 		Usages: map[IPFamilyMode]*Usage{
 			IPv4:      {},
 			IPv6:      {},
@@ -161,9 +182,12 @@ func (n *Network) Usage() *NetworkUsage {
 	for _, ipv4SubnetName := range ipv4SubnetNames {
 		networkUsage.Usages[IPv4].Add(subnetUsages[ipv4SubnetName])
 	}
+	networkUsage.Usages[IPv4].LastAllocation = n.LastAllocatedSubnet
+
 	for _, ipv6SubnetName := range ipv6SubnetNames {
 		networkUsage.Usages[IPv6].Add(subnetUsages[ipv6SubnetName])
 	}
+	networkUsage.Usages[IPv6].LastAllocation = n.LastAllocatedIPv6Subnet
 
 	networkUsage.Usages[DualStack].Available = utils.MinUint32(networkUsage.Usages[IPv4].Available, networkUsage.Usages[IPv6].Available)
 

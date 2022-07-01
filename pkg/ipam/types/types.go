@@ -25,10 +25,11 @@ const (
 
 type Network struct {
 	// Spec fields
-	Name                string
-	NetID               *uint32
-	LastAllocatedSubnet string
-	Type                NetworkType
+	Name                    string
+	NetID                   *uint32
+	LastAllocatedSubnet     string
+	LastAllocatedIPv6Subnet string
+	Type                    NetworkType
 
 	Subnets *SubnetSlice
 }
