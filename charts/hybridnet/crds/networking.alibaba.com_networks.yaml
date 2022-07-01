@@ -26,6 +26,30 @@ spec:
     - jsonPath: .spec.mode
       name: Mode
       type: string
+    - jsonPath: .status.statistics.total
+      name: V4Total
+      type: integer
+    - jsonPath: .status.statistics.used
+      name: V4Used
+      type: integer
+    - jsonPath: .status.statistics.available
+      name: V4Available
+      type: integer
+    - jsonPath: .status.lastAllocatedSubnet
+      name: LastAllocatedV4Subnet
+      type: string
+    - jsonPath: .status.ipv6Statistics.total
+      name: V6Total
+      type: integer
+    - jsonPath: .status.ipv6Statistics.used
+      name: V6Used
+      type: integer
+    - jsonPath: .status.ipv6Statistics.available
+      name: V6Available
+      type: integer
+    - jsonPath: .status.lastAllocatedIPv6Subnet
+      name: LastAllocatedV6Subnet
+      type: string
     name: v1
     schema:
       openAPIV3Schema:
