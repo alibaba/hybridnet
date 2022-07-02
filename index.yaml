@@ -3,6 +3,38 @@ entries:
   hybridnet:
   - annotations:
       artifacthub.io/changes: |
+        - "Remove DualStack feature gate and make it built in"
+        - "Support to retain ip for kubevirt VMs"
+        - "Bump golang from v1.16 to v1.17"
+        - "Add limitations for creating overlapped subnets"
+        - "Disable the automatic iptables mode detection of felix"
+        - "Print statistics for Network CR"
+        - "Remove dualStack flag of charts"
+        - "Add vmIPRetain flag for charts"
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: 0.6.0
+    created: "2022-07-02T02:55:40.856161695Z"
+    description: A container networking solution aiming at hybrid clouds.
+    digest: 0486396b8c15c46feced18b20d8b10c56852569ec92a8f4bd31a988071591de6
+    home: https://github.com/alibaba/hybridnet
+    keywords:
+    - network
+    - vlan
+    - bgp
+    - vxlan
+    - cni
+    - kubernetes
+    kubeVersion: '>=1.16.0-0'
+    name: hybridnet
+    sources:
+    - https://github.com/alibaba/hybridnet
+    type: application
+    urls:
+    - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.4.0/hybridnet-0.4.0.tgz
+    version: 0.4.0
+  - annotations:
+      artifacthub.io/changes: |
         - "Update hybridnet image to v0.5.1"
         - "Make network initialization optional"
       artifacthub.io/prerelease: "false"
@@ -197,4 +229,4 @@ entries:
     urls:
     - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.1.1/hybridnet-0.1.1.tgz
     version: 0.1.1
-generated: "2022-06-16T03:37:44.617707303Z"
+generated: "2022-07-02T02:55:40.856195196Z"
