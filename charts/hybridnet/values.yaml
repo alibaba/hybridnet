@@ -1,7 +1,7 @@
 images:
   hybridnet:
     image: hybridnetdev/hybridnet
-    tag: v0.5.1
+    tag: v0.6.0
     imagePullPolicy: IfNotPresent
   registryURL: "docker.io"
 
@@ -72,8 +72,8 @@ defaultNetworkType: Overlay
 # -- Enable the MultiCluster feature. true or false
 multiCluster: false
 
-# -- Enable the DualStack feature. IPv6 is disabled when is dualStack is not enable. true or false
-dualStack: false
-
 # -- The default value when pod's ip family is unspecified. IPv4 or IPv6 or DualStack
 defaultIPFamily: IPv4
+
+# -- Enable the support of retaining IP for kubevirt VM. true or false
+vmIPRetain: false

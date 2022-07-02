@@ -35,7 +35,7 @@ spec:
           command:
             - /hybridnet/hybridnet-manager
             - --default-ip-retain={{ .Values.defaultIPRetain }}
-            - --feature-gates=MultiCluster={{ .Values.multiCluster }},DualStack={{ .Values.dualStack }}
+            - --feature-gates=MultiCluster={{ .Values.multiCluster }},VMIPRetain={{ .Values.vmIPRetain }}
           env:
             - name: DEFAULT_NETWORK_TYPE
               value: {{ .Values.defaultNetworkType }}
@@ -82,7 +82,7 @@ spec:
           command:
             - /hybridnet/hybridnet-webhook
             - --default-ip-retain={{ .Values.defaultIPRetain }}
-            - --feature-gates=MultiCluster={{ .Values.multiCluster }},DualStack={{ .Values.dualStack }}
+            - --feature-gates=MultiCluster={{ .Values.multiCluster }}
           args:
             - --port=9898
           env:

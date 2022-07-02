@@ -2,8 +2,8 @@ apiVersion: v2
 name: hybridnet
 # When the version is modified, make sure the artifacthub.io/changes list is updated
 # Also update CHANGELOG.md
-version: 0.3.1
-appVersion: 0.5.1
+version: 0.4.0
+appVersion: 0.6.0
 home: https://github.com/alibaba/hybridnet
 description: A container networking solution aiming at hybrid clouds.
 keywords:
@@ -22,5 +22,11 @@ annotations:
   artifacthub.io/prerelease: "false"
   # List of changes for the release in artifacthub.io
   artifacthub.io/changes: |
-    - "Update hybridnet image to v0.5.1"
-    - "Make network initialization optional"
+    - "Remove DualStack feature gate and make it built in"
+    - "Support to retain ip for kubevirt VMs"
+    - "Bump golang from v1.16 to v1.17"
+    - "Add limitations for creating overlapped subnets"
+    - "Disable the automatic iptables mode detection of felix"
+    - "Print statistics for Network CR"
+    - "Remove dualStack flag of charts"
+    - "Add vmIPRetain flag for charts"

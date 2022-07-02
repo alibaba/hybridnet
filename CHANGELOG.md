@@ -145,3 +145,14 @@ All notable changes to this project will be documented in this file.
 ## v0.5.1
 ### Fixed Issues
 - Fix address duplication error while active-standby switch of manager pods happens
+
+## v0.6.0
+### New features
+- Remove DualStack feature gate and make it built in
+- Support to retain ip for kubevirt VMs
+
+### Improvements
+- Bump golang from v1.16 to v1.17
+- Add limitations for creating overlapped subnets
+- Disable the automatic iptables mode detection of felix
+- Print statistics for Network CR
