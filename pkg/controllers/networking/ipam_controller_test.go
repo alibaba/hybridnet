@@ -56,7 +56,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 					defer manager.RUnlock()
 					return len(manager.Networks)
 				}()).
-				WithTimeout(10 * time.Second).
+				WithTimeout(30 * time.Second).
 				WithPolling(time.Second).
 				Should(Equal(2))
 

@@ -19,17 +19,22 @@ package multicluster
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/time/rate"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
+	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/multicluster/clusterchecker"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/managerruntime"
@@ -45,41 +50,97 @@ const (
 
 type RemoteClusterStatusChecker struct {
 	client.Client
-	Logger logr.Logger
 
-	CheckPeriod time.Duration
-
-	DaemonHub managerruntime.DaemonHub
-
-	Checker clusterchecker.Checker
-
-	Event <-chan ClusterCheckEvent
-
+	Logger   logr.Logger
 	Recorder record.EventRecorder
+
+	CheckPeriod            time.Duration
+	Checker                clusterchecker.Checker
+	ClusterStatusCheckChan <-chan string
+	Queue                  workqueue.RateLimitingInterface
+	DaemonHub              managerruntime.DaemonHub
+
+	Concurrency concurrency.ControllerConcurrency
 }
 
 func (r *RemoteClusterStatusChecker) Start(ctx context.Context) error {
 	r.Logger.Info("remote cluster status checker is starting")
 
-	ticker := time.NewTicker(r.CheckPeriod)
+	// initialize work queue if nil
+	if r.Queue == nil {
+		r.Queue = workqueue.NewNamedRateLimitingQueue(
+			workqueue.NewMaxOfRateLimiter(
+				workqueue.NewItemExponentialFailureRateLimiter(time.Second, r.CheckPeriod),
+				&workqueue.BucketRateLimiter{
+					Limiter: rate.NewLimiter(rate.Limit(10), 100),
+				},
+			), CheckerRemoteClusterStatus)
+	}
 
+	go func() {
+		<-ctx.Done()
+		r.Queue.ShutDown()
+	}()
+
+	// launch checking workers to process resources
+	r.Logger.Info("starting checking workers", "count", r.Concurrency.Max())
+
+	// staring workers based on concurrency
+	wg := &sync.WaitGroup{}
+	wg.Add(r.Concurrency.Max())
+	for i := 0; i < r.Concurrency.Max(); i++ {
+		go func() {
+			defer wg.Done()
+			for r.processNext(ctx) {
+			}
+		}()
+	}
+
+	ticker := time.NewTicker(r.CheckPeriod)
 	for {
 		select {
 		case <-ticker.C:
-			r.Logger.V(1).Info("cron job for all clusters")
-			r.crontab(ctx)
-		case event := <-r.Event:
-			r.Logger.Info("single job for one cluster registration")
-			r.checkClusterStatus(event.Context, event.Name, event.DaemonID)
+			r.Logger.V(1).Info("all clusters check from cronjob")
+			r.enqueueAll(ctx)
+		case clusterName := <-r.ClusterStatusCheckChan:
+			r.Logger.Info("single cluster check event from channel", "cluster", clusterName)
+			r.enqueue(clusterName)
 		case <-ctx.Done():
 			ticker.Stop()
-			r.Logger.Info("remote cluster status checker is stopping")
+			r.Logger.Info("remote cluster status checker is stopping, waiting for all workers to finish")
+			wg.Wait()
+			r.Logger.Info("all checking workers finished")
 			return nil
 		}
 	}
 }
 
-func (r *RemoteClusterStatusChecker) crontab(ctx context.Context) {
+func (r *RemoteClusterStatusChecker) processNext(ctx context.Context) bool {
+	obj, shutdown := r.Queue.Get()
+	if shutdown {
+		return false
+	}
+
+	defer r.Queue.Done(obj)
+
+	clusterName, ok := obj.(string)
+	if !ok {
+		r.Logger.Error(nil, "cluster name is not a valid string", "type", fmt.Sprintf("%T", obj))
+		r.Queue.Forget(obj)
+		return true
+	}
+
+	if err := r.checkClusterStatus(ctx, clusterName); err != nil {
+		r.Logger.V(1).Info("requeue cluster", "cluster", clusterName)
+		r.Queue.AddRateLimited(clusterName)
+		return true
+	}
+
+	r.Queue.Forget(obj)
+	return true
+}
+
+func (r *RemoteClusterStatusChecker) enqueueAll(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 
 	remoteClusterList, err := utils.ListRemoteClusters(ctx, r)
@@ -88,24 +149,16 @@ func (r *RemoteClusterStatusChecker) crontab(ctx context.Context) {
 		return
 	}
 
-	nameDaemonIDMap := make(map[string]managerruntime.DaemonID)
-
 	for i := range remoteClusterList.Items {
-		var remoteCluster = &remoteClusterList.Items[i]
-		if len(remoteCluster.Status.UUID) > 0 {
-			nameDaemonIDMap[remoteCluster.Name] = managerruntime.DaemonID(remoteCluster.Status.UUID)
-		}
+		r.enqueue(remoteClusterList.Items[i].Name)
 	}
-
-	r.Logger.V(1).Info("check remote cluster status periodically", "clusters", nameDaemonIDMap)
-
-	for name, id := range nameDaemonIDMap {
-		r.checkClusterStatus(ctx, name, id)
-	}
-
 }
 
-func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, name string, daemonID managerruntime.DaemonID) {
+func (r *RemoteClusterStatusChecker) enqueue(name string) {
+	r.Queue.Add(name)
+}
+
+func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, name string) error {
 	start := time.Now()
 	defer func() {
 		metrics.RemoteClusterStatusCheckDuration.WithLabelValues(name).Observe(time.Since(start).Seconds())
@@ -113,8 +166,16 @@ func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, nam
 
 	remoteCluster, err := utils.GetRemoteCluster(ctx, r, name)
 	if err != nil {
-		// TODO: handle fetch error here
-		return
+		if errors.IsNotFound(err) {
+			// if cluster not exist, just ignore it
+			return nil
+		}
+		return fmt.Errorf("fail to get remote cluster: %v", err)
+	}
+
+	daemonID := managerruntime.DaemonID(remoteCluster.Status.UUID)
+	if len(daemonID) == 0 {
+		return fmt.Errorf("unexpected empty cluster uuid")
 	}
 
 	_, err = controllerutil.CreateOrPatch(ctx, r, remoteCluster, func() (err error) {
@@ -212,8 +273,11 @@ func (r *RemoteClusterStatusChecker) checkClusterStatus(ctx context.Context, nam
 
 	if err != nil {
 		r.Recorder.Event(remoteCluster, corev1.EventTypeWarning, "CheckStatusFail", err.Error())
-		r.Logger.Error(err, "unable to check cluster status", "RemoteCluster", name)
+		r.Logger.Error(err, "fail to check cluster status", "cluster", name)
+	} else {
+		r.Logger.V(1).Info("check cluster status successfully", "cluster", name)
 	}
+	return err
 }
 
 func (r *RemoteClusterStatusChecker) getManagerRuntimeByDaemonID(daemonID managerruntime.DaemonID) (managerruntime.ManagerRuntime, error) {

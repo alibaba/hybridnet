@@ -55,7 +55,7 @@ type RemoteClusterReconciler struct {
 
 	DaemonHub managerruntime.DaemonHub
 
-	Event chan<- ClusterCheckEvent
+	ClusterStatusCheckChan chan<- string
 
 	LocalManager manager.Manager
 
@@ -184,11 +184,7 @@ func (r *RemoteClusterReconciler) guardDaemon(ctx context.Context, name string, 
 	}
 
 	// event checker to check and run this cluster
-	r.Event <- ClusterCheckEvent{
-		Context:  ctx,
-		Name:     name,
-		DaemonID: daemonID,
-	}
+	r.ClusterStatusCheckChan <- name
 	return nil
 }
 
