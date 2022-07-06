@@ -33,7 +33,7 @@ var _ ipam.Manager = &Manager{}
 type Manager struct {
 	sync.RWMutex
 
-	Networks types.NetworkSet
+	NetworkSet types.NetworkSet
 
 	NetworkGetter NetworkGetter
 	SubnetGetter  SubnetGetter
@@ -44,7 +44,7 @@ type Manager struct {
 func NewManager(networks []string, nGetter NetworkGetter, sGetter SubnetGetter, iGetter IPSetGetter) (ipam.Manager, error) {
 	manager := &Manager{
 		RWMutex:       sync.RWMutex{},
-		Networks:      types.NewNetworkSet(),
+		NetworkSet:    types.NewNetworkSet(),
 		NetworkGetter: nGetter,
 		SubnetGetter:  sGetter,
 		IPSetGetter:   iGetter,
@@ -67,7 +67,7 @@ func (m *Manager) Refresh(opts ...types.RefreshOption) error {
 
 	var toRefreshNetworkNames []string
 	if options.ForceAll {
-		toRefreshNetworkNames = m.Networks.ListNetwork()
+		toRefreshNetworkNames = m.NetworkSet.ListNetworkToNames()
 	} else {
 		toRefreshNetworkNames = options.Networks
 	}
@@ -97,7 +97,7 @@ func (m *Manager) GetNetworkUsage(networkName string) (*types.NetworkUsage, erro
 
 	var network *types.Network
 	var err error
-	if network, err = m.Networks.GetNetwork(networkName); err != nil {
+	if network, err = m.NetworkSet.GetNetworkByName(networkName); err != nil {
 		return nil, fmt.Errorf("fail to get network %s: %v", networkName, err)
 	}
 	return network.Usage(), nil
@@ -119,7 +119,7 @@ func (m *Manager) GetSubnetUsage(networkName, subnetName string) (*types.Usage, 
 
 	var network *types.Network
 	var err error
-	if network, err = m.Networks.GetNetwork(networkName); err != nil {
+	if network, err = m.NetworkSet.GetNetworkByName(networkName); err != nil {
 		return nil, fmt.Errorf("fail to get network %s: %v", networkName, err)
 	}
 
@@ -164,7 +164,7 @@ func (m *Manager) Allocate(networkName string, podInfo types.PodInfo, opts ...ty
 
 func (m *Manager) allocateIPv4(networkName string, podInfo types.PodInfo, options types.AllocateOptions) (IPs []*types.IP, err error) {
 	var network *types.Network
-	if network, err = m.Networks.GetNetwork(networkName); err != nil {
+	if network, err = m.NetworkSet.GetNetworkByName(networkName); err != nil {
 		return nil, fmt.Errorf("fail to get network %s: %v", networkName, err)
 	}
 
@@ -195,7 +195,7 @@ func (m *Manager) allocateIPv4(networkName string, podInfo types.PodInfo, option
 
 func (m *Manager) allocateIPv6(networkName string, podInfo types.PodInfo, options types.AllocateOptions) (IPs []*types.IP, err error) {
 	var network *types.Network
-	if network, err = m.Networks.GetNetwork(networkName); err != nil {
+	if network, err = m.NetworkSet.GetNetworkByName(networkName); err != nil {
 		return nil, fmt.Errorf("fail to get network %s: %v", networkName, err)
 	}
 
@@ -226,7 +226,7 @@ func (m *Manager) allocateIPv6(networkName string, podInfo types.PodInfo, option
 
 func (m *Manager) allocateDualStack(networkName string, podInfo types.PodInfo, options types.AllocateOptions) (IPs []*types.IP, err error) {
 	var network *types.Network
-	if network, err = m.Networks.GetNetwork(networkName); err != nil {
+	if network, err = m.NetworkSet.GetNetworkByName(networkName); err != nil {
 		return nil, fmt.Errorf("fail to get network %s: %v", networkName, err)
 	}
 
@@ -293,7 +293,7 @@ func (m *Manager) Assign(networkName string, podInfo types.PodInfo, assignedSuit
 
 func (m *Manager) assignIPv4(networkName string, podInfo types.PodInfo, assignedSuites []types.SubnetIPSuite, options types.AssignOptions) (assignedIPs []*types.IP, err error) {
 	var network *types.Network
-	if network, err = m.Networks.GetNetwork(networkName); err != nil {
+	if network, err = m.NetworkSet.GetNetworkByName(networkName); err != nil {
 		return nil, fmt.Errorf("fail to get network %s: %v", networkName, err)
 	}
 
@@ -323,7 +323,7 @@ func (m *Manager) assignIPv4(networkName string, podInfo types.PodInfo, assigned
 
 func (m *Manager) assignIPv6(networkName string, podInfo types.PodInfo, assignedSuites []types.SubnetIPSuite, options types.AssignOptions) (assignedIPs []*types.IP, err error) {
 	var network *types.Network
-	if network, err = m.Networks.GetNetwork(networkName); err != nil {
+	if network, err = m.NetworkSet.GetNetworkByName(networkName); err != nil {
 		return nil, fmt.Errorf("fail to get network %s: %v", networkName, err)
 	}
 
@@ -353,7 +353,7 @@ func (m *Manager) assignIPv6(networkName string, podInfo types.PodInfo, assigned
 
 func (m *Manager) assignDualStack(networkName string, podInfo types.PodInfo, assignedSuites []types.SubnetIPSuite, options types.AssignOptions) (assignedIPs []*types.IP, err error) {
 	var network *types.Network
-	if network, err = m.Networks.GetNetwork(networkName); err != nil {
+	if network, err = m.NetworkSet.GetNetworkByName(networkName); err != nil {
 		return nil, fmt.Errorf("fail to get network %s: %v", networkName, err)
 	}
 
@@ -401,7 +401,7 @@ func (m *Manager) Release(networkName string, releaseSuites []types.SubnetIPSuit
 	}
 
 	var network *types.Network
-	if network, err = m.Networks.GetNetwork(networkName); err != nil {
+	if network, err = m.NetworkSet.GetNetworkByName(networkName); err != nil {
 		return fmt.Errorf("fail to get network %s: %v", networkName, err)
 	}
 
@@ -434,7 +434,7 @@ func (m *Manager) Reserve(networkName string, reserveSuites []types.SubnetIPSuit
 	}
 
 	var network *types.Network
-	if network, err = m.Networks.GetNetwork(networkName); err != nil {
+	if network, err = m.NetworkSet.GetNetworkByName(networkName); err != nil {
 		return fmt.Errorf("fail to get network %s: %v", networkName, err)
 	}
 
@@ -462,7 +462,7 @@ func (m *Manager) refreshNetwork(name string) error {
 	}
 
 	if network == nil {
-		m.Networks.RemoveNetwork(name)
+		m.NetworkSet.RemoveNetwork(name)
 		return nil
 	}
 
@@ -484,7 +484,7 @@ func (m *Manager) refreshNetwork(name string) error {
 		}
 	}
 
-	m.Networks.RefreshNetwork(name, network)
+	m.NetworkSet.RefreshNetwork(name, network)
 
 	return nil
 }

@@ -25,13 +25,11 @@ const (
 
 type Network struct {
 	// Spec fields
-	Name                    string
-	NetID                   *uint32
-	LastAllocatedSubnet     string
-	LastAllocatedIPv6Subnet string
-	Type                    NetworkType
-
-	Subnets *SubnetSlice
+	Name        string
+	NetID       *uint32
+	Type        NetworkType
+	IPv4Subnets *SubnetSlice
+	IPv6Subnets *SubnetSlice
 }
 
 type NetworkSet map[string]*Network
@@ -60,31 +58,28 @@ type Subnet struct {
 }
 
 type SubnetSlice struct {
-	Subnets        []*Subnet
-	SubnetIndexMap map[string]int
-
-	SubnetIndex int
-	SubnetCount int
+	Subnets             []*Subnet
+	SubnetIndexMap      map[string]int
+	SubnetIndex         int
+	SubnetCount         int
+	LastAllocatedSubnet string
 }
 
 type IP struct {
-	Address *net.IPNet
-	Gateway net.IP
-	NetID   *uint32
-	Subnet  string
-	Network string
-
+	Address      *net.IPNet
+	Gateway      net.IP
+	NetID        *uint32
+	Subnet       string
+	Network      string
 	PodName      string
 	PodNamespace string
-
-	Status string
+	Status       string
 }
 
 type IPSet map[string]*IP
 
 type IPSlice struct {
-	IPs []string
-
+	IPs     []string
 	IPCount int
 	IPIndex int
 }
