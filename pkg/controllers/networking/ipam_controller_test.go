@@ -41,7 +41,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 			Expect(manager.NetworkGetter).NotTo(BeNil())
 			Expect(manager.SubnetGetter).NotTo(BeNil())
 			Expect(manager.IPSetGetter).NotTo(BeNil())
-			Expect(manager.Networks).NotTo(BeNil())
+			Expect(manager.NetworkSet).NotTo(BeNil())
 		})
 
 		It("Check IPAM manager initialization", func() {
@@ -54,42 +54,43 @@ var _ = Describe("IPAM controller integration test suite", func() {
 				func() int {
 					manager.RLock()
 					defer manager.RUnlock()
-					return len(manager.Networks)
+					return len(manager.NetworkSet)
 				}()).
 				WithTimeout(30 * time.Second).
 				WithPolling(time.Second).
 				Should(Equal(2))
 
 			By("Check networks")
-			Expect(manager.Networks.ListNetwork()).To(ConsistOf(underlayNetworkName, overlayNetworkName))
+			Expect(manager.NetworkSet.ListNetworkToNames()).To(ConsistOf(underlayNetworkName, overlayNetworkName))
 
-			Expect(manager.Networks.MatchNetworkType(underlayNetworkName, ipamtypes.Underlay)).To(BeTrue())
-			Expect(manager.Networks.MatchNetworkType(overlayNetworkName, ipamtypes.Overlay)).To(BeTrue())
+			Expect(manager.NetworkSet.CheckNetworkByType(underlayNetworkName, ipamtypes.Underlay)).To(BeTrue())
+			Expect(manager.NetworkSet.CheckNetworkByType(overlayNetworkName, ipamtypes.Overlay)).To(BeTrue())
 
 			By("Check underlay network")
-			underlayNetwork, err := manager.Networks.GetNetwork(underlayNetworkName)
+			underlayNetwork, err := manager.NetworkSet.GetNetworkByName(underlayNetworkName)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(underlayNetwork.Subnets).NotTo(BeNil())
-			Expect(underlayNetwork.Subnets.Subnets).To(HaveLen(1))
-			Expect(underlayNetwork.Subnets.Subnets[0].Name).To(Equal(underlaySubnetName))
+			Expect(underlayNetwork.IPv4Subnets).NotTo(BeNil())
+			Expect(underlayNetwork.IPv4Subnets.Subnets).To(HaveLen(1))
+			Expect(underlayNetwork.IPv4Subnets.Subnets[0].Name).To(Equal(underlaySubnetName))
 
 			By("Check overlay network")
-			overlayNetwork, err := manager.Networks.GetNetwork(overlayNetworkName)
+			overlayNetwork, err := manager.NetworkSet.GetNetworkByName(overlayNetworkName)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(overlayNetwork.Subnets).NotTo(BeNil())
-			Expect(overlayNetwork.Subnets.Subnets).To(HaveLen(2))
+			Expect(overlayNetwork.IPv4Subnets).NotTo(BeNil())
+			Expect(overlayNetwork.IPv6Subnets).NotTo(BeNil())
+			Expect(overlayNetwork.SubnetCount()).To(Equal(2))
 
-			availableIPv4Subnet, err := overlayNetwork.Subnets.GetAvailableIPv4Subnet()
+			availableIPv4Subnet, err := overlayNetwork.GetIPv4SubnetByNameOrAvailable("")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(availableIPv4Subnet).NotTo(BeNil())
 			Expect(availableIPv4Subnet.Name).To(Equal(overlayIPv4SubnetName))
 
-			availableIPv6Subnet, err := overlayNetwork.Subnets.GetAvailableIPv6Subnet()
+			availableIPv6Subnet, err := overlayNetwork.GetIPv6SubnetByNameOrAvailable("")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(availableIPv6Subnet).NotTo(BeNil())
 			Expect(availableIPv6Subnet.Name).To(Equal(overlayIPv6SubnetName))
 
-			availableIPv4Subnet, availableIPv6Subnet, err = overlayNetwork.Subnets.GetAvailableDualStackSubnets()
+			availableIPv4Subnet, availableIPv6Subnet, err = overlayNetwork.GetDualStackSubnetsByNameOrAvailable("", "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(availableIPv4Subnet).NotTo(BeNil())
 			Expect(availableIPv4Subnet.Name).To(Equal(overlayIPv4SubnetName))

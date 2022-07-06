@@ -37,20 +37,12 @@ func (u *Usage) Add(in *Usage) {
 }
 
 type NetworkUsage struct {
-	Usages       map[IPFamilyMode]*Usage
-	SubnetUsages map[string]*Usage
+	Usages map[IPFamilyMode]*Usage
 }
 
 func (n *NetworkUsage) GetByType(ipFamily IPFamilyMode) *Usage {
 	if len(n.Usages) > 0 {
 		return n.Usages[ipFamily]
-	}
-	return nil
-}
-
-func (n *NetworkUsage) GetBySubnet(subnetName string) *Usage {
-	if len(n.SubnetUsages) > 0 {
-		return n.SubnetUsages[subnetName]
 	}
 	return nil
 }

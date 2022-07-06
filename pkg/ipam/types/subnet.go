@@ -33,14 +33,15 @@ var (
 	ErrNotAvailableAssignedIP = errors.New("assigned ip is not available")
 )
 
-func NewSubnetSlice() *SubnetSlice {
+func NewSubnetSlice(lastAllocatedSubnet string) *SubnetSlice {
 	return &SubnetSlice{
-		Subnets:        make([]*Subnet, 0),
-		SubnetIndexMap: make(map[string]int),
+		Subnets:             make([]*Subnet, 0),
+		SubnetIndexMap:      make(map[string]int),
+		LastAllocatedSubnet: lastAllocatedSubnet,
 	}
 }
 
-func (s *SubnetSlice) AddSubnet(subnet *Subnet, parentNetID *uint32, ips IPSet, isDefault bool) error {
+func (s *SubnetSlice) AddSubnet(subnet *Subnet, parentNetID *uint32, ips IPSet) error {
 	if err := subnet.Canonicalize(); err != nil {
 		return err
 	}
@@ -52,7 +53,7 @@ func (s *SubnetSlice) AddSubnet(subnet *Subnet, parentNetID *uint32, ips IPSet, 
 	s.Subnets = append(s.Subnets, subnet)
 	s.SubnetCount = len(s.Subnets)
 	s.SubnetIndexMap[subnet.Name] = s.SubnetCount - 1
-	if isDefault {
+	if subnet.Name == s.LastAllocatedSubnet {
 		s.SubnetIndex = s.SubnetIndexMap[subnet.Name]
 	}
 
@@ -85,78 +86,6 @@ func (s *SubnetSlice) GetAvailableSubnet() (*Subnet, error) {
 	}
 }
 
-func (s *SubnetSlice) GetAvailableIPv4Subnet() (*Subnet, error) {
-	if s.SubnetCount == 0 {
-		return nil, ErrNoAvailableSubnet
-	}
-
-	lastIndex := s.SubnetIndex
-	for {
-		var subnet = s.Subnets[s.SubnetIndex]
-
-		if subnet.IsIPv4() && subnet.IsAvailable() {
-			return subnet, nil
-		}
-
-		s.SubnetIndex = (s.SubnetIndex + 1) % s.SubnetCount
-		if s.SubnetIndex == lastIndex {
-			return nil, ErrNoAvailableSubnet
-		}
-	}
-}
-
-func (s *SubnetSlice) GetAvailableIPv6Subnet() (*Subnet, error) {
-	if s.SubnetCount == 0 {
-		return nil, ErrNoAvailableSubnet
-	}
-
-	lastIndex := s.SubnetIndex
-	for {
-		var subnet = s.Subnets[s.SubnetIndex]
-
-		if subnet.IsIPv6() && subnet.IsAvailable() {
-			return subnet, nil
-		}
-
-		s.SubnetIndex = (s.SubnetIndex + 1) % s.SubnetCount
-		if s.SubnetIndex == lastIndex {
-			return nil, ErrNoAvailableSubnet
-		}
-	}
-}
-
-func (s *SubnetSlice) GetAvailableDualStackSubnets() (v4Subnet *Subnet, v6Subnet *Subnet, err error) {
-	if s.SubnetCount == 0 {
-		return nil, nil, ErrNoAvailableSubnet
-	}
-
-	lastIndex := s.SubnetIndex
-	var v4Selected, v6Selected = false, false
-	for {
-		var subnet = s.Subnets[s.SubnetIndex]
-
-		if subnet.IsAvailable() {
-			if !v4Selected && subnet.IsIPv4() {
-				v4Subnet = subnet
-				v4Selected = true
-			}
-			if !v6Selected && subnet.IsIPv6() {
-				v6Subnet = subnet
-				v6Selected = true
-			}
-		}
-
-		if v4Selected && v6Selected {
-			return
-		}
-
-		s.SubnetIndex = (s.SubnetIndex + 1) % s.SubnetCount
-		if s.SubnetIndex == lastIndex {
-			return nil, nil, ErrNoAvailableSubnet
-		}
-	}
-}
-
 func (s *SubnetSlice) GetSubnetByIP(ip string) (*Subnet, error) {
 	for _, subnet := range s.Subnets {
 		if subnet.Contains(net.ParseIP(ip)) {
@@ -167,7 +96,7 @@ func (s *SubnetSlice) GetSubnetByIP(ip string) (*Subnet, error) {
 	return nil, ErrNotFoundSubnet
 }
 
-func (s *SubnetSlice) CurrentSubnet() string {
+func (s *SubnetSlice) CurrentSubnetName() string {
 	if s.SubnetCount == 0 {
 		return ""
 	}
@@ -175,25 +104,20 @@ func (s *SubnetSlice) CurrentSubnet() string {
 	return s.Subnets[s.SubnetIndex].Name
 }
 
-func (s *SubnetSlice) Usage() (string, map[string]*Usage) {
-	usages := make(map[string]*Usage, len(s.Subnets))
-
+func (s *SubnetSlice) Usage() *Usage {
+	usage := &Usage{}
 	for _, subnet := range s.Subnets {
-		usages[subnet.Name] = subnet.Usage()
+		usage.Add(subnet.Usage())
 	}
 
-	return s.CurrentSubnet(), usages
+	// lastAllocation of subnet slice should be the current
+	// subnet name
+	usage.LastAllocation = s.CurrentSubnetName()
+	return usage
 }
 
-func (s *SubnetSlice) Classify() (IPv4Subnets, IPv6Subnets []string) {
-	for _, subnet := range s.Subnets {
-		if subnet.IsIPv6() {
-			IPv6Subnets = append(IPv6Subnets, subnet.Name)
-		} else {
-			IPv4Subnets = append(IPv4Subnets, subnet.Name)
-		}
-	}
-	return
+func (s *SubnetSlice) Count() int {
+	return s.SubnetCount
 }
 
 func NewSubnet(

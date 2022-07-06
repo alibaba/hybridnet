@@ -21,7 +21,7 @@ import (
 	"testing"
 )
 
-func TestSubnetSlice_CurrentSubnet(t *testing.T) {
+func TestSubnetSlice_CurrentSubnetName(t *testing.T) {
 	tests := []struct {
 		name                  string
 		ss                    *SubnetSlice
@@ -53,8 +53,8 @@ func TestSubnetSlice_CurrentSubnet(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if test.ss.CurrentSubnet() != test.expectedCurrentSubnet {
-				t.Errorf("test %s fails: expected %s but got %s", test.name, test.expectedCurrentSubnet, test.ss.CurrentSubnet())
+			if test.ss.CurrentSubnetName() != test.expectedCurrentSubnet {
+				t.Errorf("test %s fails: expected %s but got %s", test.name, test.expectedCurrentSubnet, test.ss.CurrentSubnetName())
 				return
 			}
 		})

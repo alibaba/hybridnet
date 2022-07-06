@@ -30,11 +30,11 @@ import (
 func TestManager(t *testing.T) {
 	var networkGetter = func(network string) (*types.Network, error) {
 		return &types.Network{
-			Name:                network,
-			NetID:               nil,
-			LastAllocatedSubnet: "subnet1",
-			Subnets:             types.NewSubnetSlice(),
-			Type:                types.Underlay,
+			Name:        network,
+			NetID:       nil,
+			IPv4Subnets: types.NewSubnetSlice("subnet1"),
+			IPv6Subnets: types.NewSubnetSlice("subnet4"),
+			Type:        types.Underlay,
 		}, nil
 	}
 
