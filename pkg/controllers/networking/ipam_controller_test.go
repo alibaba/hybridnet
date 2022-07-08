@@ -17,6 +17,7 @@
 package networking_test
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -51,14 +52,14 @@ var _ = Describe("IPAM controller integration test suite", func() {
 
 			By("Waiting for IPAM manager initialized by controller")
 			Eventually(
-				func() int {
+				func(g Gomega) {
 					manager.RLock()
 					defer manager.RUnlock()
-					return len(manager.NetworkSet)
-				}()).
+					g.Expect(manager.NetworkSet).To(HaveLen(2))
+				}).
 				WithTimeout(30 * time.Second).
 				WithPolling(time.Second).
-				Should(Equal(2))
+				Should(Succeed())
 
 			By("Check networks")
 			Expect(manager.NetworkSet.ListNetworkToNames()).To(ConsistOf(underlayNetworkName, overlayNetworkName))
@@ -96,6 +97,169 @@ var _ = Describe("IPAM controller integration test suite", func() {
 			Expect(availableIPv4Subnet.Name).To(Equal(overlayIPv4SubnetName))
 			Expect(availableIPv6Subnet).NotTo(BeNil())
 			Expect(availableIPv6Subnet.Name).To(Equal(overlayIPv6SubnetName))
+		})
+	})
+
+	Context("Refresh check after updating", func() {
+		var testOverlayNetworkName = "ipam-overlay-network"
+		var testOverlaySubnetName1 = "ipam-overlay-subnet1"
+		var testOverlaySubnetName2 = "ipam-overlay-subnet2"
+		var network = overlayNetworkRender(testOverlayNetworkName, 100)
+		var subnet1 = subnetRender(testOverlaySubnetName1, testOverlayNetworkName, "192.167.56.0/24", nil, true)
+		var subnet2 = subnetRender(testOverlaySubnetName2, testOverlayNetworkName, "fe90::0/120", nil, false)
+
+		It("Check network refresh after creating one", func() {
+			By("Create a new overlay network")
+			Expect(k8sClient.Create(context.Background(), network)).NotTo(HaveOccurred())
+
+			By("Cast interface to inner type")
+			manager, ok := ipamManager.(*ipammanager.Manager)
+			Expect(ok).To(BeTrue())
+
+			By("Waiting for IPAM manager refreshed by controller")
+			Eventually(
+				func(g Gomega) {
+					manager.RLock()
+					defer manager.RUnlock()
+					g.Expect(manager.NetworkSet).To(HaveLen(3))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("Check network names")
+			Expect(manager.NetworkSet.ListNetworkToNames()).To(ContainElement(testOverlayNetworkName))
+
+			By("Check created overlay network")
+			createdOverlayNetwork, err := manager.NetworkSet.GetNetworkByName(testOverlayNetworkName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(createdOverlayNetwork.IPv4Subnets).NotTo(BeNil())
+			Expect(createdOverlayNetwork.IPv6Subnets).NotTo(BeNil())
+			Expect(createdOverlayNetwork.Type).To(Equal(ipamtypes.Overlay))
+			Expect(createdOverlayNetwork.SubnetCount()).To(Equal(0))
+		})
+
+		It("Check subnet refresh after creating IPv4 one", func() {
+			By("Create a new overlay IPv4 subnet")
+			Expect(k8sClient.Create(context.Background(), subnet1)).NotTo(HaveOccurred())
+
+			By("Cast interface to inner type")
+			manager, ok := ipamManager.(*ipammanager.Manager)
+			Expect(ok).To(BeTrue())
+
+			By("Checking whether IPAM manager refreshed by controller correctly")
+			Eventually(
+				func(g Gomega) {
+					manager.RLock()
+					defer manager.RUnlock()
+					g.Expect(manager.NetworkSet).To(HaveLen(3))
+
+					parentNetwork, err := manager.NetworkSet.GetNetworkByName(testOverlayNetworkName)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(parentNetwork).NotTo(BeNil())
+					g.Expect(parentNetwork.SubnetCount()).To(Equal(1))
+					g.Expect(parentNetwork.Type).To(Equal(ipamtypes.Overlay))
+					g.Expect(parentNetwork.IPv4Subnets.Subnets).To(HaveLen(1))
+
+					createdSubnet, err := parentNetwork.GetSubnetByName(testOverlaySubnetName1)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(createdSubnet).NotTo(BeNil())
+					g.Expect(createdSubnet.IsIPv4()).To(BeTrue())
+					g.Expect(createdSubnet.IsAvailable()).To(BeTrue())
+					g.Expect(createdSubnet.AvailableIPs.Count()).To(Equal(int(basicIPQuantity - networkAddress - broadcastAddress - gatewayAddress)))
+					g.Expect(createdSubnet.UsingIPs.Count()).To(Equal(0))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		It("Check subnet refresh after creating another IPv6 one", func() {
+			By("Create a new overlay IPv6 subnet")
+			Expect(k8sClient.Create(context.Background(), subnet2)).NotTo(HaveOccurred())
+
+			By("Cast interface to inner type")
+			manager, ok := ipamManager.(*ipammanager.Manager)
+			Expect(ok).To(BeTrue())
+
+			By("Checking whether IPAM manager refreshed by controller correctly")
+			Eventually(
+				func(g Gomega) {
+					manager.RLock()
+					defer manager.RUnlock()
+					g.Expect(manager.NetworkSet).To(HaveLen(3))
+
+					parentNetwork, err := manager.NetworkSet.GetNetworkByName(testOverlayNetworkName)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(parentNetwork).NotTo(BeNil())
+					g.Expect(parentNetwork.SubnetCount()).To(Equal(2))
+					g.Expect(parentNetwork.Type).To(Equal(ipamtypes.Overlay))
+					g.Expect(parentNetwork.IPv4Subnets.Subnets).To(HaveLen(1))
+					g.Expect(parentNetwork.IPv6Subnets.Subnets).To(HaveLen(1))
+
+					createdSubnet, err := parentNetwork.GetSubnetByName(testOverlaySubnetName2)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(createdSubnet).NotTo(BeNil())
+					g.Expect(createdSubnet.IsIPv6()).To(BeTrue())
+					g.Expect(createdSubnet.IsAvailable()).To(BeTrue())
+					g.Expect(createdSubnet.AvailableIPs.Count()).To(Equal(int(basicIPQuantity - networkAddress)))
+					g.Expect(createdSubnet.UsingIPs.Count()).To(Equal(0))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		It("Check subnet refresh after removing two", func() {
+			By("Removing the two subnets")
+			Expect(k8sClient.Delete(context.Background(), subnet1)).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(context.Background(), subnet2)).NotTo(HaveOccurred())
+
+			By("Cast interface to inner type")
+			manager, ok := ipamManager.(*ipammanager.Manager)
+			Expect(ok).To(BeTrue())
+
+			By("Checking whether IPAM manager refreshed by controller correctly")
+			Eventually(
+				func(g Gomega) {
+					manager.RLock()
+					defer manager.RUnlock()
+					g.Expect(manager.NetworkSet).To(HaveLen(3))
+
+					parentNetwork, err := manager.NetworkSet.GetNetworkByName(testOverlayNetworkName)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(parentNetwork).NotTo(BeNil())
+					g.Expect(parentNetwork.SubnetCount()).To(Equal(0))
+					g.Expect(parentNetwork.Type).To(Equal(ipamtypes.Overlay))
+					g.Expect(parentNetwork.IPv4Subnets).NotTo(BeNil())
+					g.Expect(parentNetwork.IPv6Subnets).NotTo(BeNil())
+					g.Expect(parentNetwork.IPv4Subnets.Subnets).To(HaveLen(0))
+					g.Expect(parentNetwork.IPv6Subnets.Subnets).To(HaveLen(0))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		It("Check network refresh after removing", func() {
+			By("Removing the network")
+			Expect(k8sClient.Delete(context.Background(), network)).NotTo(HaveOccurred())
+
+			By("Cast interface to inner type")
+			manager, ok := ipamManager.(*ipammanager.Manager)
+			Expect(ok).To(BeTrue())
+
+			By("Checking whether IPAM manager refreshed by controller correctly")
+			Eventually(
+				func(g Gomega) {
+					manager.RLock()
+					defer manager.RUnlock()
+					g.Expect(manager.NetworkSet).To(HaveLen(2))
+					g.Expect(manager.NetworkSet.ListNetworkToNames()).NotTo(ContainElement(testOverlayNetworkName))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
 		})
 	})
 
