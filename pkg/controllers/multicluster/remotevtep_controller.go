@@ -198,7 +198,7 @@ func (r *RemoteVtepReconciler) pickEndpointIPListForNode(ctx context.Context, no
 // RefreshAll will trigger all nodes to reconcile,
 // this function should be called when recognized subnet set change
 func (r *RemoteVtepReconciler) RefreshAll() {
-	nodeNames, err := utils.ListNodesToNames(r.Context, r.Client)
+	nodeNames, err := utils.ListActiveNodesToNames(r.Context, r.Client)
 	if err != nil {
 		return
 	}
