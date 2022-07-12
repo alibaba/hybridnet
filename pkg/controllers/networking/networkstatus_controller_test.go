@@ -26,8 +26,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	//+kubebuilder:scaffold:imports
 )
@@ -140,7 +142,7 @@ var _ = Describe("Network status controller integration test suite", func() {
 			}
 		})
 
-		It("check subnet list and statistics after creating subnets", func() {
+		It("Check subnet list and statistics after creating subnets", func() {
 			const subnet1, subnet2, subnet3 = "subnet1-status", "subnet2-status", "subnet3-status"
 			newSubnets := []*networkingv1.Subnet{
 				subnetRender(subnet1, underlayNetworkNameForStatus, "192.168.57.0/24", pointer.Int32Ptr(57), true),
@@ -186,6 +188,134 @@ var _ = Describe("Network status controller integration test suite", func() {
 			for _, subnet := range newSubnets {
 				Expect(k8sClient.Delete(context.Background(), subnet)).NotTo(HaveOccurred())
 			}
+		})
+
+		It("Check statistics after creating pods", func() {
+			nodeTest := nodeRender("node4-status", map[string]string{
+				"network": underlayNetworkNameForStatus,
+			})
+
+			v4SubnetTest := subnetRender("subnet5-status", underlayNetworkNameForStatus, "192.168.60.0/24", pointer.Int32Ptr(60), true)
+			v6SubnetTest := subnetRender("subnet6-status", underlayNetworkNameForStatus, "fe85::0/120", pointer.Int32Ptr(85), true)
+
+			By("creating node and subnets")
+			Expect(k8sClient.Create(context.Background(), nodeTest)).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(context.Background(), v4SubnetTest)).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(context.Background(), v6SubnetTest)).NotTo(HaveOccurred())
+
+			var ipv4Available, ipv6Available int32
+			By("checking subnet list and statistics of status")
+			Eventually(
+				func(g Gomega) {
+					network, err := utils.GetNetwork(context.Background(), k8sClient, underlayNetworkNameForStatus)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(network).NotTo(BeNil())
+
+					g.Expect(network.Status.NodeList).To(HaveLen(1))
+					g.Expect(network.Status.NodeList).To(ContainElement(nodeTest.Name))
+
+					g.Expect(network.Status.SubnetList).To(HaveLen(2))
+					g.Expect(network.Status.SubnetList).To(ConsistOf(v4SubnetTest.Name, v6SubnetTest.Name))
+
+					g.Expect(network.Status.Statistics).NotTo(BeNil())
+					g.Expect(network.Status.Statistics.Total).Should(Equal(basicIPQuantity - networkAddress - gatewayAddress - broadcastAddress))
+					g.Expect(network.Status.Statistics.Available).Should(Equal(network.Status.Statistics.Total))
+					g.Expect(network.Status.Statistics.Used).Should(Equal(int32(0)))
+					// record available of IPv4 addresses
+					ipv4Available = network.Status.Statistics.Available
+
+					g.Expect(network.Status.IPv6Statistics).NotTo(BeNil())
+					g.Expect(network.Status.IPv6Statistics.Total).Should(Equal(basicIPQuantity - networkAddress - gatewayAddress))
+					g.Expect(network.Status.IPv6Statistics.Available).Should(Equal(network.Status.IPv6Statistics.Total))
+					g.Expect(network.Status.IPv6Statistics.Used).Should(Equal(int32(0)))
+					// record available of IPv6 addresses
+					ipv6Available = network.Status.IPv6Statistics.Available
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("create a single pod requiring DualStack addresses")
+			pod := simplePodRender("pod123-status", nodeTest.Name)
+			pod.Annotations = map[string]string{
+				constants.AnnotationIPFamily: "DualStack",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).Should(Succeed())
+
+			By("check ip instance count of DualStack allocation")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(2))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("check usage statistics of status")
+			Eventually(
+				func(g Gomega) {
+					network, err := utils.GetNetwork(context.Background(), k8sClient, underlayNetworkNameForStatus)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(network).NotTo(BeNil())
+
+					g.Expect(network.Status.Statistics).NotTo(BeNil())
+					g.Expect(network.Status.Statistics.Available).To(Equal(ipv4Available - int32(1)))
+
+					g.Expect(network.Status.IPv6Statistics).NotTo(BeNil())
+					g.Expect(network.Status.IPv6Statistics.Available).To(Equal(ipv6Available - int32(1)))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("remove the test pod and related ip instances")
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+			Expect(k8sClient.DeleteAllOf(
+				context.Background(),
+				&networkingv1.IPInstance{},
+				client.MatchingLabels{
+					constants.LabelPod: pod.Name,
+				},
+				client.InNamespace("default"),
+			)).NotTo(HaveOccurred())
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(context.Background(),
+						types.NamespacedName{
+							Namespace: "default",
+							Name:      pod.Name,
+						},
+						&corev1.Pod{})
+					g.Expect(err).NotTo(BeNil())
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("check usage statistics of status after pod removed")
+			Eventually(
+				func(g Gomega) {
+					network, err := utils.GetNetwork(context.Background(), k8sClient, underlayNetworkNameForStatus)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(network).NotTo(BeNil())
+
+					g.Expect(network.Status.Statistics).NotTo(BeNil())
+					g.Expect(network.Status.Statistics.Available).To(Equal(ipv4Available))
+
+					g.Expect(network.Status.IPv6Statistics).NotTo(BeNil())
+					g.Expect(network.Status.IPv6Statistics.Available).To(Equal(ipv6Available))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("removing node and subnets")
+			Expect(k8sClient.Delete(context.Background(), v4SubnetTest)).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(context.Background(), v6SubnetTest)).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(context.Background(), nodeTest)).NotTo(HaveOccurred())
 		})
 
 		It("Recycle", func() {
