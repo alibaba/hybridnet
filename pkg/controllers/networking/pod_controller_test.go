@@ -182,7 +182,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 					constants.LabelPod: podName,
 				},
 				client.InNamespace("default"),
-			))
+			)).NotTo(HaveOccurred())
 		})
 	})
 
@@ -707,7 +707,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 					constants.LabelPod: podName,
 				},
 				client.InNamespace("default"),
-			))
+			)).NotTo(HaveOccurred())
 
 			By("make sure test pod cleaned up")
 			Eventually(

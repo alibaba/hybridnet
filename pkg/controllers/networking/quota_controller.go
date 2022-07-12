@@ -111,13 +111,13 @@ func (r *QuotaReconciler) patchNodeLabels(ctx context.Context, nodeName string, 
 	}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		return r.Patch(ctx,
+		return client.IgnoreNotFound(r.Patch(ctx,
 			&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}},
 			client.RawPatch(
 				types.MergePatchType,
 				[]byte(fmt.Sprintf(`{"metadata":{"labels":%s}}`, string(marshaledLabels))),
 			),
-		)
+		))
 	})
 }
 
