@@ -18,31 +18,31 @@ package networking
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
+	globalutils "github.com/alibaba/hybridnet/pkg/utils"
 )
 
 const ControllerQuota = "Quota"
 
 // QuotaReconciler reconciles quota labels on node
 type QuotaReconciler struct {
+	context.Context
 	client.Client
 
 	concurrency.ControllerConcurrency
@@ -51,7 +51,7 @@ type QuotaReconciler struct {
 func (r *QuotaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := ctrllog.FromContext(ctx)
 
-	var network = &networkingv1.Network{}
+	var node = &corev1.Node{}
 
 	defer func() {
 		if err != nil {
@@ -59,77 +59,88 @@ func (r *QuotaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (resu
 		}
 	}()
 
-	if err = r.Get(ctx, req.NamespacedName, network); err != nil {
-		return ctrl.Result{}, wrapError("unable to fetch Network", client.IgnoreNotFound(err))
+	if err = r.Get(ctx, req.NamespacedName, node); err != nil {
+		return ctrl.Result{}, wrapError("unable to fetch Node", client.IgnoreNotFound(err))
 	}
 
-	if networkingv1.GetNetworkType(network) != networkingv1.NetworkTypeUnderlay {
-		log.V(1).Info("only underlay network need quota labels")
-		return ctrl.Result{}, nil
+	// get related underlay network
+	var networkList *networkingv1.NetworkList
+	if networkList, err = utils.ListNetworks(ctx, r, client.MatchingFields{IndexerFieldNode: req.Name}); err != nil {
+		return ctrl.Result{}, wrapError("unable to list underlay network by indexer", err)
 	}
 
-	var quotaLabels = map[string]string{
-		constants.LabelIPv4AddressQuota:      constants.QuotaEmpty,
-		constants.LabelIPv6AddressQuota:      constants.QuotaEmpty,
-		constants.LabelDualStackAddressQuota: constants.QuotaEmpty,
-	}
-	if networkingv1.IsAvailable(network.Status.Statistics) {
-		quotaLabels[constants.LabelIPv4AddressQuota] = constants.QuotaNonEmpty
-	}
-	if networkingv1.IsAvailable(network.Status.IPv6Statistics) {
-		quotaLabels[constants.LabelIPv6AddressQuota] = constants.QuotaNonEmpty
-	}
-	if networkingv1.IsAvailable(network.Status.DualStackStatistics) {
-		quotaLabels[constants.LabelDualStackAddressQuota] = constants.QuotaNonEmpty
+	nodePatch := client.MergeFrom(node.DeepCopy())
+
+	// if no matched underlay network, clean the unnecessary quota labels
+	if len(networkList.Items) == 0 {
+		if node.Labels == nil {
+			return ctrl.Result{}, nil
+		}
+		delete(node.Labels, constants.LabelIPv4AddressQuota)
+		delete(node.Labels, constants.LabelIPv6AddressQuota)
+		delete(node.Labels, constants.LabelDualStackAddressQuota)
+
+		return ctrl.Result{}, wrapError("unable to clean node quota labels", r.Patch(ctx, node, nodePatch))
 	}
 
-	var patchFuncs []func() error
-	for _, nodeName := range network.Status.NodeList {
-		nodeNameCopy := nodeName
-		patchFuncs = append(patchFuncs, func() error {
-			return r.patchNodeLabels(ctx, nodeNameCopy, quotaLabels)
-		})
+	// TODO: use the first matched underlay network until multiple network selection supported
+	network := &networkList.Items[0]
+
+	valueFromAvailable := func(available bool) string {
+		if available {
+			return constants.QuotaNonEmpty
+		}
+		return constants.QuotaEmpty
 	}
 
-	if err = errors.AggregateGoroutines(patchFuncs...); err != nil {
+	if node.Labels == nil {
+		node.Labels = map[string]string{}
+	}
+	node.Labels[constants.LabelIPv4AddressQuota] = valueFromAvailable(networkingv1.IsAvailable(network.Status.Statistics))
+	node.Labels[constants.LabelIPv6AddressQuota] = valueFromAvailable(networkingv1.IsAvailable(network.Status.IPv6Statistics))
+	node.Labels[constants.LabelDualStackAddressQuota] = valueFromAvailable(networkingv1.IsAvailable(network.Status.DualStackStatistics))
+
+	if err = r.Patch(ctx, node, nodePatch); err != nil {
 		return ctrl.Result{}, wrapError("unable to update quota labels", err)
 	}
 
-	log.V(1).Info(fmt.Sprintf("sync nodes %v quota labels to %v",
-		network.Status.NodeList, quotaLabels))
+	log.V(1).Info(fmt.Sprintf("sync quota labels to %v", node.Labels))
 	return ctrl.Result{}, nil
-}
-
-func (r *QuotaReconciler) patchNodeLabels(ctx context.Context, nodeName string, labels map[string]string) error {
-	if len(labels) == 0 {
-		return nil
-	}
-
-	marshaledLabels, err := json.Marshal(labels)
-	if err != nil {
-		return err
-	}
-
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		return client.IgnoreNotFound(r.Patch(ctx,
-			&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}},
-			client.RawPatch(
-				types.MergePatchType,
-				[]byte(fmt.Sprintf(`{"metadata":{"labels":%s}}`, string(marshaledLabels))),
-			),
-		))
-	})
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *QuotaReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerQuota).
-		For(&networkingv1.Network{},
+		For(&corev1.Node{},
 			builder.WithPredicates(
+				&utils.IgnoreDeletePredicate{},
+				&predicate.ResourceVersionChangedPredicate{},
+				&predicate.LabelChangedPredicate{},
+				&utils.NetworkOfNodeChangePredicate{
+					Context: r.Context,
+					Client:  r.Client,
+				},
+			)).
+		Watches(&source.Kind{Type: &networkingv1.Network{}},
+			handler.EnqueueRequestsFromMapFunc(
+				func(obj client.Object) []reconcile.Request {
+					network, ok := obj.(*networkingv1.Network)
+					if !ok {
+						return nil
+					}
+
+					// enqueue network-related nodes
+					return nodeNamesToReconcileRequests(globalutils.DeepCopyStringSlice(network.Status.NodeList))
+				},
+			),
+			builder.WithPredicates(
+				// only nodes of underlay network need quota labels
+				utils.NetworkTypePredicate(networkingv1.NetworkTypeUnderlay),
 				&predicate.ResourceVersionChangedPredicate{},
 				&utils.NetworkStatusChangePredicate{},
-			)).
+			),
+		).
 		WithOptions(
 			controller.Options{
 				MaxConcurrentReconciles: r.Max(),

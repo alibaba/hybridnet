@@ -111,6 +111,7 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, options Registe
 	}
 
 	if err = (&QuotaReconciler{
+		Context:               ctx,
 		Client:                mgr.GetClient(),
 		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerQuota]),
 	}).SetupWithManager(mgr); err != nil {

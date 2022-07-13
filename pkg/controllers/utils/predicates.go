@@ -232,3 +232,13 @@ func (TerminatingPredicate) Create(e event.CreateEvent) bool {
 func (TerminatingPredicate) Update(e event.UpdateEvent) bool {
 	return !e.ObjectNew.GetDeletionTimestamp().IsZero()
 }
+
+func NetworkTypePredicate(networkType networkingv1.NetworkType) predicate.Predicate {
+	return predicate.NewPredicateFuncs(func(obj client.Object) bool {
+		network, ok := obj.(*networkingv1.Network)
+		if !ok {
+			return false
+		}
+		return networkingv1.GetNetworkType(network) == networkType
+	})
+}
