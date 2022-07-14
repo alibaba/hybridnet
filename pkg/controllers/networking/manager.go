@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -52,11 +53,16 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, options Registe
 
 	ipamStore := NewIPAMStore(mgr.GetClient())
 
+	// init status update channels
+	networkStatusUpdateChan, subnetStatusUpdateChan := make(chan event.GenericEvent), make(chan event.GenericEvent)
+
 	// setup controllers
 	if err = (&IPAMReconciler{
-		Client:                mgr.GetClient(),
-		IPAMManager:           ipamManager,
-		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerIPAM]),
+		Client:                  mgr.GetClient(),
+		IPAMManager:             ipamManager,
+		NetworkStatusUpdateChan: networkStatusUpdateChan,
+		SubnetStatusUpdateChan:  subnetStatusUpdateChan,
+		ControllerConcurrency:   concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerIPAM]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerIPAM, err)
 	}
@@ -92,20 +98,22 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, options Registe
 	}
 
 	if err = (&NetworkStatusReconciler{
-		Context:               ctx,
-		Client:                mgr.GetClient(),
-		IPAMManager:           ipamManager,
-		Recorder:              mgr.GetEventRecorderFor(ControllerNetworkStatus + "Controller"),
-		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerNetworkStatus]),
+		Context:                 ctx,
+		Client:                  mgr.GetClient(),
+		IPAMManager:             ipamManager,
+		Recorder:                mgr.GetEventRecorderFor(ControllerNetworkStatus + "Controller"),
+		NetworkStatusUpdateChan: networkStatusUpdateChan,
+		ControllerConcurrency:   concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerNetworkStatus]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerNetworkStatus, err)
 	}
 
 	if err = (&SubnetStatusReconciler{
-		Client:                mgr.GetClient(),
-		IPAMManager:           ipamManager,
-		Recorder:              mgr.GetEventRecorderFor(ControllerSubnetStatus + "Controller"),
-		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerSubnetStatus]),
+		Client:                 mgr.GetClient(),
+		IPAMManager:            ipamManager,
+		Recorder:               mgr.GetEventRecorderFor(ControllerSubnetStatus + "Controller"),
+		SubnetStatusUpdateChan: subnetStatusUpdateChan,
+		ControllerConcurrency:  concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerSubnetStatus]),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerSubnetStatus, err)
 	}

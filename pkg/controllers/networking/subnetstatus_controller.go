@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -49,6 +50,8 @@ type SubnetStatusReconciler struct {
 
 	IPAMManager IPAMManager
 	Recorder    record.EventRecorder
+
+	SubnetStatusUpdateChan <-chan event.GenericEvent
 
 	concurrency.ControllerConcurrency
 }
@@ -138,6 +141,9 @@ func (r *SubnetStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(
 				&utils.IgnoreUpdatePredicate{},
 			),
+		).
+		Watches(&source.Channel{Source: r.SubnetStatusUpdateChan, DestBufferSize: 100},
+			&handler.EnqueueRequestForObject{},
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.Max(),
