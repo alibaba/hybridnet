@@ -727,6 +727,99 @@ var _ = Describe("Pod controller integration test suite", func() {
 		})
 	})
 
+	Context("Config IP allocation to pod with labels/annotations", func() {
+		var podName string
+
+		BeforeEach(func() {
+			podName = fmt.Sprintf("test-pod-%s", uuid.NewUUID())
+		})
+
+		It("Config pod with underlay network type", func() {
+			By("create pod with underlay network type specified in annotation")
+			pod := simplePodRender(podName, node1Name)
+			pod.Annotations = map[string]string{
+				constants.AnnotationNetworkType: "Underlay",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Network).To(Equal(underlayNetworkName))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		It("Config pod with overlay network type", func() {
+			By("create pod with overlay network type specified in label")
+			pod := simplePodRender(podName, node1Name)
+			pod.Labels = map[string]string{
+				constants.LabelNetworkType: "Overlay",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Network).To(Equal(overlayNetworkName))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		AfterEach(func() {
+			By("remove the test pod")
+			Expect(k8sClient.Delete(context.Background(),
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "default",
+						Name:      podName,
+					},
+				},
+				client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+
+			By("clean up test ip instances")
+			Expect(k8sClient.DeleteAllOf(
+				context.Background(),
+				&networkingv1.IPInstance{},
+				client.MatchingLabels{
+					constants.LabelPod: podName,
+				},
+				client.InNamespace("default"),
+			)).NotTo(HaveOccurred())
+
+			By("make sure test pod cleaned up")
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(context.Background(),
+						types.NamespacedName{
+							Namespace: "default",
+							Name:      podName,
+						},
+						&corev1.Pod{})
+					g.Expect(err).NotTo(BeNil())
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+		})
+	})
+
 	Context("Unlock", func() {
 		testLock.Unlock()
 	})
