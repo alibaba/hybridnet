@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	globalutils "github.com/alibaba/hybridnet/pkg/utils"
 )
 
@@ -45,6 +46,18 @@ func InitIndexers(mgr ctrl.Manager) (err error) {
 			default:
 				return nil
 			}
+		}); err != nil {
+		return err
+	}
+
+	// init mac indexer for IPInstances
+	if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.IPInstance{},
+		ipamtypes.IndexerFieldMAC, func(obj client.Object) []string {
+			ipInstance, ok := obj.(*networkingv1.IPInstance)
+			if !ok {
+				return nil
+			}
+			return []string{ipInstance.Spec.Address.MAC}
 		}); err != nil {
 		return err
 	}

@@ -104,6 +104,9 @@ type CoupleOptions struct {
 	// AdditionalLabels will be patched to IP when coupling
 	AdditionalLabels map[string]string
 
+	// SpecifiedMACAddress will be used as mac address of Pod
+	SpecifiedMACAddress SpecifiedMACAddress
+
 	// OwnerReference will replace the owner reference fetched from Pod explicitly
 	OwnerReference *metav1.OwnerReference
 }
@@ -122,6 +125,9 @@ type ReCoupleOption interface {
 type ReCoupleOptions struct {
 	// AdditionalLabels will be patched to IP when recoupling
 	AdditionalLabels map[string]string
+
+	// SpecifiedMACAddress will be used as mac address of Pod
+	SpecifiedMACAddress SpecifiedMACAddress
 
 	// OwnerReference will replace the owner reference fetched from Pod explicitly
 	OwnerReference *metav1.OwnerReference
@@ -190,4 +196,24 @@ type DropPodName bool
 
 func (d DropPodName) ApplyToReserve(options *ReserveOptions) {
 	options.DropPodName = bool(d)
+}
+
+type SpecifiedMACAddress string
+
+func (s SpecifiedMACAddress) ApplyToReCouple(options *ReCoupleOptions) {
+	options.SpecifiedMACAddress = s
+}
+
+func (s SpecifiedMACAddress) ApplyToCouple(options *CoupleOptions) {
+	options.SpecifiedMACAddress = s
+}
+
+func (s SpecifiedMACAddress) IsEmpty() bool {
+	return len(s) == 0
+}
+
+// EqualsTo returns whether current specified MAC address is equal to another
+// normalized MAC address.
+func (s SpecifiedMACAddress) EqualsTo(normalizedMACAddr string) bool {
+	return string(s) == normalizedMACAddr
 }

@@ -70,7 +70,12 @@ func (s *crdStore) Couple(ctx context.Context, pod *corev1.Pod, IPs []*ipamtypes
 		}
 	}()
 
-	var unifiedMACAddr = mac.GenerateMAC().String()
+	var unifiedMACAddr string
+	if options.SpecifiedMACAddress.IsEmpty() {
+		unifiedMACAddr = mac.GenerateMAC().String()
+	} else {
+		unifiedMACAddr = string(options.SpecifiedMACAddress)
+	}
 	for _, ip := range IPs {
 		var ipInstance *networkingv1.IPInstance
 		if ipInstance, err = s.createIPInstance(ctx, pod, ip, unifiedMACAddr, options.OwnerReference, options.AdditionalLabels); err != nil {
@@ -92,9 +97,14 @@ func (s *crdStore) ReCouple(ctx context.Context, pod *corev1.Pod, IPs []*ipamtyp
 	// parse options
 	options.ApplyOptions(opts)
 
-	// if pod will be recoupled with multi IPs, a unified MAC address
-	// should be reused or created
-	if len(IPs) > 1 {
+	// If MAC address is specified in options, use it as unified MAC address.
+	if !options.SpecifiedMACAddress.IsEmpty() {
+		unifiedMACAddr = string(options.SpecifiedMACAddress)
+	}
+
+	// If there is no specified MAC address in options, and pod will be recoupled with
+	// multi IPs, a unified MAC address should be reused.
+	if options.SpecifiedMACAddress.IsEmpty() && len(IPs) > 1 {
 		for _, ip := range IPs {
 			var ipInstance *networkingv1.IPInstance
 			if ipInstance, err = s.getIPInstance(ctx, pod.Namespace, ip); err != nil {
@@ -109,11 +119,11 @@ func (s *crdStore) ReCouple(ctx context.Context, pod *corev1.Pod, IPs []*ipamtyp
 			unifiedMACAddr = ipInstance.Spec.Address.MAC
 			break
 		}
+	}
 
-		// if no valid MAC address reused, recreate a new one
-		if len(unifiedMACAddr) == 0 {
-			unifiedMACAddr = mac.GenerateMAC().String()
-		}
+	// If no valid MAC address reused or specified in options, create a new one.
+	if len(unifiedMACAddr) == 0 {
+		unifiedMACAddr = mac.GenerateMAC().String()
 	}
 
 	for _, ip := range IPs {
@@ -196,6 +206,14 @@ func (s *crdStore) IPUnBind(ctx context.Context, namespace, ip string) (err erro
 
 // createIPInstance will create an IPInstance by pod info, ip info and mac address
 func (s *crdStore) createIPInstance(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP, macAddr string, ownerReference *metav1.OwnerReference, additionalLabels map[string]string) (ipIns *networkingv1.IPInstance, err error) {
+	// Check MAC address collision with existing ip instances of other pods.
+	if len(macAddr) > 0 {
+		err = s.checkMACAddressCollision(pod, macAddr)
+		if err != nil {
+			return nil, fmt.Errorf("fail to check MAC address collision %v", err)
+		}
+	}
+
 	ipInstance := &networkingv1.IPInstance{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      utils.ToDNSLabelFormatName(ip),
@@ -210,6 +228,14 @@ func (s *crdStore) createIPInstance(ctx context.Context, pod *corev1.Pod, ip *ip
 
 // createOrUpdateIPInstance will create or update an IPInstance by pod info, ip info and mac address
 func (s *crdStore) createOrUpdateIPInstance(ctx context.Context, pod *corev1.Pod, ip *ipamtypes.IP, macAddr string, ownerReference *metav1.OwnerReference, additionalLabels map[string]string) (ipIns *networkingv1.IPInstance, err error) {
+	// Check MAC address collision with existing ip instances of other pods.
+	if len(macAddr) > 0 {
+		err = s.checkMACAddressCollision(pod, macAddr)
+		if err != nil {
+			return nil, fmt.Errorf("fail to check MAC address collision %v", err)
+		}
+	}
+
 	var ipInstance = &networkingv1.IPInstance{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      utils.ToDNSLabelFormatName(ip),
@@ -228,6 +254,22 @@ func (s *crdStore) createOrUpdateIPInstance(ctx context.Context, pod *corev1.Pod
 	})
 
 	return ipInstance, err
+}
+
+func (s *crdStore) checkMACAddressCollision(pod *corev1.Pod, macAddr string) (err error) {
+	ipInstanceList := &networkingv1.IPInstanceList{}
+	if err = s.List(context.TODO(), ipInstanceList, client.MatchingFields{ipamtypes.IndexerFieldMAC: macAddr}); err != nil {
+		return fmt.Errorf("unable to list ip instances by indexer MAC %s: %v", macAddr, err)
+	}
+	for _, ipInstance := range ipInstanceList.Items {
+		if !ipInstance.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if ipInstance.Status.PodNamespace != pod.GetNamespace() || ipInstance.Status.PodName != pod.GetName() {
+			return fmt.Errorf("specified mac address %s is in conflict with existing ip instance %s/%s", macAddr, ipInstance.Namespace, ipInstance.Name)
+		}
+	}
+	return nil
 }
 
 // deleteIPInstance will remove an IPInstance by namespace and name

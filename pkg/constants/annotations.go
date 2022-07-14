@@ -20,6 +20,8 @@ const (
 	AnnotationIPPool   = "networking.alibaba.com/ip-pool"
 	AnnotationIPFamily = "networking.alibaba.com/ip-family"
 
+	AnnotationMACPool = "networking.alibaba.com/mac-pool"
+
 	AnnotationIPRetain = "networking.alibaba.com/ip-retain"
 
 	AnnotationSpecifiedNetwork = "networking.alibaba.com/specified-network"

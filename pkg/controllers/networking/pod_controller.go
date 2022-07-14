@@ -320,6 +320,14 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 	// preAssign means that user want to assign some IPs to pod through annotation
 	var preAssign = len(pod.Annotations[constants.AnnotationIPPool]) > 0
 
+	// parse specified MAC address option from mac-pool annotation
+	var specifiedMACAddr ipamtypes.SpecifiedMACAddress
+	if len(pod.Annotations[constants.AnnotationMACPool]) > 0 {
+		if specifiedMACAddr, err = parseSpecifiedMACAddressOption(pod); err != nil {
+			return wrapError("fail to parse specified MAC address option for stateful pod", err)
+		}
+	}
+
 	// expectReallocate means that ip is expected to be released and allocated again, usually
 	// this will be set true when ip is leaking
 	// 1. global retain and pod retain or unset, ip should be retained
@@ -345,7 +353,7 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 			}
 		}
 
-		return wrapError("unable to reallocate", r.allocate(ctx, pod, networkName))
+		return wrapError("unable to reallocate", r.allocate(ctx, pod, networkName, specifiedMACAddr))
 	}
 
 	var (
@@ -393,12 +401,12 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 		if len(ipCandidates) == 0 {
 			// allocate has its own observation process, so just skip
 			shouldObserve = false
-			return wrapError("unable to allocate", r.allocate(ctx, pod, networkName))
+			return wrapError("unable to allocate", r.allocate(ctx, pod, networkName, specifiedMACAddr))
 		}
 	}
 
 	// assign IP candidates to pod
-	return wrapError("unable to assign", r.assign(ctx, pod, networkName, ipCandidates, forceAssign))
+	return wrapError("unable to assign", r.assign(ctx, pod, networkName, ipCandidates, forceAssign, specifiedMACAddr))
 }
 
 func (r *PodReconciler) vmAllocate(ctx context.Context, pod *corev1.Pod, vmName, networkName string,
@@ -589,6 +597,24 @@ func ipCandidateToAssignSuite(ipCandidates []ipCandidate) (ret []types.SubnetIPS
 		}
 	}
 	return
+}
+
+func parseSpecifiedMACAddressOption(pod *corev1.Pod) (mac ipamtypes.SpecifiedMACAddress, err error) {
+	if len(pod.Annotations[constants.AnnotationMACPool]) == 0 {
+		return "", nil
+	}
+
+	macPool := strings.Split(pod.Annotations[constants.AnnotationMACPool], ",")
+	idx := utils.GetIndexFromName(pod.Name)
+
+	if idx >= len(macPool) {
+		return "", fmt.Errorf("unable to find assigned mac address in mac pool %s by index %d", pod.Annotations[constants.AnnotationMACPool], idx)
+	}
+	if len(macPool[idx]) == 0 {
+		return "", fmt.Errorf("the %d assigned mac address is empty in mac pool %s", idx, pod.Annotations[constants.AnnotationMACPool])
+	}
+
+	return ipamtypes.SpecifiedMACAddress(macPool[idx]), nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
