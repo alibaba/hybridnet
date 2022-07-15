@@ -27,13 +27,15 @@ In hybridnet, we try to break the strict boundary of all the forms of container 
 2. If a connection has either an overlay container side (even the other side is an underlay container), it's considered an "Overlay" connection (without NATed). In other words, underlay containers are always connected with overlay containers directly, just like they are all overlay containers
 3. Traffic between underlay containers keeps the origin "Underlay" attributes. Lower costs and being visible to underlying network
 
+![datapath](/docs/images/datapath.jpeg)
+
 The users of hybridnet can keep both *Overlay* and *Underlay* network inside a Kubernetes cluster without any concern about the connectivity, which brings a more flexible and extensible container network to orchestrate different applications.
 
 As the foundation of hybridnet, we use "Policy Routing" to distribute traffic across the different data planes. The feature of "Policy Routing" is introduced in 2.1 version of linux kernel as a basic part of routing subsystem, which provides strong stability and compatibility. Another two docs about [hybridnet components](/docs/components.md) and [the contrast between hybridnet and other CNI implementations](/docs/other-implementations.md) can be considered as further references.
 
 ## Features
 
-- [Unified management APIs](/docs/crd.md) implemented with Kubernetes CRD
+- [Unified topology-aware management APIs](/docs/crd.md) implemented with Kubernetes CRD
 - Support IPv4/IPv6 dual stack
 - Multiple network fabrics. VXLAN(overlay), VLAN(underlay), BGP(underlay), etc.
 - Advanced IPAM. Retaining IP for stateful workloads, topology-aware IP allocation, etc.
