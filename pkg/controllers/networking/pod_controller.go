@@ -64,6 +64,7 @@ const (
 )
 
 const (
+	IndexerFieldMAC   = "mac"
 	IndexerFieldNode  = "node"
 	OverlayNodeName   = "c3e6699d28e7"
 	GlobalBGPNodeName = "d7afdca2c149"
@@ -326,6 +327,11 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 		if specifiedMACAddr, err = parseSpecifiedMACAddressOption(pod); err != nil {
 			return wrapError("fail to parse specified MAC address option for stateful pod", err)
 		}
+
+		// check specified MAC address collision in advance
+		if err = r.checkMACAddressCollision(pod, networkName, string(specifiedMACAddr)); err != nil {
+			return wrapError("fail to check specified MAC address collision: %v", err)
+		}
 	}
 
 	// expectReallocate means that ip is expected to be released and allocated again, usually
@@ -565,6 +571,24 @@ func (r *PodReconciler) removeFinalizer(ctx context.Context, pod *corev1.Pod) er
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		return r.Patch(ctx, pod, patch)
 	})
+}
+
+func (r *PodReconciler) checkMACAddressCollision(pod *corev1.Pod, networkName string, macAddr string) (err error) {
+	ipInstanceList := &networkingv1.IPInstanceList{}
+	if err = r.List(context.TODO(), ipInstanceList,
+		client.MatchingLabels{constants.LabelNetwork: networkName},
+		client.MatchingFields{IndexerFieldMAC: macAddr}); err != nil {
+		return fmt.Errorf("unable to list ip instances by indexer MAC %s: %v", macAddr, err)
+	}
+	for _, ipInstance := range ipInstanceList.Items {
+		if !ipInstance.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if ipInstance.Status.PodNamespace != pod.GetNamespace() || ipInstance.Status.PodName != pod.GetName() {
+			return fmt.Errorf("specified mac address %s is in conflict with existing ip instance %s/%s", macAddr, ipInstance.Namespace, ipInstance.Name)
+		}
+	}
+	return nil
 }
 
 func ipToReleaseSuite(ips []*types.IP) (ret []ipamtypes.SubnetIPSuite) {

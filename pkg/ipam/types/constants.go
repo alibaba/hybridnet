@@ -22,10 +22,6 @@ import (
 	"sync"
 )
 
-const (
-	IndexerFieldMAC = "mac"
-)
-
 type IPFamilyMode string
 
 const (
