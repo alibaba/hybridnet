@@ -210,6 +210,20 @@ func overlayNetworkRender(name string, netID int32) *networkingv1.Network {
 	}
 }
 
+// globalBGPNetworkRender will render a simple global BGP network of BGP mode
+func globalBGPNetworkRender(name string, netID int32) *networkingv1.Network {
+	return &networkingv1.Network{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: networkingv1.NetworkSpec{
+			NetID: &netID,
+			Type:  networkingv1.NetworkTypeGlobalBGP,
+			Mode:  networkingv1.NetworkModeBGP,
+		},
+	}
+}
+
 // subnetRender will render a simple subnet of a specified network
 func subnetRender(name, networkName string, cidr string, netID *int32, hasGateway bool) *networkingv1.Subnet {
 	tempIP, _, _ := net.ParseCIDR(cidr)

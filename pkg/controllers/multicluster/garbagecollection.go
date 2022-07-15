@@ -109,7 +109,7 @@ func (r *RemoteVTEPGarbageCollection) Start(ctx context.Context) error {
 	r.logger.Info("remote vtep garbage collection is starting")
 
 	wait.UntilWithContext(ctx, func(c context.Context) {
-		nodeNames, err := utils.ListNodesToNames(ctx, r.reconciler.Client)
+		nodeNames, err := utils.ListActiveNodesToNames(ctx, r.reconciler.Client)
 		if err != nil {
 			r.logger.Error(err, "unable to list nodes")
 			return

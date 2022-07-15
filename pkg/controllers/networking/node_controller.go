@@ -141,7 +141,7 @@ func (r *NodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				// enqueue all nodes here
 				func(_ client.Object) []reconcile.Request {
 					// TODO: handle error here
-					nodeNames, _ := utils.ListNodesToNames(r.Context, r.Client)
+					nodeNames, _ := utils.ListActiveNodesToNames(r.Context, r.Client)
 					return nodeNamesToReconcileRequests(nodeNames)
 				},
 			),

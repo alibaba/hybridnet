@@ -81,7 +81,7 @@ func ListIPInstances(ctx context.Context, client client.Reader, opts ...client.L
 	return &ipList, nil
 }
 
-func ListNodesToNames(ctx context.Context, client client.Reader, opts ...client.ListOption) ([]string, error) {
+func ListActiveNodesToNames(ctx context.Context, client client.Reader, opts ...client.ListOption) ([]string, error) {
 	var nodeList = corev1.NodeList{}
 	if err := client.List(ctx, &nodeList, opts...); err != nil {
 		// TODO: handle error here
@@ -89,12 +89,15 @@ func ListNodesToNames(ctx context.Context, client client.Reader, opts ...client.
 	}
 	var names = make([]string, len(nodeList.Items))
 	for i := range nodeList.Items {
-		names[i] = nodeList.Items[i].GetName()
+		// node is active iff it is not in terminating
+		if nodeList.Items[i].DeletionTimestamp == nil {
+			names[i] = nodeList.Items[i].GetName()
+		}
 	}
 	return names, nil
 }
 
-func ListSubnetsToNames(ctx context.Context, client client.Reader, opts ...client.ListOption) ([]string, error) {
+func ListActiveSubnetsToNames(ctx context.Context, client client.Reader, opts ...client.ListOption) ([]string, error) {
 	subnetList, err := ListSubnets(ctx, client, opts...)
 	if err != nil {
 		return nil, err
@@ -102,7 +105,10 @@ func ListSubnetsToNames(ctx context.Context, client client.Reader, opts ...clien
 
 	var names = make([]string, len(subnetList.Items))
 	for i := range subnetList.Items {
-		names[i] = subnetList.Items[i].GetName()
+		// subnet is active iff it is not in terminating
+		if subnetList.Items[i].DeletionTimestamp == nil {
+			names[i] = subnetList.Items[i].GetName()
+		}
 	}
 	return names, nil
 }

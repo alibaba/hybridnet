@@ -255,6 +255,11 @@ func (s *crdStore) reserveIPInstance(ctx context.Context, ipInstance *networking
 	_, err := controllerutil.CreateOrPatch(ctx, s, ipInstance,
 		// update both spec and status for reservation
 		func() error {
+			// if ip instance is terminating, no need to reserve it
+			if ipInstance.DeletionTimestamp != nil {
+				return nil
+			}
+
 			// clean pod uid & node info means this IP is not being used by any pod
 			ipInstance.Spec.Binding.NodeName = ""
 			ipInstance.Spec.Binding.PodUID = ""

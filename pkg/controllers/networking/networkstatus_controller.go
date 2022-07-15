@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -56,6 +57,8 @@ type NetworkStatusReconciler struct {
 
 	IPAMManager IPAMManager
 	Recorder    record.EventRecorder
+
+	NetworkStatusUpdateChan <-chan event.GenericEvent
 
 	concurrency.ControllerConcurrency
 }
@@ -92,13 +95,13 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// update node list
 	networkStatus := &networkingv1.NetworkStatus{}
-	if networkStatus.NodeList, err = utils.ListNodesToNames(ctx, r, client.MatchingLabels(nodeSelector)); err != nil {
+	if networkStatus.NodeList, err = utils.ListActiveNodesToNames(ctx, r, client.MatchingLabels(nodeSelector)); err != nil {
 		return ctrl.Result{}, wrapError("unable to update node list", err)
 	}
 	sort.Strings(networkStatus.NodeList)
 
 	// update subnet list
-	if networkStatus.SubnetList, err = utils.ListSubnetsToNames(ctx,
+	if networkStatus.SubnetList, err = utils.ListActiveSubnetsToNames(ctx,
 		r,
 		client.MatchingFields{
 			IndexerFieldNetwork: network.GetName(),
@@ -209,8 +212,13 @@ func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) (err error)
 				}
 			}),
 			builder.WithPredicates(
-				&predicate.GenerationChangedPredicate{},
-				&utils.SubnetSpecChangePredicate{},
+				predicate.Or(
+					&utils.TerminatingPredicate{},
+					predicate.And(
+						&predicate.GenerationChangedPredicate{},
+						&utils.SubnetSpecChangePredicate{},
+					),
+				),
 			)).
 		Watches(&source.Kind{Type: &networkingv1.IPInstance{}},
 			handler.EnqueueRequestsFromMapFunc(func(object client.Object) []reconcile.Request {
@@ -268,12 +276,20 @@ func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) (err error)
 			}),
 			builder.WithPredicates(
 				&predicate.ResourceVersionChangedPredicate{},
-				&predicate.LabelChangedPredicate{},
-				&utils.NetworkOfNodeChangePredicate{
-					Context: r.Context,
-					Client:  r.Client,
-				},
+				predicate.Or(
+					&utils.TerminatingPredicate{},
+					predicate.And(
+						&predicate.LabelChangedPredicate{},
+						&utils.NetworkOfNodeChangePredicate{
+							Context: r.Context,
+							Client:  r.Client,
+						},
+					),
+				),
 			)).
+		Watches(&source.Channel{Source: r.NetworkStatusUpdateChan, DestBufferSize: 100},
+			&handler.EnqueueRequestForObject{},
+		).
 		WithOptions(
 			controller.Options{
 				MaxConcurrentReconciles: r.Max(),
