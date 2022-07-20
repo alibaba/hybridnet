@@ -22,6 +22,8 @@ const (
 
 	AnnotationIPRetain = "networking.alibaba.com/ip-retain"
 
+	AnnotationGlobalService = "networking.alibaba.com/global-service"
+
 	AnnotationSpecifiedNetwork = "networking.alibaba.com/specified-network"
 	AnnotationSpecifiedSubnet  = "networking.alibaba.com/specified-subnet"
 
