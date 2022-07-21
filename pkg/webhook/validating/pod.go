@@ -22,20 +22,19 @@ import (
 	"net/http"
 	"strings"
 
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/utils"
+	macutils "github.com/alibaba/hybridnet/pkg/utils/mac"
+	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
 )
 
 var podGVK = gvkConverter(corev1.SchemeGroupVersion.WithKind("Pod"))
@@ -141,6 +140,20 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 				if utils.NormalizedIP(ip) != ip {
 					return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("ip pool has an invalid ip %s", ip), logger)
 				}
+			}
+		}
+	}
+
+	// MAC address pool validation
+	var macPool string
+	if macPool = pod.Annotations[constants.AnnotationMACPool]; len(macPool) > 0 {
+		macAddrSegments := strings.Split(macPool, ",")
+		for idx, macAddr := range macAddrSegments {
+			if len(macAddr) == 0 {
+				return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("the %d mac addr in mac pool is empty", idx), logger)
+			}
+			if len(macutils.NormalizeMAC(macAddr)) == 0 {
+				return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("the %d mac address %s is not valid", idx, macAddr), logger)
 			}
 		}
 	}

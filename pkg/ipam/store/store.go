@@ -70,7 +70,12 @@ func (s *crdStore) Couple(ctx context.Context, pod *corev1.Pod, IPs []*ipamtypes
 		}
 	}()
 
-	var unifiedMACAddr = mac.GenerateMAC().String()
+	var unifiedMACAddr string
+	if options.SpecifiedMACAddress.IsEmpty() {
+		unifiedMACAddr = mac.GenerateMAC().String()
+	} else {
+		unifiedMACAddr = string(options.SpecifiedMACAddress)
+	}
 	for _, ip := range IPs {
 		var ipInstance *networkingv1.IPInstance
 		if ipInstance, err = s.createIPInstance(ctx, pod, ip, unifiedMACAddr, options.OwnerReference, options.AdditionalLabels); err != nil {
@@ -92,9 +97,14 @@ func (s *crdStore) ReCouple(ctx context.Context, pod *corev1.Pod, IPs []*ipamtyp
 	// parse options
 	options.ApplyOptions(opts)
 
-	// if pod will be recoupled with multi IPs, a unified MAC address
-	// should be reused or created
-	if len(IPs) > 1 {
+	// If MAC address is specified in options, use it as unified MAC address.
+	if !options.SpecifiedMACAddress.IsEmpty() {
+		unifiedMACAddr = string(options.SpecifiedMACAddress)
+	}
+
+	// If there is no specified MAC address in options, and pod will be recoupled with
+	// multi IPs, a unified MAC address should be reused.
+	if options.SpecifiedMACAddress.IsEmpty() && len(IPs) > 1 {
 		for _, ip := range IPs {
 			var ipInstance *networkingv1.IPInstance
 			if ipInstance, err = s.getIPInstance(ctx, pod.Namespace, ip); err != nil {
@@ -109,11 +119,11 @@ func (s *crdStore) ReCouple(ctx context.Context, pod *corev1.Pod, IPs []*ipamtyp
 			unifiedMACAddr = ipInstance.Spec.Address.MAC
 			break
 		}
+	}
 
-		// if no valid MAC address reused, recreate a new one
-		if len(unifiedMACAddr) == 0 {
-			unifiedMACAddr = mac.GenerateMAC().String()
-		}
+	// If no valid MAC address reused or specified in options, create a new one.
+	if len(unifiedMACAddr) == 0 {
+		unifiedMACAddr = mac.GenerateMAC().String()
 	}
 
 	for _, ip := range IPs {

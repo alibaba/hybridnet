@@ -49,6 +49,18 @@ func InitIndexers(mgr ctrl.Manager) (err error) {
 		return err
 	}
 
+	// init mac indexer for IPInstances
+	if err = mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.IPInstance{},
+		IndexerFieldMAC, func(obj client.Object) []string {
+			ipInstance, ok := obj.(*networkingv1.IPInstance)
+			if !ok {
+				return nil
+			}
+			return []string{ipInstance.Spec.Address.MAC}
+		}); err != nil {
+		return err
+	}
+
 	// init network indexer for Subnets
 	return mgr.GetFieldIndexer().IndexField(context.TODO(), &networkingv1.Subnet{},
 		IndexerFieldNetwork, func(obj client.Object) []string {
