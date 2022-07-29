@@ -19,9 +19,8 @@ package route
 import (
 	"fmt"
 	"net"
-	"strings"
 
-	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/daemon/iptables"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 
@@ -38,6 +37,9 @@ const (
 
 	MaxRulePriority   = 32767
 	NodeLocalTableNum = 255
+
+	fromRuleMask = iptables.KubeProxyMasqueradeMark + iptables.FuleNATedPodTrafficMark
+	fromRuleMark = 0x0
 )
 
 type SubnetInfo struct {
@@ -129,7 +131,7 @@ func appendHighestUnusedPriorityRuleIfNotExist(src *net.IPNet, table, family int
 
 	priority, err := findHighestUnusedRulePriority(family)
 	if err != nil {
-		return fmt.Errorf("failed to find highest unused rule priority for to overlay subnet rule: %v", err)
+		return fmt.Errorf("failed to find highest unused rule priority: %v", err)
 	}
 
 	rule := netlink.NewRule()
@@ -162,44 +164,9 @@ func findEmptyRouteTable(family int) (int, error) {
 	return 0, fmt.Errorf("cannot find empty route table in range %v~%v", MinRouteTableNum, MaxRouteTableNum)
 }
 
-func checkIsFromPodSubnetRule(rule netlink.Rule, family int) (bool, error) {
-	if rule.IifName != "" || rule.OifName != "" || rule.Dst != nil || rule.Src == nil ||
-		rule.Table < MinRouteTableNum || rule.Table >= MaxRouteTableNum {
-		return false, nil
-	}
-
-	routes, err := listRoutesByTable(rule.Table, family)
-	if err != nil {
-		return false, fmt.Errorf("failed to list route for table %v: %v", rule.Table, err)
-	}
-
-	for _, route := range routes {
-		// skip exclude routes
-		if isExcludeRoute(&route) {
-			continue
-		}
-
-		link, err := netlink.LinkByIndex(route.LinkIndex)
-		if err != nil {
-			return false, fmt.Errorf("failed to get link for route %v: %v", route.String(), err)
-		}
-
-		// Underlay subnet route table found.
-		// For a vlan route table, only one default route and one subnet route will exist.
-		// For a bgp route table, only one default route will exist.
-		if route.Dst == nil && len(routes) == 2 || len(routes) == 1 {
-			return true, nil
-		}
-
-		// overlay subnet route table found
-		if strings.Contains(link.Attrs().Name, constants.VxlanLinkInfix) &&
-			!(route.Dst != nil && !route.Dst.IP.IsGlobalUnicast()) {
-			return true, nil
-		}
-
-	}
-
-	return false, nil
+func checkIsFromPodSubnetRule(rule netlink.Rule) bool {
+	return rule.Src != nil && rule.Mask == fromRuleMask &&
+		rule.Table >= MinRouteTableNum && rule.Table <= MaxRouteTableNum
 }
 
 func clearRouteTable(table int, family int) error {
@@ -272,19 +239,8 @@ func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
 
 	// Add rule at the last in case error happens while failed to add any routes to table.
 	if !ruleExist {
-		priority, err := findHighestUnusedRulePriority(family)
-		if err != nil {
-			return fmt.Errorf("failed to find highest unused rule priority: %v", err)
-		}
-
-		rule := netlink.NewRule()
-		rule.Table = table
-		rule.Priority = priority
-		rule.Src = cidr
-		rule.Family = family
-
-		if err := netlink.RuleAdd(rule); err != nil {
-			return fmt.Errorf("failed to add rule %v: %v", rule, err)
+		if err := appendHighestUnusedPriorityRuleIfNotExist(cidr, table, family, fromRuleMark, fromRuleMask); err != nil {
+			return fmt.Errorf("failed to append from subnet rule for cidr %v: %v", cidr, err)
 		}
 	}
 

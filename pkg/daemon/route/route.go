@@ -334,9 +334,21 @@ func (m *Manager) SyncRoutes() error {
 
 	// Sync from every pod subnet rules.
 	for _, rule := range ruleList {
-		isFromPodSubnetRule, err := checkIsFromPodSubnetRule(rule, m.family)
-		if err != nil {
-			return fmt.Errorf("failed to check if rule %v is from pod subnet rule: %v", rule.String(), err)
+		isFromPodSubnetRule := checkIsFromPodSubnetRule(rule)
+
+		// TODO: for compatibility, to be removed in the next major version
+		if !isFromPodSubnetRule {
+			isOldFromPodSubnetRule, err := checkIsOldFromPodSubnetRule(rule, m.family)
+			if err != nil {
+				return fmt.Errorf("failed to check if rule %v is outdated from pod subnet rule: %v", rule.String(), err)
+			}
+
+			if isOldFromPodSubnetRule {
+				if err := updateOldFromPodSubnetRuleToNew(rule); err != nil {
+					return fmt.Errorf("failed to update old from subnet rule %v: %v", rule.String(), err)
+				}
+				isFromPodSubnetRule = true
+			}
 		}
 
 		if isFromPodSubnetRule {

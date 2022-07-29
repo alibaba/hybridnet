@@ -39,9 +39,13 @@ const (
 	ChainPreRouting  = "PREROUTING"
 	ChainForward     = "FORWARD"
 
-	ChainHybridnetPostRouting = "HYBRIDNET-POSTROUTING"
-	ChainHybridnetForward     = "HYBRIDNET-FORWARD"
-	ChainHybridnetPreRouting  = "HYBRIDNET-PREROUTING"
+	CustomChainPrefix = "HYBRIDNET-"
+
+	ChainHybridnetPostRouting = CustomChainPrefix + "POSTROUTING"
+	ChainHybridnetForward     = CustomChainPrefix + "FORWARD"
+	ChainHybridnetPreRouting  = CustomChainPrefix + "PREROUTING"
+
+	ChainHybridnetFromRuleSkip = CustomChainPrefix + "FROM-RULE-SKIP"
 
 	HybridnetOverlayNetSetName  = "HYBRIDNET-OVERLAY-NET"
 	HybridnetAllIPSetName       = "HYBRIDNET-ALL"
@@ -50,7 +54,11 @@ const (
 	HybridnetLocalBGPNetSetName = "HYBRIDNET-LOCAL-BGP-NET"
 
 	PodToNodeBackTrafficMarkString = "0x20"
+	FuleNATedPodTrafficMarkString  = "0x40"
 	PodToNodeBackTrafficMark       = 0x20
+	FuleNATedPodTrafficMark        = 0x40
+
+	KubeProxyMasqueradeMark = 0x4000
 )
 
 // Protocol defines the ip protocol either ipv4 or ipv6
@@ -266,6 +274,7 @@ func (mgr *Manager) SyncRules() error {
 	writeLine(filterChains, utiliptables.MakeChainLine(ChainHybridnetForward))
 	writeLine(mangleChains, utiliptables.MakeChainLine(ChainHybridnetPreRouting))
 	writeLine(mangleChains, utiliptables.MakeChainLine(ChainHybridnetPostRouting))
+	writeLine(mangleChains, utiliptables.MakeChainLine(ChainHybridnetFromRuleSkip))
 
 	if len(mgr.overlayIfName) != 0 {
 		// There might be two scenarios where overlayIfName is nil
@@ -288,6 +297,12 @@ func (mgr *Manager) SyncRules() error {
 	if len(mgr.bgpIfName) != 0 {
 		writeLine(filterRules, generateBGPEndLoopRuleSpec(mgr.bgpIfName, localPodIPSet.GetNameWithProtocol(),
 			localBGPNetSet.GetNameWithProtocol())...)
+	}
+
+	writeLine(mangleRules, generateFullNATMarkSNATRuleSpec()...)
+	// no need for remote subnets, because there are no "from" rules for them
+	for _, subnet := range append(mgr.localClusterUnderlaySubnets, mgr.localClusterOverlaySubnets...) {
+		writeLine(mangleRules, generateFullNATMarkDNATRuleSpec(subnet)...)
 	}
 
 	// Write the end-of-table markers
@@ -436,6 +451,20 @@ func generateBGPEndLoopRuleSpec(bgpIf, localPodIPSet, localBGPNetSet string) []s
 		"-m", "set", "!", "--match-set", localPodIPSet, "dst",
 		"-m", "set", "--match-set", localBGPNetSet, "dst",
 		"-j", "DROP",
+	}
+}
+
+func generateFullNATMarkSNATRuleSpec() []string {
+	return []string{"-A", ChainHybridnetPreRouting, "-m", "comment", "--comment", `"match full NATed pod traffic"`,
+		"-m", "conntrack", "--ctstate", "SNAT",
+		"-j", ChainHybridnetFromRuleSkip,
+	}
+}
+
+func generateFullNATMarkDNATRuleSpec(cidr *net.IPNet) []string {
+	return []string{"-A", ChainHybridnetFromRuleSkip, "-m", "conntrack", "--ctstate", "DNAT",
+		"--ctreplsrc", cidr.String(), "-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s",
+			FuleNATedPodTrafficMarkString, FuleNATedPodTrafficMarkString),
 	}
 }
 
