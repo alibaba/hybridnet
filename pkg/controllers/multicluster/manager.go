@@ -85,5 +85,13 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, options Registe
 		return fmt.Errorf("unable to inject checker %s: %v", CheckerRemoteClusterStatus, err)
 	}
 
+	if err = (&GlobalServiceReconciler{
+		Context:               ctx,
+		Client:                mgr.GetClient(),
+		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerGlobalService]),
+	}).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to inject controller %s: %v", ControllerGlobalService, err)
+	}
+
 	return nil
 }

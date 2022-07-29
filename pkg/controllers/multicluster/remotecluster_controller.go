@@ -243,6 +243,17 @@ func (r *RemoteClusterReconciler) constructClusterManagerRuntime(remoteCluster *
 				return wrapError("unable to inject remote vtep reconciler", err)
 			}
 
+			// inject RemoteEndpointSliceReconciler
+			if err = (&RemoteEndpointSliceReconciler{
+				Context:             r.Context,
+				Client:              mgr.GetClient(),
+				ClusterName:         shadowRemoteCluster.Name,
+				ParentCluster:       r.LocalManager,
+				ParentClusterObject: shadowRemoteCluster,
+			}).SetupWithManager(mgr); err != nil {
+				return wrapError("unable to inject remote endpoint slice reconciler", err)
+			}
+
 			return nil
 		},
 	)

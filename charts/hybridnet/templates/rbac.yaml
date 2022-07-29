@@ -15,23 +15,13 @@ rules:
   - apiGroups:
       - "networking.alibaba.com"
     resources:
-      - networks
-      - networks/status
-      - subnets
-      - subnets/status
-      - ipinstances
-      - ipinstances/status
+      - "*"
     verbs:
       - "*"
   - apiGroups:
       - "multicluster.alibaba.com"
     resources:
-      - remoteclusters
-      - remoteclusters/status
-      - remotesubnets
-      - remotesubnets/status
-      - remotevteps
-      - remotevteps/status
+      - "*"
     verbs:
       - "*"
   - apiGroups:
@@ -99,9 +89,7 @@ rules:
     resources:
       - endpointslices
     verbs:
-      - get
-      - list
-      - watch
+      - "*"
   - apiGroups:
       - "coordination.k8s.io"
     resources:
