@@ -19,25 +19,25 @@ package main
 import (
 	"os"
 
-	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
+	zapinit "github.com/alibaba/hybridnet/pkg/zap"
 
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/alibaba/hybridnet/pkg/feature"
-
+	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/controller"
 	"github.com/alibaba/hybridnet/pkg/daemon/server"
+	"github.com/alibaba/hybridnet/pkg/feature"
 )
 
 var gitCommit string
 
 func main() {
-	log.SetLogger(zap.New(zap.UseDevMode(true)))
+	log.SetLogger(zapinit.NewZapLogger())
 
 	var entryLog = log.Log.WithName("entry")
 	entryLog.Info("starting hybridnet daemon",
