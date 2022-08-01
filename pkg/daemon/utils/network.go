@@ -269,12 +269,44 @@ func CheckPodNeighExist(podIP net.IP, forwardNodeIfIndex int, family int) (bool,
 	return false, nil
 }
 
-// AddRoute adds a universally-scoped route to a device with onlink flag.
+// AddRoute adds a universally-scoped route. If no direct route contains gw IP, add single route for gw.
 func AddRoute(ipn *net.IPNet, gw net.IP, dev netlink.Link) error {
+	ipFamily := netlink.FAMILY_V4
+	ipMask := net.CIDRMask(32, 32)
+	if gw.To4() == nil {
+		ipFamily = netlink.FAMILY_V6
+		ipMask = net.CIDRMask(128, 128)
+	}
+
+	routeList, err := netlink.RouteList(dev, ipFamily)
+	if err != nil {
+		return fmt.Errorf("failed to list route on dev %v: %v", dev.Attrs().Name, err)
+	}
+
+	containsGW := false
+	for _, route := range routeList {
+		if route.Dst != nil && route.Dst.Contains(gw) {
+			containsGW = true
+			break
+		}
+	}
+
+	if !containsGW {
+		if err := netlink.RouteAdd(&netlink.Route{
+			LinkIndex: dev.Attrs().Index,
+			Scope:     netlink.SCOPE_LINK,
+			Dst: &net.IPNet{
+				IP:   gw,
+				Mask: ipMask,
+			},
+		}); err != nil {
+			return fmt.Errorf("failed to add direct route for gw ip %v: %v", gw.String(), err)
+		}
+	}
+
 	return netlink.RouteAdd(&netlink.Route{
 		LinkIndex: dev.Attrs().Index,
 		Scope:     netlink.SCOPE_UNIVERSE,
-		Flags:     int(netlink.FLAG_ONLINK),
 		Dst:       ipn,
 		Gw:        gw,
 	})
