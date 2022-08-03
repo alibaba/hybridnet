@@ -23,17 +23,13 @@ import (
 	"strings"
 	"time"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	kubevirtv1 "kubevirt.io/api/core/v1"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/alibaba/hybridnet/pkg/feature"
-
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apitypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
+	kubevirtv1 "kubevirt.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -46,11 +42,13 @@ import (
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
+	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
 	"github.com/alibaba/hybridnet/pkg/ipam/types"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/metrics"
 	globalutils "github.com/alibaba/hybridnet/pkg/utils"
+	macutils "github.com/alibaba/hybridnet/pkg/utils/mac"
 	"github.com/alibaba/hybridnet/pkg/utils/transform"
 )
 
@@ -375,13 +373,18 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 		}
 
 		if len(ipPool[idx]) == 0 {
-			return fmt.Errorf("the %d assigned ip is empty in ip-pool %s", idx, pod.Annotations[constants.AnnotationIPPool])
+			return fmt.Errorf("the %d assigned ip section is empty in ip-pool %s", idx, pod.Annotations[constants.AnnotationIPPool])
 		}
 
 		for _, ipStr := range strings.Split(ipPool[idx], "/") {
+			normalizedIP := globalutils.NormalizedIP(ipStr)
+			if len(normalizedIP) == 0 {
+				return fmt.Errorf("the assigned ip %s is illegal", ipStr)
+			}
+
 			// pre assignment only have IP
 			ipCandidates = append(ipCandidates, ipCandidate{
-				ip: globalutils.NormalizedIP(ipStr),
+				ip: normalizedIP,
 			})
 		}
 		// pre assignment can force using reserved IPs
@@ -634,11 +637,17 @@ func parseSpecifiedMACAddressOption(pod *corev1.Pod) (mac ipamtypes.SpecifiedMAC
 	if idx >= len(macPool) {
 		return "", fmt.Errorf("unable to find assigned mac address in mac pool %s by index %d", pod.Annotations[constants.AnnotationMACPool], idx)
 	}
+
 	if len(macPool[idx]) == 0 {
 		return "", fmt.Errorf("the %d assigned mac address is empty in mac pool %s", idx, pod.Annotations[constants.AnnotationMACPool])
 	}
 
-	return ipamtypes.SpecifiedMACAddress(macPool[idx]), nil
+	normalizedMAC := macutils.NormalizeMAC(macPool[idx])
+	if len(normalizedMAC) == 0 {
+		return "", fmt.Errorf("the assigned mac address %s is illegal", macPool[idx])
+	}
+
+	return ipamtypes.SpecifiedMACAddress(normalizedMAC), nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
