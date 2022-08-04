@@ -25,15 +25,12 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
-	"github.com/alibaba/hybridnet/pkg/utils"
 	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
 )
 
@@ -55,6 +52,7 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 	if err != nil {
 		return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
 	}
+	pod.Namespace, pod.Name = req.Namespace, req.Name
 
 	// special mutation for host networking pods
 	if pod.Spec.HostNetwork {
@@ -73,73 +71,10 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		subnetNameStr  string
 		networkTypeStr string
 		ipFamilyStr    string
-
-		// elected will be true iff one networking config was assigned
-		elected = func() bool {
-			return len(networkNameStr) > 0 || len(subnetNameStr) > 0 || len(networkTypeStr) > 0 || len(ipFamilyStr) > 0
-		}
-
-		// fetchFromObject will fetch networking configs from k8s objects
-		fetchFromObject = func(obj client.Object) error {
-			var err error
-			if networkNameStr, subnetNameStr, err = webhookutils.SelectNetworkAndSubnetFromObject(ctx, handler.Cache, obj); err != nil {
-				return fmt.Errorf("unable to select network and subnet from object %s/%s/%s: %v",
-					obj.GetObjectKind().GroupVersionKind().String(), obj.GetNamespace(), obj.GetName(), err)
-			}
-			networkTypeStr = utils.PickFirstNonEmptyString(obj.GetAnnotations()[constants.AnnotationNetworkType],
-				obj.GetLabels()[constants.LabelNetworkType])
-			ipFamilyStr = obj.GetAnnotations()[constants.AnnotationIPFamily]
-			return nil
-		}
 	)
 
-	// priority level 1
-	// if stateful pods have allocated ips and no need to be reallocated, just
-	// reuse the existing network
-	if strategy.OwnByStatefulWorkload(pod) {
-		var shouldReuse = utils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], strategy.DefaultIPRetain)
-		if shouldReuse {
-			ipList := &networkingv1.IPInstanceList{}
-			if err = handler.Client.List(
-				ctx,
-				ipList,
-				client.InNamespace(pod.Namespace),
-				client.MatchingLabels{
-					constants.LabelPod: pod.Name,
-				}); err != nil {
-				return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
-			}
-
-			// ignore terminating ipInstance
-			for i := range ipList.Items {
-				if ipList.Items[i].DeletionTimestamp == nil {
-					networkNameStr = ipList.Items[i].Spec.Network
-					break
-				}
-			}
-		}
-	}
-
-	// priority level 2
-	// fetch networking configs from pod annotations/labels
-	if !elected() {
-		pod.Namespace, pod.Name = req.Namespace, req.Name
-		if err = fetchFromObject(pod); err != nil {
-			return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
-		}
-	}
-
-	// priority level 3
-	// fetch networking configs from namespace annotations/labels
-	if !elected() {
-		ns := &corev1.Namespace{}
-		if err = handler.Cache.Get(ctx, types.NamespacedName{Name: req.Namespace}, ns); err != nil {
-			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError,
-				fmt.Errorf("unable to get namespace of pod %s/%s: %v", req.Namespace, req.Name, err), logger)
-		}
-		if err = fetchFromObject(ns); err != nil {
-			return webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, err, logger)
-		}
+	if networkNameStr, subnetNameStr, networkTypeStr, ipFamilyStr, err = webhookutils.ParseNetworkConfigOfPodByPriority(ctx, handler.Cache, pod); err != nil {
+		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, fmt.Errorf("unable to parse network config for pod: %v", err), logger)
 	}
 
 	// parsing networking configs
@@ -168,6 +103,7 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 	patchAnnotationToPod(pod, constants.AnnotationSpecifiedSubnet, subnetNameStr)
 	patchAnnotationToPod(pod, constants.AnnotationNetworkType, string(networkType))
 	patchAnnotationToPod(pod, constants.AnnotationIPFamily, ipFamilyStr)
+	patchAnnotationToPod(pod, constants.AnnotationHandledByWebhook, "true")
 
 	switch networkType {
 	case ipamtypes.Underlay:

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -14,6 +15,7 @@ import (
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
@@ -99,4 +101,74 @@ func AdmissionErroredWithLog(code int32, err error, logger logr.Logger) admissio
 func AdmissionDeniedWithLog(reason string, logger logr.Logger) admission.Response {
 	logger.Info("admission denied", "reason", reason)
 	return admission.Denied(reason)
+}
+
+// ParseNetworkConfigOfPodByPriority will try to parse network-related configs for pod by priority as below,
+// 1. if pod was stateful allocated and no need to be reallocated, reusing the existing network
+// 2. if pod have labels or annotations which contain network config, use it all
+// 3. if namespace which pod locates on have labels or annotations which contain network config, use it all
+func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod *corev1.Pod) (networkNameStr, subnetNameStr, networkTypeStr, ipFamilyStr string, err error) {
+	var (
+		// elected will be true iff one networking config was assigned
+		elected = func() bool {
+			return len(networkNameStr) > 0 || len(subnetNameStr) > 0 || len(networkTypeStr) > 0 || len(ipFamilyStr) > 0
+		}
+
+		// fetchFromObject will fetch networking configs from k8s objects
+		fetchFromObject = func(obj client.Object) error {
+			if networkNameStr, subnetNameStr, err = SelectNetworkAndSubnetFromObject(ctx, c, obj); err != nil {
+				return fmt.Errorf("unable to select network and subnet from object %s/%s/%s: %v",
+					obj.GetObjectKind().GroupVersionKind().String(), obj.GetNamespace(), obj.GetName(), err)
+			}
+			networkTypeStr = utils.PickFirstNonEmptyString(obj.GetAnnotations()[constants.AnnotationNetworkType],
+				obj.GetLabels()[constants.LabelNetworkType])
+			ipFamilyStr = obj.GetAnnotations()[constants.AnnotationIPFamily]
+			return nil
+		}
+	)
+
+	// priority 1
+	if strategy.OwnByStatefulWorkload(pod) {
+		var shouldReuse = utils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], strategy.DefaultIPRetain)
+		if shouldReuse {
+			ipList := &networkingv1.IPInstanceList{}
+			if err = c.List(
+				ctx,
+				ipList,
+				client.InNamespace(pod.Namespace),
+				client.MatchingLabels{
+					constants.LabelPod: pod.Name,
+				}); err != nil {
+				return
+			}
+
+			// ignore terminating ipInstance
+			for i := range ipList.Items {
+				if ipList.Items[i].DeletionTimestamp == nil {
+					networkNameStr = ipList.Items[i].Spec.Network
+					break
+				}
+			}
+		}
+	}
+
+	// priority level 2
+	if !elected() {
+		if err = fetchFromObject(pod); err != nil {
+			return
+		}
+	}
+
+	// priority level 3
+	if !elected() {
+		ns := &corev1.Namespace{}
+		if err = c.Get(ctx, types.NamespacedName{Name: pod.Namespace}, ns); err != nil {
+			return
+		}
+		if err = fetchFromObject(ns); err != nil {
+			return
+		}
+	}
+
+	return
 }

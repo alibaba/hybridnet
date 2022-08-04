@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -282,4 +283,12 @@ func GetClusterUUID(ctx context.Context, c client.Reader) (types.UID, error) {
 		return "", err
 	}
 	return namespace.UID, nil
+}
+
+func CheckObjectExistence(ctx context.Context, c client.Reader, namespacedName types.NamespacedName, obj client.Object) (bool, error) {
+	err := c.Get(ctx, namespacedName, obj)
+	if errors.IsNotFound(err) {
+		return false, nil
+	}
+	return err == nil, err
 }

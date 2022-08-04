@@ -23,8 +23,6 @@ import (
 	"strings"
 
 	"github.com/alibaba/hybridnet/pkg/utils"
-
-	"github.com/alibaba/hybridnet/pkg/ipam/types"
 )
 
 var (
@@ -37,21 +35,6 @@ func ToIPFormat(name string) string {
 		return net.ParseIP(strings.ReplaceAll(name, "-", ":")).String()
 	}
 	return strings.ReplaceAll(name, "-", ".")
-}
-
-func ToIPFormatWithFamily(name string) (string, bool) {
-	const IPv6SeparatorCount = 7
-	if isIPv6 := strings.Count(name, "-") == IPv6SeparatorCount; isIPv6 {
-		return net.ParseIP(strings.ReplaceAll(name, "-", ":")).String(), true
-	}
-	return strings.ReplaceAll(name, "-", "."), false
-}
-
-func ToIPFamilyMode(isIPv6 bool) types.IPFamilyMode {
-	if isIPv6 {
-		return types.IPv6
-	}
-	return types.IPv4
 }
 
 func GetIndexFromName(name string) int {
