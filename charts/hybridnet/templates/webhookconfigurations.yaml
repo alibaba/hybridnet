@@ -33,7 +33,7 @@ webhooks:
         namespace: kube-system
         port: 443
         path: "/validate"
-    failurePolicy: Fail
+    failurePolicy: Ignore
     matchPolicy: Equivalent
     name: core-v1.validating.hybridnet
     objectSelector:
@@ -64,7 +64,7 @@ webhooks:
         namespace: kube-system
         port: 443
         path: "/mutate"
-    failurePolicy: Fail
+    failurePolicy: Ignore
     matchPolicy: Equivalent
     name: core-v1.mutating.hybridnet
     objectSelector:
