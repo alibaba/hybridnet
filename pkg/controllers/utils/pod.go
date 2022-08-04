@@ -16,7 +16,11 @@
 
 package utils
 
-import v1 "k8s.io/api/core/v1"
+import (
+	v1 "k8s.io/api/core/v1"
+
+	"github.com/alibaba/hybridnet/pkg/webhook/utils"
+)
 
 func PodIsEvicted(pod *v1.Pod) bool {
 	return pod.Status.Phase == v1.PodFailed && pod.Status.Reason == "Evicted"
@@ -42,3 +46,5 @@ func PodIsCompleted(pod *v1.Pod) bool {
 
 	return pod.Status.Phase == v1.PodSucceeded && unknownContainerCount == 0
 }
+
+var ParseNetworkConfigOfPodByPriority = utils.ParseNetworkConfigOfPodByPriority

@@ -34,4 +34,6 @@ const (
 	AnnotationNodeVtepIP           = "networking.alibaba.com/vtep-ip"
 	AnnotationNodeVtepMac          = "networking.alibaba.com/vtep-mac"
 	AnnotationNodeLocalVxlanIPList = "networking.alibaba.com/local-vxlan-ip-list"
+
+	AnnotationHandledByWebhook = "networking.alibaba.com/handled-by-webhook"
 )

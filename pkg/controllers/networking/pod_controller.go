@@ -171,11 +171,21 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		return ctrl.Result{}, wrapError("unable to decouple pod", r.decouple(ctx, pod))
 	}
 
+	var handledByWebhook = globalutils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationHandledByWebhook], false)
+
+	ipFamily := ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
+	if !handledByWebhook {
+		switch ipFamily {
+		case ipamtypes.IPv4, ipamtypes.IPv6, ipamtypes.DualStack:
+		default:
+			// pod with illegal ip family can be created if webhook is down
+			return ctrl.Result{}, fmt.Errorf("illegal ip family %s, should check webhook liveness", ipFamily)
+		}
+	}
+
 	cacheExist, uid, ipInstanceList := r.PodIPCache.Get(pod.Name, pod.Namespace)
 	// To avoid IP duplicate allocation
 	if cacheExist && uid == pod.UID {
-		ipFamily := ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
-
 		if (len(ipInstanceList) == 1 && (ipFamily == ipamtypes.IPv4 || ipFamily == ipamtypes.IPv6)) ||
 			(len(ipInstanceList) == 2 && ipFamily == ipamtypes.DualStack) {
 			return ctrl.Result{}, nil
@@ -187,7 +197,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		}
 	}
 
-	networkName, err = r.selectNetwork(ctx, pod)
+	networkName, err = r.selectNetwork(ctx, pod, handledByWebhook)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to select network: %v", err)
 	}
@@ -233,53 +243,114 @@ func (r *PodReconciler) reserve(ctx context.Context, pod *corev1.Pod, reserveOpt
 // selectNetwork will pick the hit network by pod, taking the priority as below
 // 1. explicitly specify network in pod annotations/labels
 // 2. parse network type from pod and select a corresponding network binding on node
-func (r *PodReconciler) selectNetwork(ctx context.Context, pod *corev1.Pod) (string, error) {
+func (r *PodReconciler) selectNetwork(ctx context.Context, pod *corev1.Pod, handledByWebhook bool) (string, error) {
+	var (
+		networkStrFromWebhook     string
+		networkTypeStrFromWebhook string
+		err                       error
+	)
+
+	// parse network and network-type in the webhook way
+	if !handledByWebhook {
+		if networkStrFromWebhook, _, networkTypeStrFromWebhook, _, err = utils.ParseNetworkConfigOfPodByPriority(ctx, r, pod); err != nil {
+			return "", fmt.Errorf("unable to parse network config of pod: %v", err)
+		}
+	}
+
 	var specifiedNetwork string
 	if specifiedNetwork = globalutils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedNetwork], pod.Labels[constants.LabelSpecifiedNetwork]); len(specifiedNetwork) > 0 {
+		if !handledByWebhook {
+			// check network selection conflict
+			if len(networkStrFromWebhook) > 0 && networkStrFromWebhook != specifiedNetwork {
+				return "", fmt.Errorf("different specified network between controller(%s) and webhook(%s), should check webhook liveness", specifiedNetwork, networkStrFromWebhook)
+			}
+
+			// check network existence
+			var (
+				v1Network = &networkingv1.Network{}
+				exist     bool
+			)
+			if exist, err = utils.CheckObjectExistence(ctx, r, apitypes.NamespacedName{Name: specifiedNetwork}, v1Network); err != nil {
+				return "", fmt.Errorf("fail to check network existence: %v", err)
+			}
+			if !exist {
+				return "", fmt.Errorf("specified network %s not found, should check webhook liveness", specifiedNetwork)
+			}
+
+			// check network and network-type conflict
+			if len(networkTypeStrFromWebhook) > 0 && networkTypeStrFromWebhook != string(v1Network.Spec.Type) {
+				return "", fmt.Errorf("specified network(%s) mismatch specified network type(%s), should check webhook liveness", specifiedNetwork, networkTypeStrFromWebhook)
+			}
+		}
+
 		return specifiedNetwork, nil
 	}
 
 	var networkType = types.ParseNetworkTypeFromString(globalutils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType]))
+
+	if !handledByWebhook {
+		// check network-type conflict
+		if len(networkTypeStrFromWebhook) > 0 && networkTypeStrFromWebhook != string(networkType) {
+			return "", fmt.Errorf("different network type between controller(%s) and webhook(%s), should check webhook liveness", networkType, networkTypeStrFromWebhook)
+		}
+	}
+
+	var selectedNetworkName string
 	switch networkType {
 	case types.Underlay:
 		// try to get underlay network by node name
-		underlayNetworkName, err := r.getNetworkByNodeNameIndexer(ctx, pod.Spec.NodeName)
+		selectedNetworkName, err = r.getNetworkByNodeNameIndexer(ctx, pod.Spec.NodeName)
 		if err != nil {
 			return "", fmt.Errorf("unable to get underlay network by node name indexer: %v", err)
 		}
 
-		if len(underlayNetworkName) == 0 {
-			return "", fmt.Errorf("unable to find underlay network for node %s", pod.Spec.NodeName)
+		if len(selectedNetworkName) == 0 {
+			return "", fmt.Errorf("unable to find underlay network for node %s, should check webhook liveness", pod.Spec.NodeName)
 		}
-
-		return underlayNetworkName, nil
 	case types.Overlay:
 		// try to get overlay network by special node name
-		overlayNetworkName, err := r.getNetworkByNodeNameIndexer(ctx, OverlayNodeName)
+		selectedNetworkName, err = r.getNetworkByNodeNameIndexer(ctx, OverlayNodeName)
 		if err != nil {
 			return "", fmt.Errorf("unable to get overlay network by node name indexer: %v", err)
 		}
 
-		if len(overlayNetworkName) == 0 {
+		if len(selectedNetworkName) == 0 {
 			return "", fmt.Errorf("unable to find overlay network")
 		}
-
-		return overlayNetworkName, nil
 	case types.GlobalBGP:
 		// try to get global bgp network by special node name
-		globalBGPNetworkName, err := r.getNetworkByNodeNameIndexer(ctx, GlobalBGPNodeName)
+		selectedNetworkName, err = r.getNetworkByNodeNameIndexer(ctx, GlobalBGPNodeName)
 		if err != nil {
 			return "", fmt.Errorf("unable to get overlay network by node name indexer: %v", err)
 		}
 
-		if len(globalBGPNetworkName) == 0 {
+		if len(selectedNetworkName) == 0 {
 			return "", fmt.Errorf("unable to find global bgp network")
 		}
 
-		return globalBGPNetworkName, nil
+		if !handledByWebhook {
+			// check bgp attachment of node
+			var node = &corev1.Node{}
+			if err = r.Get(ctx, apitypes.NamespacedName{Name: pod.Spec.NodeName}, node); err != nil {
+				return "", fmt.Errorf("unalbe to get node %s: %v", pod.Spec.NodeName, err)
+			}
+			if _, attached := node.Labels[constants.LabelBGPNetworkAttachment]; !attached {
+				return "", fmt.Errorf("node %s has not attached bgp network, should check webhook liveness", pod.Spec.NodeName)
+			}
+		}
+
 	default:
 		return "", fmt.Errorf("unknown network type %s from pod", networkType)
 	}
+
+	if !handledByWebhook {
+		// check network selection conflict
+		if len(networkStrFromWebhook) > 0 && networkStrFromWebhook != selectedNetworkName {
+			return "", fmt.Errorf("different network selection between controller(%s) and webhook(%s), should check webhook liveness", selectedNetworkName, networkStrFromWebhook)
+		}
+	}
+
+	return selectedNetworkName, nil
 }
 
 func (r *PodReconciler) getNetworkByNodeNameIndexer(ctx context.Context, nodeName string) (string, error) {
