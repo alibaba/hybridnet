@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 
@@ -199,6 +201,16 @@ func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod
 		if err = fetchFromObject(ns); err != nil {
 			return
 		}
+	}
+
+	if !ipamtypes.IsValidFamilyMode(ipamtypes.ParseIPFamilyFromString(ipFamilyStr)) {
+		err = fmt.Errorf("unrecognized ip family %s", ipFamilyStr)
+		return
+	}
+
+	if !ipamtypes.IsValidNetworkType(ipamtypes.ParseNetworkTypeFromString(networkTypeStr)) {
+		err = fmt.Errorf("unrecognized network type %s", networkTypeStr)
+		return
 	}
 
 	return

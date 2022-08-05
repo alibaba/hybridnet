@@ -120,7 +120,8 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		}
 		// quota label selector to make sure pod will be scheduled on nodes
 		// where capacity of network is enough
-		switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
+		ipFamily := ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
+		switch ipFamily {
 		case ipamtypes.IPv4:
 			patchSelectorToPod(pod, map[string]string{
 				constants.LabelIPv4AddressQuota: constants.QuotaNonEmpty,
@@ -133,6 +134,8 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 			patchSelectorToPod(pod, map[string]string{
 				constants.LabelDualStackAddressQuota: constants.QuotaNonEmpty,
 			})
+		default:
+			webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, fmt.Errorf("unknown ip family %s", ipFamily), logger)
 		}
 	case ipamtypes.Overlay:
 		logger.Info("patch pod with overlay attachment selector",

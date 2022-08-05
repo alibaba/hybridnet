@@ -117,6 +117,12 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 		ipFamily = ipamtypes.ParseIPFamilyFromString(ipFamilyStr)
 	}
 
+	if !ipamtypes.IsValidFamilyMode(ipFamily) {
+		errMsg := fmt.Errorf("invalid pod ip family %v", ipFamily)
+		cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
+		return
+	}
+
 	for i := 0; i < retries; i++ {
 		time.Sleep(backOffBase)
 		backOffBase = backOffBase * 2
