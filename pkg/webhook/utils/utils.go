@@ -110,16 +110,21 @@ func AdmissionDeniedWithLog(reason string, logger logr.Logger) admission.Respons
 // 1. if pod was stateful allocated and no need to be reallocated, reusing the existing network
 // 2. if pod have labels or annotations which contain network config, use it all
 // 3. if namespace which pod locates on have labels or annotations which contain network config, use it all
-func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod *corev1.Pod) (networkNameStr, subnetNameStr, networkTypeStr, ipFamilyStr string, err error) {
+func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod *corev1.Pod) (
+	networkName, subnetNameStr string, networkType ipamtypes.NetworkType,
+	ipFamily ipamtypes.IPFamilyMode, networkNodeSelector map[string]string, err error) {
 	var (
+		// these two variable is needed, them could be empty after a election
+		networkTypeStr, ipFamilyStr string
+
 		// elected will be true iff one networking config was assigned
 		elected = func() bool {
-			return len(networkNameStr) > 0 || len(subnetNameStr) > 0 || len(networkTypeStr) > 0 || len(ipFamilyStr) > 0
+			return len(networkName) > 0 || len(subnetNameStr) > 0 || len(networkTypeStr) > 0 || len(ipFamilyStr) > 0
 		}
 
 		// fetchFromObject will fetch networking configs from k8s objects
 		fetchFromObject = func(obj client.Object) error {
-			if networkNameStr, subnetNameStr, err = SelectNetworkAndSubnetFromObject(ctx, c, obj); err != nil {
+			if networkName, subnetNameStr, err = SelectNetworkAndSubnetFromObject(ctx, c, obj); err != nil {
 				return fmt.Errorf("unable to select network and subnet from object %s/%s/%s: %v",
 					obj.GetObjectKind().GroupVersionKind().String(), obj.GetNamespace(), obj.GetName(), err)
 			}
@@ -134,24 +139,11 @@ func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod
 	if strategy.OwnByStatefulWorkload(pod) {
 		var shouldReuse = utils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationIPRetain], strategy.DefaultIPRetain)
 		if shouldReuse {
-			ipList := &networkingv1.IPInstanceList{}
-			if err = c.List(
-				ctx,
-				ipList,
-				client.InNamespace(pod.Namespace),
+			// if networkName is not empty, elected will be true
+			networkName, ipFamily, err = parseNetworkConfigByExistIPInstances(ctx, c, client.InNamespace(pod.Namespace),
 				client.MatchingLabels{
 					constants.LabelPod: pod.Name,
-				}); err != nil {
-				return
-			}
-
-			// ignore terminating ipInstance
-			for i := range ipList.Items {
-				if ipList.Items[i].DeletionTimestamp == nil {
-					networkNameStr = ipList.Items[i].Spec.Network
-					break
-				}
-			}
+				})
 		}
 	} else if feature.VMIPRetainEnabled() {
 		var isVMPod bool
@@ -161,27 +153,12 @@ func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod
 			err = fmt.Errorf("unable to check if pod %v/%v is for VM: %v", pod.Namespace, pod.Name, err)
 			return
 		}
-
 		if isVMPod {
-			ipList := &networkingv1.IPInstanceList{}
-			if err = c.List(
-				ctx,
-				ipList,
-				client.InNamespace(pod.Namespace),
+			// if networkName is not empty, elected will be true
+			networkName, ipFamily, err = parseNetworkConfigByExistIPInstances(ctx, c, client.InNamespace(pod.Namespace),
 				client.MatchingLabels{
 					constants.LabelVM: vmName,
-				}); err != nil {
-				err = fmt.Errorf("failed to list allocated ip instances for vm %v: %v", vmName, err)
-				return
-			}
-
-			// ignore terminating ipInstance
-			for i := range ipList.Items {
-				if ipList.Items[i].DeletionTimestamp == nil {
-					networkNameStr = ipList.Items[i].Spec.Network
-					break
-				}
-			}
+				})
 		}
 	}
 
@@ -203,13 +180,67 @@ func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod
 		}
 	}
 
-	if !ipamtypes.IsValidFamilyMode(ipamtypes.ParseIPFamilyFromString(ipFamilyStr)) {
-		err = fmt.Errorf("unrecognized ip family %s", ipFamilyStr)
+	networkType = ipamtypes.ParseNetworkTypeFromString(networkTypeStr)
+	if len(ipFamily) == 0 {
+		ipFamily = ipamtypes.ParseIPFamilyFromString(ipFamilyStr)
+	}
+
+	if len(networkName) > 0 {
+		network := &networkingv1.Network{}
+		if err = c.Get(ctx, types.NamespacedName{Name: networkName}, network); err != nil {
+			err = fmt.Errorf("failed to get network %v: %v", networkName, err)
+			return
+		}
+
+		// specified network takes higher priority than network type defaulting, if no network type specified
+		// from pod, then network type should inherit from network type of specified network from pod
+		if len(networkTypeStr) == 0 {
+			networkType = ipamtypes.ParseNetworkTypeFromString(string(networkingv1.GetNetworkType(network)))
+		}
+
+		networkNodeSelector = network.Spec.NodeSelector
+	}
+
+	if !ipamtypes.IsValidFamilyMode(ipFamily) {
+		err = fmt.Errorf("unrecognized ip family %s", ipFamily)
 		return
 	}
 
-	if !ipamtypes.IsValidNetworkType(ipamtypes.ParseNetworkTypeFromString(networkTypeStr)) {
-		err = fmt.Errorf("unrecognized network type %s", networkTypeStr)
+	if !ipamtypes.IsValidNetworkType(networkType) {
+		err = fmt.Errorf("unrecognized network type %s", networkType)
+		return
+	}
+
+	return
+}
+
+func parseNetworkConfigByExistIPInstances(ctx context.Context, c client.Reader, opts ...client.ListOption) (networkName string,
+	ipFamily ipamtypes.IPFamilyMode, err error) {
+	ipList := &networkingv1.IPInstanceList{}
+	if err = c.List(ctx, ipList, opts...); err != nil {
+		return
+	}
+
+	ipFamilyCounter := 0
+	for i := range ipList.Items {
+		// ignore terminating ipInstance
+		if ipList.Items[i].DeletionTimestamp == nil {
+			networkName = ipList.Items[i].Spec.Network
+			ipFamilyCounter++
+		}
+	}
+
+	switch ipFamilyCounter {
+	case 1:
+		if networkingv1.IsIPv6IPInstance(&ipList.Items[0]) {
+			ipFamily = ipamtypes.IPv6
+		} else {
+			ipFamily = ipamtypes.IPv4
+		}
+	case 2:
+		ipFamily = ipamtypes.DualStack
+	default:
+		err = fmt.Errorf("more than two reserve ip exist for list options %v", opts)
 		return
 	}
 
