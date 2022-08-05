@@ -23,30 +23,25 @@ import (
 	"net/http"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/util/retry"
-
-	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
-
-	"github.com/alibaba/hybridnet/pkg/daemon/utils"
-
-	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
-
+	"github.com/emicklei/go-restful"
 	"github.com/go-logr/logr"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
 	"github.com/alibaba/hybridnet/pkg/daemon/controller"
+	"github.com/alibaba/hybridnet/pkg/daemon/utils"
+	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	"github.com/alibaba/hybridnet/pkg/request"
-
-	"github.com/emicklei/go-restful"
+	globalutils "github.com/alibaba/hybridnet/pkg/utils"
+	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
 )
 
 type cniDaemonHandler struct {
@@ -110,6 +105,17 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	backOffBase := 5 * time.Microsecond
 	retries := 11
 	ipFamily := ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
+	handledByWebhook := globalutils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationHandledByWebhook], false)
+
+	if !handledByWebhook {
+		_, _, _, ipFamilyStr, err := webhookutils.ParseNetworkConfigOfPodByPriority(context.TODO(), cdh.mgrAPIReader, pod)
+		if err != nil {
+			errMsg := fmt.Errorf("failed to parse network config of pod %v: %v", pod.Name, err)
+			cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
+			return
+		}
+		ipFamily = ipamtypes.ParseIPFamilyFromString(ipFamilyStr)
+	}
 
 	for i := 0; i < retries; i++ {
 		time.Sleep(backOffBase)
