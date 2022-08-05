@@ -82,7 +82,7 @@ spec:
           command:
             - /hybridnet/hybridnet-webhook
             - --default-ip-retain={{ .Values.defaultIPRetain }}
-            - --feature-gates=MultiCluster={{ .Values.multiCluster }}
+            - --feature-gates=MultiCluster={{ .Values.multiCluster }},VMIPRetain={{ .Values.vmIPRetain }}
           args:
             - --port=9898
           env:

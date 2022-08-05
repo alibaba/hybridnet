@@ -15,6 +15,7 @@ import (
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/feature"
 	"github.com/alibaba/hybridnet/pkg/ipam/strategy"
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
@@ -139,6 +140,36 @@ func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod
 				client.MatchingLabels{
 					constants.LabelPod: pod.Name,
 				}); err != nil {
+				return
+			}
+
+			// ignore terminating ipInstance
+			for i := range ipList.Items {
+				if ipList.Items[i].DeletionTimestamp == nil {
+					networkNameStr = ipList.Items[i].Spec.Network
+					break
+				}
+			}
+		}
+	} else if feature.VMIPRetainEnabled() {
+		var isVMPod bool
+		var vmName string
+		isVMPod, vmName, _, err = strategy.OwnByVirtualMachine(ctx, pod, c)
+		if err != nil {
+			err = fmt.Errorf("unable to check if pod %v/%v is for VM: %v", pod.Namespace, pod.Name, err)
+			return
+		}
+
+		if isVMPod {
+			ipList := &networkingv1.IPInstanceList{}
+			if err = c.List(
+				ctx,
+				ipList,
+				client.InNamespace(pod.Namespace),
+				client.MatchingLabels{
+					constants.LabelVM: vmName,
+				}); err != nil {
+				err = fmt.Errorf("failed to list allocated ip instances for vm %v: %v", vmName, err)
 				return
 			}
 

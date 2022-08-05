@@ -20,6 +20,8 @@ import (
 	"flag"
 	"os"
 
+	kubevirtv1 "kubevirt.io/api/core/v1"
+
 	"github.com/spf13/pflag"
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
@@ -52,6 +54,7 @@ func init() {
 	_ = multiclusterv1.AddToScheme(scheme)
 	_ = admissionv1beta1.AddToScheme(scheme)
 	_ = admissionv1.AddToScheme(scheme)
+	_ = kubevirtv1.AddToScheme(scheme)
 }
 
 func main() {
