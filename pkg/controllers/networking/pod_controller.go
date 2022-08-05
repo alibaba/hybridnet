@@ -183,18 +183,10 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		}
 	}
 
-	cacheExist, uid, ipInstanceList := r.PodIPCache.Get(pod.Name, pod.Namespace)
+	cacheExist, uid, _ := r.PodIPCache.Get(pod.Name, pod.Namespace)
 	// To avoid IP duplicate allocation
 	if cacheExist && uid == pod.UID {
-		if (len(ipInstanceList) == 1 && (ipFamily == ipamtypes.IPv4 || ipFamily == ipamtypes.IPv6)) ||
-			(len(ipInstanceList) == 2 && ipFamily == ipamtypes.DualStack) {
-			return ctrl.Result{}, nil
-		}
-
-		if len(ipInstanceList) > 0 {
-			return ctrl.Result{}, fmt.Errorf("duplicated ip instances exist for pod: %v/%v, pod ip family is %v",
-				pod.Namespace, pod.Name, ipFamily)
-		}
+		return ctrl.Result{}, nil
 	}
 
 	networkName, err = r.selectNetwork(ctx, pod, handledByWebhook)
