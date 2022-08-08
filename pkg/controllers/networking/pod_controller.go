@@ -251,15 +251,14 @@ func (r *PodReconciler) reserve(ctx context.Context, pod *corev1.Pod, reserveOpt
 func (r *PodReconciler) selectNetwork(ctx context.Context, pod *corev1.Pod, handledByWebhook bool,
 	networkStrFromWebhook string, networkTypeFromWebhook types.NetworkType) (string, error) {
 	var specifiedNetwork string
+	var networkType types.NetworkType
 	var err error
-	if specifiedNetwork = globalutils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedNetwork], pod.Labels[constants.LabelSpecifiedNetwork]); len(specifiedNetwork) > 0 {
-		if !handledByWebhook {
-			// check network selection conflict
-			if len(networkStrFromWebhook) > 0 && networkStrFromWebhook != specifiedNetwork {
-				return "", fmt.Errorf("different specified network between controller(%s) and webhook(%s), "+
-					"should check webhook liveness", specifiedNetwork, networkStrFromWebhook)
-			}
 
+	if !handledByWebhook {
+		specifiedNetwork = networkStrFromWebhook
+		networkType = networkTypeFromWebhook
+
+		if len(specifiedNetwork) != 0 {
 			// check network existence
 			var (
 				v1Network = &networkingv1.Network{}
@@ -271,26 +270,17 @@ func (r *PodReconciler) selectNetwork(ctx context.Context, pod *corev1.Pod, hand
 			if !exist {
 				return "", fmt.Errorf("specified network %s not found, should check webhook liveness", specifiedNetwork)
 			}
-
-			// check network and network-type conflict
-			if string(networkTypeFromWebhook) != string(v1Network.Spec.Type) {
-				return "", fmt.Errorf("specified network(%s) mismatch specified network type(%s), "+
-					"should check webhook liveness", specifiedNetwork, networkTypeFromWebhook)
-			}
 		}
 
+		// Should not return here, because wehook is missing and we need to make sure the pod
+		// is scheduled to a node that matches the specified Network.
+	} else if specifiedNetwork = globalutils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedNetwork],
+		pod.Labels[constants.LabelSpecifiedNetwork]); len(specifiedNetwork) > 0 {
 		return specifiedNetwork, nil
-	}
-
-	var networkType = types.ParseNetworkTypeFromString(globalutils.PickFirstNonEmptyString(
-		pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType]))
-
-	if !handledByWebhook {
-		// check network-type conflict
-		if networkTypeFromWebhook != networkType {
-			return "", fmt.Errorf("different network type between controller(%s) and webhook(%s), "+
-				"should check webhook liveness", networkType, networkTypeFromWebhook)
-		}
+	} else {
+		// Webhook is working, and no specified network for pod is found.
+		networkType = types.ParseNetworkTypeFromString(globalutils.PickFirstNonEmptyString(
+			pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType]))
 	}
 
 	var selectedNetworkName string
@@ -343,7 +333,7 @@ func (r *PodReconciler) selectNetwork(ctx context.Context, pod *corev1.Pod, hand
 
 	if !handledByWebhook {
 		// check network selection conflict
-		if len(networkStrFromWebhook) > 0 && networkStrFromWebhook != selectedNetworkName {
+		if len(specifiedNetwork) > 0 && specifiedNetwork != selectedNetworkName {
 			return "", fmt.Errorf("different network selection between controller(%s) and webhook(%s), should check webhook liveness", selectedNetworkName, networkStrFromWebhook)
 		}
 	}
