@@ -173,6 +173,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 
 	var (
 		networkStrFromWebhook  string
+		subnetStrFromWebhook   string
 		networkTypeFromWebhook types.NetworkType
 		ipFamilyFromWebhook    types.IPFamilyMode
 		ipFamily               types.IPFamilyMode
@@ -209,20 +210,21 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	if strategy.OwnByStatefulWorkload(pod) {
 		log.V(1).Info("strategic allocation for stateful pod")
 		return ctrl.Result{}, wrapError("unable to stateful allocate",
-			r.statefulAllocate(ctx, pod, networkName, ipFamily))
+			r.statefulAllocate(ctx, pod, networkName, subnetStrFromWebhook, handledByWebhook, ipFamily))
 	}
 
 	if feature.VMIPRetainEnabled() {
 		if isVMPod, vmName, vmiOwnerReference, err := strategy.OwnByVirtualMachine(ctx, pod, r.APIReader); isVMPod {
 			log.V(1).Info("strategic allocation for VM pod")
 			return ctrl.Result{}, wrapError("unable to vm allocate",
-				r.vmAllocate(ctx, pod, vmName, networkName, vmiOwnerReference, ipFamily))
+				r.vmAllocate(ctx, pod, vmName, networkName, subnetStrFromWebhook, handledByWebhook, vmiOwnerReference, ipFamily))
 		} else if err != nil {
 			return ctrl.Result{}, fmt.Errorf("unable to check if pod %v/%v is for VM: %v", pod.Namespace, pod.Name, err)
 		}
 	}
 
-	return ctrl.Result{}, wrapError("unable to allocate", r.allocate(ctx, pod, networkName, ipFamily))
+	return ctrl.Result{}, wrapError("unable to allocate", r.allocate(ctx, pod, networkName,
+		subnetStrFromWebhook, ipFamily, handledByWebhook))
 }
 
 // decouple will unbind IP instance with Pod
@@ -357,8 +359,8 @@ func (r *PodReconciler) getNetworkByNodeNameIndexer(ctx context.Context, nodeNam
 
 // statefulAllocate means an allocation on a stateful pod, including some
 // special features, ip retain, ip reuse or ip assignment
-func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, networkName string,
-	ipFamily types.IPFamilyMode) (err error) {
+func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, networkName, subnetStrFromWebhook string,
+	handledByWebhook bool, ipFamily types.IPFamilyMode) (err error) {
 	var (
 		shouldObserve = true
 		startTime     = time.Now()
@@ -417,7 +419,8 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 			}
 		}
 
-		return wrapError("unable to reallocate", r.allocate(ctx, pod, networkName, ipFamily, specifiedMACAddr))
+		return wrapError("unable to reallocate", r.allocate(ctx, pod, networkName,
+			subnetStrFromWebhook, ipFamily, handledByWebhook, specifiedMACAddr))
 	}
 
 	var (
@@ -470,7 +473,8 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 		if len(ipCandidates) == 0 {
 			// allocate has its own observation process, so just skip
 			shouldObserve = false
-			return wrapError("unable to allocate", r.allocate(ctx, pod, networkName, ipFamily, specifiedMACAddr))
+			return wrapError("unable to allocate", r.allocate(ctx, pod, networkName, subnetStrFromWebhook,
+				ipFamily, handledByWebhook, specifiedMACAddr))
 		}
 	}
 
@@ -479,8 +483,8 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 		ipFamily, specifiedMACAddr))
 }
 
-func (r *PodReconciler) vmAllocate(ctx context.Context, pod *corev1.Pod, vmName, networkName string,
-	vmiOwnerReference *metav1.OwnerReference, ipFamily types.IPFamilyMode) (err error) {
+func (r *PodReconciler) vmAllocate(ctx context.Context, pod *corev1.Pod, vmName, networkName, subnetStrFromWebhook string,
+	handledByWebhook bool, vmiOwnerReference *metav1.OwnerReference, ipFamily types.IPFamilyMode) (err error) {
 	if err = r.addFinalizer(ctx, pod); err != nil {
 		return wrapError("unable to add finalizer for stateful pod", err)
 	}
@@ -510,8 +514,8 @@ func (r *PodReconciler) vmAllocate(ctx context.Context, pod *corev1.Pod, vmName,
 
 	// when no valid ip found, it means that this is the first time of pod creation
 	if len(ipCandidates) == 0 {
-		return wrapError("unable to allocate", r.allocate(ctx, pod, networkName, ipFamily,
-			types.AdditionalLabels(vmLabels), types.OwnerReference(*vmiOwnerReference)))
+		return wrapError("unable to allocate", r.allocate(ctx, pod, networkName, subnetStrFromWebhook, ipFamily,
+			handledByWebhook, types.AdditionalLabels(vmLabels), types.OwnerReference(*vmiOwnerReference)))
 	}
 
 	// forced assign for using reserved ips
@@ -568,8 +572,8 @@ func (r *PodReconciler) release(ctx context.Context, pod *corev1.Pod, allocatedI
 }
 
 // allocate will allocate new IPs for pod
-func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkName string, ipFamily types.IPFamilyMode,
-	coupleOptions ...types.CoupleOption) (err error) {
+func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkName, subnetStrFromWebhook string,
+	ipFamily types.IPFamilyMode, handledByWebhook bool, coupleOptions ...types.CoupleOption) (err error) {
 	var startTime = time.Now()
 	defer func() {
 		metrics.IPAllocationPeriodSummary.
@@ -578,10 +582,19 @@ func (r *PodReconciler) allocate(ctx context.Context, pod *corev1.Pod, networkNa
 	}()
 
 	var (
+		subnetNameStr        string
 		specifiedSubnetNames []string
 		allocatedIPs         []*types.IP
 	)
-	if subnetNameStr := globalutils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedSubnet], pod.Labels[constants.LabelSpecifiedSubnet]); len(subnetNameStr) > 0 {
+
+	if !handledByWebhook {
+		subnetNameStr = subnetStrFromWebhook
+	} else {
+		subnetNameStr = globalutils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationSpecifiedSubnet],
+			pod.Labels[constants.LabelSpecifiedSubnet])
+	}
+
+	if len(subnetNameStr) > 0 {
 		specifiedSubnetNames = strings.Split(subnetNameStr, "/")
 	}
 
