@@ -198,6 +198,11 @@ func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod
 			networkType = ipamtypes.ParseNetworkTypeFromString(string(networkingv1.GetNetworkType(network)))
 		}
 
+		if string(networkType) != string(networkingv1.GetNetworkType(network)) {
+			err = fmt.Errorf("specified network %v does not match network type %v", networkName, networkType)
+			return
+		}
+
 		networkNodeSelector = network.Spec.NodeSelector
 	}
 
@@ -221,18 +226,18 @@ func parseNetworkConfigByExistIPInstances(ctx context.Context, c client.Reader, 
 		return
 	}
 
-	ipFamilyCounter := 0
+	var validIPList []networkingv1.IPInstance
 	for i := range ipList.Items {
 		// ignore terminating ipInstance
 		if ipList.Items[i].DeletionTimestamp == nil {
 			networkName = ipList.Items[i].Spec.Network
-			ipFamilyCounter++
+			validIPList = append(validIPList, ipList.Items[i])
 		}
 	}
 
-	switch ipFamilyCounter {
+	switch len(validIPList) {
 	case 1:
-		if networkingv1.IsIPv6IPInstance(&ipList.Items[0]) {
+		if networkingv1.IsIPv6IPInstance(&validIPList[0]) {
 			ipFamily = ipamtypes.IPv6
 		} else {
 			ipFamily = ipamtypes.IPv4

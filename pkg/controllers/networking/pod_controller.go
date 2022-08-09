@@ -175,7 +175,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		networkStrFromWebhook  string
 		subnetStrFromWebhook   string
 		networkTypeFromWebhook types.NetworkType
-		ipFamilyFromWebhook    types.IPFamilyMode
 		ipFamily               types.IPFamilyMode
 	)
 
@@ -183,14 +182,8 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	// parse network and network-type in the webhook way
 	if !handledByWebhook {
 		if networkStrFromWebhook, _, networkTypeFromWebhook,
-			ipFamilyFromWebhook, _, err = utils.ParseNetworkConfigOfPodByPriority(ctx, r, pod); err != nil {
+			ipFamily, _, err = utils.ParseNetworkConfigOfPodByPriority(ctx, r, pod); err != nil {
 			return ctrl.Result{}, fmt.Errorf("unable to parse network config of pod: %v", err)
-		}
-
-		ipFamily = ipFamilyFromWebhook
-		if !ipamtypes.IsValidFamilyMode(ipFamily) {
-			// pod with illegal ip family can be created if webhook is down
-			return ctrl.Result{}, fmt.Errorf("illegal ip family %s, should check webhook liveness", ipFamily)
 		}
 	} else {
 		ipFamily = ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])

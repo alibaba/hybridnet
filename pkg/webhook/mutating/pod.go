@@ -115,8 +115,6 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 			patchSelectorToPod(pod, map[string]string{
 				constants.LabelDualStackAddressQuota: constants.QuotaNonEmpty,
 			})
-		default:
-			webhookutils.AdmissionErroredWithLog(http.StatusBadRequest, fmt.Errorf("unknown ip family %s", ipFamily), logger)
 		}
 	case ipamtypes.Overlay:
 		logger.Info("patch pod with overlay attachment selector",
