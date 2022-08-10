@@ -47,7 +47,16 @@ func ParseIPFamilyFromString(in string) IPFamilyMode {
 	case strings.ToLower(string(DualStack)):
 		return DualStack
 	default:
-		return IPv4
+		return IPFamilyMode(in)
+	}
+}
+
+func IsValidFamilyMode(ipFamily IPFamilyMode) bool {
+	switch ipFamily {
+	case IPv4, IPv6, DualStack:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -97,6 +106,15 @@ func ParseNetworkTypeFromString(in string) NetworkType {
 		return ParseNetworkTypeFromEnvOnce()
 	default:
 		return NetworkType(in)
+	}
+}
+
+func IsValidNetworkType(networkType NetworkType) bool {
+	switch networkType {
+	case Underlay, Overlay, GlobalBGP:
+		return true
+	default:
+		return false
 	}
 }
 

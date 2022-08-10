@@ -159,17 +159,13 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 	}
 
 	// Network type validation
-	switch networkType {
-	case ipamtypes.Underlay, ipamtypes.Overlay, ipamtypes.GlobalBGP:
-	default:
+	if !ipamtypes.IsValidNetworkType(networkType) {
 		return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("unrecognized network type %s", networkType), logger)
 	}
 
 	// IP family validation
 	var ipFamily = ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
-	switch ipFamily {
-	case ipamtypes.IPv4, ipamtypes.IPv6, ipamtypes.DualStack:
-	default:
+	if !ipamtypes.IsValidFamilyMode(ipFamily) {
 		return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("unrecognized ip family %s", ipFamily), logger)
 	}
 

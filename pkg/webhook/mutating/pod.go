@@ -24,11 +24,9 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
@@ -67,42 +65,25 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 
 	// select 4 networking configs in order as below
 	var (
-		networkNameStr string
-		subnetNameStr  string
-		networkTypeStr string
-		ipFamilyStr    string
+		networkName   string
+		subnetNameStr string
+		networkType   ipamtypes.NetworkType
+		ipFamily      ipamtypes.IPFamilyMode
+
+		networkNodeSelector map[string]string
 	)
 
-	if networkNameStr, subnetNameStr, networkTypeStr, ipFamilyStr, err = webhookutils.ParseNetworkConfigOfPodByPriority(ctx, handler.Cache, pod); err != nil {
-		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, fmt.Errorf("unable to parse network config for pod: %v", err), logger)
-	}
-
 	// parsing networking configs
-	// TODO: validation
-	var networkName = networkNameStr
-	var networkType = ipamtypes.ParseNetworkTypeFromString(networkTypeStr)
-
-	var networkNodeSelector map[string]string
-	if len(networkName) > 0 {
-		network := &networkingv1.Network{}
-		if err = handler.Client.Get(ctx, types.NamespacedName{Name: networkName}, network); err != nil {
-			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
-		}
-
-		// specified network takes higher priority than network type defaulting, if no network type specified
-		// from pod, then network type should inherit from network type of specified network from pod
-		if len(networkTypeStr) == 0 {
-			networkType = ipamtypes.ParseNetworkTypeFromString(string(networkingv1.GetNetworkType(network)))
-		}
-
-		networkNodeSelector = network.Spec.NodeSelector
+	if networkName, subnetNameStr, networkType, ipFamily, networkNodeSelector,
+		err = webhookutils.ParseNetworkConfigOfPodByPriority(ctx, handler.Cache, pod); err != nil {
+		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, fmt.Errorf("unable to parse network config for pod: %v", err), logger)
 	}
 
 	// persistent specified network and subnet in pod annotations
 	patchAnnotationToPod(pod, constants.AnnotationSpecifiedNetwork, networkName)
 	patchAnnotationToPod(pod, constants.AnnotationSpecifiedSubnet, subnetNameStr)
 	patchAnnotationToPod(pod, constants.AnnotationNetworkType, string(networkType))
-	patchAnnotationToPod(pod, constants.AnnotationIPFamily, ipFamilyStr)
+	patchAnnotationToPod(pod, constants.AnnotationIPFamily, string(ipFamily))
 	patchAnnotationToPod(pod, constants.AnnotationHandledByWebhook, "true")
 
 	switch networkType {
@@ -120,7 +101,8 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		}
 		// quota label selector to make sure pod will be scheduled on nodes
 		// where capacity of network is enough
-		switch ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily]) {
+		ipFamily := ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])
+		switch ipFamily {
 		case ipamtypes.IPv4:
 			patchSelectorToPod(pod, map[string]string{
 				constants.LabelIPv4AddressQuota: constants.QuotaNonEmpty,
