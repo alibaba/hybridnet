@@ -5,10 +5,6 @@
         {
             "type":"hybridnet",
             "server_socket":"/run/cni/hybridnet.sock"
-        },
-        {
-            "type": "bandwidth",
-            "capabilities": {"bandwidth": true}
         }
     ]
 }
