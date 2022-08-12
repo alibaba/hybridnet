@@ -507,3 +507,34 @@ func ConfigureIface(ifName string, res *current.Result) error {
 
 	return nil
 }
+
+func EnsureIPReachable(ip net.IP) error {
+	ipMask := net.CIDRMask(32, 32)
+	if ip.To4() == nil {
+		ipMask = net.CIDRMask(128, 128)
+	}
+
+	routeList, _ := netlink.RouteGet(ip)
+	// netlink.RouteGet will return an error if ip is unreachable
+	if len(routeList) > 0 {
+		return nil
+	}
+
+	loopback, err := netlink.LinkByName("lo")
+	if err != nil {
+		return fmt.Errorf("failed to get loopback dev: %v", err)
+	}
+
+	if err = netlink.RouteAdd(&netlink.Route{
+		Scope: netlink.SCOPE_LINK,
+		Dst: &net.IPNet{
+			IP:   ip,
+			Mask: ipMask,
+		},
+		LinkIndex: loopback.Attrs().Index,
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
