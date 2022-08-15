@@ -33,6 +33,12 @@ spec:
               name: cni-conf
             - mountPath: /opt/cni/bin
               name: cni-bin
+            - mountPath: /hybridnet/00-hybridnet.conflist
+              name: cni-conf-source
+              subPath: cni-config
+          env:
+            - name: NEEDED_COMMUNITY_CNI_PLUGINS
+              value: {{ .Values.daemon.neededCommunityCNIPlugins }}
       containers:
         - name: cni-daemon
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
@@ -125,3 +131,10 @@ spec:
           hostPath:
             path: /run/xtables.lock
             type: FileOrCreate
+        - name: cni-conf-source
+          configMap:
+            name: hybridnet-cni-conf
+            items:
+              - key: cni-config
+                path: cni-config
+

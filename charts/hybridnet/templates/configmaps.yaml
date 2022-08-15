@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hybridnet-cni-conf
+  namespace: kube-system
+data:
+  cni-config: |-
+    {
+        "name":"hybridnet",
+        "cniVersion":"0.3.1",
+        "plugins":[
+            {
+                "type":"hybridnet",
+                "server_socket":"/run/cni/hybridnet.sock"
+            },{
+                "type": "bandwidth",
+                "capabilities": {"bandwidth": true}
+            }
+        ]
+    }
