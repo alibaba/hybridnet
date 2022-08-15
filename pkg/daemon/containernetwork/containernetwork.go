@@ -203,6 +203,12 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 			Interface: current.Int(0),
 		})
 
+		// proxy_arp will not work if the target ip address is not reachable
+		if err := daemonutils.EnsureIPReachable(net.ParseIP(constants.PodVirtualV4DefaultGateway)); err != nil {
+			return fmt.Errorf("failed to ensure virtual V4 default gateway %v reachable: %v",
+				constants.PodVirtualV4DefaultGateway, err)
+		}
+
 		if err := daemonutils.EnableIPForward(netlink.FAMILY_V4); err != nil {
 			return fmt.Errorf("failed to enable ipv4 forwarding: %v", err)
 		}
