@@ -86,18 +86,6 @@ spec:
               name: host-modules
             - mountPath: /run/xtables.lock
               name: xtables-lock
-            - mountPath: /var/run/netns
-              mountPropagation: HostToContainer
-              name: host-var-run-netns
-            - mountPath: /var/run/docker/netns
-              mountPropagation: HostToContainer
-              name: host-var-docker-netns
-            - mountPath: /run/netns
-              mountPropagation: HostToContainer
-              name: host-run-netns
-            - mountPath: /run/docker/netns
-              mountPropagation: HostToContainer
-              name: host-docker-netns
           # TODO: add liveness probe
         {{ if .Values.daemon.enableNetworkPolicy }}
         - name: policy
@@ -137,15 +125,3 @@ spec:
           hostPath:
             path: /run/xtables.lock
             type: FileOrCreate
-        - name: host-run-netns
-          hostPath:
-            path: /run/netns
-        - name: host-docker-netns
-          hostPath:
-            path: /run/docker/netns
-        - name: host-var-run-netns
-          hostPath:
-            path: /var/run/netns
-        - name: host-var-docker-netns
-          hostPath:
-            path: /var/run/docker/netns

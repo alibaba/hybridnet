@@ -19,10 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
-	"os"
-	"strings"
 	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,21 +29,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/go-logr/logr"
-
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/containernetworking/plugins/pkg/ip"
-	"github.com/containernetworking/plugins/pkg/ns"
-	"github.com/vishvananda/netlink"
-
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 )
 
@@ -63,13 +53,6 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 		endTime := time.Since(start)
 		logger.V(2).Info("IPInstance information reconciled", "time", endTime)
 	}()
-
-	if !r.ctrlHubRef.upgradeWorkDone {
-		if err := ensureExistPodConfigs(r.ctrlHubRef.config.LocalDirectTableNum, logger); err != nil {
-			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to ensure exist pod config: %v", err)
-		}
-		r.ctrlHubRef.upgradeWorkDone = true
-	}
 
 	ipInstanceList := &networkingv1.IPInstanceList{}
 	if err := r.List(ctx, ipInstanceList,
@@ -215,143 +198,6 @@ func (r *ipInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	if err := ipInstanceController.Watch(r.ctrlHubRef.ipInstanceControllerTriggerSource, &handler.Funcs{}); err != nil {
 		return fmt.Errorf("failed to watch ipInstanceControllerTriggerSource for ip instance controller: %v", err)
-	}
-
-	return nil
-}
-
-// TODO: update logic, need to be removed further
-func ensureExistPodConfigs(localDirectTableNum int, logger logr.Logger) error {
-	var netnsPaths []string
-	var netnsDir string
-
-	if daemonutils.ValidDockerNetnsDir(constants.DockerNetnsDir) {
-		netnsDir = constants.DockerNetnsDir
-	} else {
-		logger.Info("docker netns path not exist, try containerd netns path",
-			"docker-netns-path", constants.DockerNetnsDir,
-			"containerd-netns-path", constants.ContainerdNetnsDir)
-		netnsDir = constants.ContainerdNetnsDir
-	}
-
-	files, err := ioutil.ReadDir(netnsDir)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
-	for _, f := range files {
-		if f.Name() == "default" {
-			continue
-		}
-		fpath := netnsDir + "/" + f.Name()
-		if daemonutils.IsProcFS(fpath) || daemonutils.IsNsFS(fpath) {
-			netnsPaths = append(netnsPaths, fpath)
-		}
-	}
-
-	logger.Info("load exist netns", "netns-path", netnsPaths)
-
-	var hostLinkIndex int
-	allocatedIPs := map[networkingv1.IPVersion]*daemonutils.IPInfo{}
-
-	for _, netns := range netnsPaths {
-		nsHandler, err := ns.GetNS(netns)
-		if err != nil {
-			return fmt.Errorf("get ns error: %v", err)
-		}
-
-		err = nsHandler.Do(func(netNS ns.NetNS) error {
-			link, err := netlink.LinkByName(constants.ContainerNicName)
-			if err != nil {
-				return fmt.Errorf("get container interface error: %v", err)
-			}
-
-			v4Addrs, err := netlink.AddrList(link, netlink.FAMILY_V4)
-			if err != nil {
-				return fmt.Errorf("failed to get v4 container interface addr: %v", err)
-			}
-
-			var v4GatewayIP net.IP
-			if len(v4Addrs) == 0 {
-				allocatedIPs[networkingv1.IPv4] = nil
-			} else {
-				defaultRoute, err := daemonutils.GetDefaultRoute(netlink.FAMILY_V4)
-				if err != nil {
-					return fmt.Errorf("failed to get ipv4 default route: %v", err)
-				}
-				v4GatewayIP = defaultRoute.Gw
-			}
-
-			for _, addr := range v4Addrs {
-				allocatedIPs[networkingv1.IPv4] = &daemonutils.IPInfo{
-					Addr: addr.IP,
-					Gw:   v4GatewayIP,
-				}
-			}
-
-			v6Addrs, err := netlink.AddrList(link, netlink.FAMILY_V6)
-			if err != nil {
-				return fmt.Errorf("failed to get v6 container interface addr: %v", err)
-			}
-
-			var v6GatewayIP net.IP
-			if len(v6Addrs) == 0 {
-				allocatedIPs[networkingv1.IPv6] = nil
-			} else {
-				defaultRoute, err := daemonutils.GetDefaultRoute(netlink.FAMILY_V6)
-				if err != nil {
-					return fmt.Errorf("failed to get ipv6 default route: %v", err)
-				}
-				v6GatewayIP = defaultRoute.Gw
-			}
-
-			for _, addr := range v6Addrs {
-				allocatedIPs[networkingv1.IPv6] = &daemonutils.IPInfo{
-					Addr: addr.IP,
-					Gw:   v6GatewayIP,
-				}
-			}
-
-			_, hostLinkIndex, err = ip.GetVethPeerIfindex(constants.ContainerNicName)
-			if err != nil {
-				return fmt.Errorf("get host link index error: %v", err)
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			logger.Error(err, "get pod addresses and host link index error")
-		}
-
-		if hostLinkIndex == 0 {
-			continue
-		}
-
-		hostLink, err := netlink.LinkByIndex(hostLinkIndex)
-		if err != nil {
-			return fmt.Errorf("failed to get host link by index %v: %v", hostLinkIndex, err)
-		}
-
-		// this container doesn't belong to k8s
-		if !strings.HasSuffix(hostLink.Attrs().Name, "_h") {
-			continue
-		}
-
-		if hostLink.Attrs().MasterIndex != 0 {
-			bridge, err := netlink.LinkByIndex(hostLink.Attrs().MasterIndex)
-			if err != nil {
-				return fmt.Errorf("failed to get bridge by index %v: %v", hostLink.Attrs().MasterIndex, err)
-			}
-
-			if err := netlink.LinkDel(bridge); err != nil {
-				return fmt.Errorf("failed to delete bridge %v: %v", bridge.Attrs().Name, err)
-			}
-		}
-
-		if err := containernetwork.ConfigureHostNic(hostLink.Attrs().Name, allocatedIPs, localDirectTableNum); err != nil {
-			return fmt.Errorf("failed to reconfigure host nic %v: %v", hostLink.Attrs().Name, err)
-		}
 	}
 
 	return nil
