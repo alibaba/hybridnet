@@ -61,6 +61,12 @@ daemon:
   ## randomly. If is is not empty, the first result matches any of the CIDRs will be chose as VTEP address.
   vtepAddressCIDRs: "0.0.0.0/0,::/0"
 
+  # -- The community CNI plugins needed to be copied by hybridnet from inside container to the /opt/cni/bin/ directory of host
+  neededCommunityCNIPlugins: "loopback,bandwidth"
+
+  # -- The name of hybridnet CNI conf file generated in the /etc/cni/net.d/ directory of host
+  cniConfName: "06-hybridnet.conflist"
+
 # -- Whether pod IP of stateful workloads will be retained by default. true or false
 ## Ref: https://github.com/alibaba/hybridnet/wiki/Static-pod-ip-addresses-for-StatefulSet
 defaultIPRetain: true

@@ -33,6 +33,12 @@ spec:
               name: cni-conf
             - mountPath: /opt/cni/bin
               name: cni-bin
+            - mountPath: /hybridnet/00-hybridnet.conflist
+              name: cni-conf-source
+              subPath: cni-config
+          env:
+            - name: NEEDED_COMMUNITY_CNI_PLUGINS
+              value: {{ .Values.daemon.neededCommunityCNIPlugins }}
       containers:
         - name: cni-daemon
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
@@ -86,18 +92,6 @@ spec:
               name: host-modules
             - mountPath: /run/xtables.lock
               name: xtables-lock
-            - mountPath: /var/run/netns
-              mountPropagation: HostToContainer
-              name: host-var-run-netns
-            - mountPath: /var/run/docker/netns
-              mountPropagation: HostToContainer
-              name: host-var-docker-netns
-            - mountPath: /run/netns
-              mountPropagation: HostToContainer
-              name: host-run-netns
-            - mountPath: /run/docker/netns
-              mountPropagation: HostToContainer
-              name: host-docker-netns
           # TODO: add liveness probe
         {{ if .Values.daemon.enableNetworkPolicy }}
         - name: policy
@@ -137,15 +131,10 @@ spec:
           hostPath:
             path: /run/xtables.lock
             type: FileOrCreate
-        - name: host-run-netns
-          hostPath:
-            path: /run/netns
-        - name: host-docker-netns
-          hostPath:
-            path: /run/docker/netns
-        - name: host-var-run-netns
-          hostPath:
-            path: /var/run/netns
-        - name: host-var-docker-netns
-          hostPath:
-            path: /var/run/docker/netns
+        - name: cni-conf-source
+          configMap:
+            name: hybridnet-cni-conf
+            items:
+              - key: cni-config
+                path: cni-config
+

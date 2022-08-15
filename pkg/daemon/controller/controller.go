@@ -92,8 +92,6 @@ type CtrlHub struct {
 
 	nodeIPCache *NodeIPCache
 
-	upgradeWorkDone bool
-
 	logger logr.Logger
 }
 
