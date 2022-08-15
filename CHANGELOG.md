@@ -156,3 +156,21 @@ All notable changes to this project will be documented in this file.
 - Add limitations for creating overlapped subnets
 - Disable the automatic iptables mode detection of felix
 - Print statistics for Network CR
+
+## v0.7.0
+### New features
+- Support global service when MultiCluster feature is enabled
+- Support specifying MAC addresses for stateful workloads
+
+### Improvements
+- Remove `onlink` flag of the default route in pods to adapt to [Kata](https://katacontainers.io/)
+- Change the `failurePolicy` of hybridnet pod mutating/validating webhook configuration to `Ignore`, to reduce the risk caused by hybridnet webhook
+- Make cni conf configurable on nodes
+- Ensure routes of `169.254.1.1` on host if it's unreachable, to make sure `proxy_arp` can work
+- Refine integration test cases for manager
+- Improve the format of daemon logs
+
+### Fixed Issues
+- Fix kube-proxy nodeport datapath error, this happens usually if the endpoints are underlay VLAN pod (Network jitters of nodeport traffic might happen during the upgrade for old versions)
+- Fix the scheduling problem of ip-retained VM pods
+
