@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -728,18 +729,18 @@ var _ = Describe("Pod controller integration test suite", func() {
 		})
 	})
 
-	Context("Config IP allocation to pod with labels/annotations", func() {
+	Context("Assign network through labels/annotations", func() {
 		var podName string
 
 		BeforeEach(func() {
 			podName = fmt.Sprintf("test-pod-%s", uuid.NewUUID())
 		})
 
-		It("Config pod with underlay network type", func() {
-			By("create pod with underlay network type specified in annotation")
+		It("Config pod with specified underlay network in pod annotations", func() {
+			By("create pod with specified underlay network in annotation")
 			pod := simplePodRender(podName, node1Name)
 			pod.Annotations = map[string]string{
-				constants.AnnotationNetworkType: "Underlay",
+				constants.AnnotationSpecifiedNetwork: underlayNetworkName,
 			}
 			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
 
@@ -758,11 +759,11 @@ var _ = Describe("Pod controller integration test suite", func() {
 				Should(Succeed())
 		})
 
-		It("Config pod with overlay network type", func() {
-			By("create pod with overlay network type specified in label")
+		It("Config pod with specified overlay network type in pod labels", func() {
+			By("create pod with specified overlay network type specified in label")
 			pod := simplePodRender(podName, node1Name)
 			pod.Labels = map[string]string{
-				constants.LabelNetworkType: "Overlay",
+				constants.LabelSpecifiedNetwork: overlayNetworkName,
 			}
 			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
 
@@ -779,6 +780,63 @@ var _ = Describe("Pod controller integration test suite", func() {
 				WithTimeout(30 * time.Second).
 				WithPolling(time.Second).
 				Should(Succeed())
+		})
+
+		It("Config pod with specified overlay network in namespace annotations", func() {
+			By("update assigned network in namespace annotations")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(controllerutil.CreateOrPatch(
+				context.Background(),
+				k8sClient,
+				ns,
+				func() error {
+					if len(ns.Annotations) == 0 {
+						ns.Annotations = map[string]string{}
+					}
+					ns.Annotations[constants.AnnotationSpecifiedNetwork] = overlayNetworkName
+					return nil
+				})).
+				Error().
+				NotTo(HaveOccurred())
+
+			By("create pod with no labels or annotations")
+			pod := simplePodRender(podName, node1Name)
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Network).To(Equal(overlayNetworkName))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("clean assigned network in namespace annotations")
+			ns = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(controllerutil.CreateOrPatch(
+				context.Background(),
+				k8sClient,
+				ns,
+				func() error {
+					ns.Annotations = map[string]string{}
+					return nil
+				})).
+				Error().
+				NotTo(HaveOccurred())
 		})
 
 		AfterEach(func() {
@@ -818,6 +876,1062 @@ var _ = Describe("Pod controller integration test suite", func() {
 				WithPolling(time.Second).
 				Should(Succeed())
 
+		})
+	})
+
+	Context("Assign subnet through labels/annotations", func() {
+		var podName string
+		var networkName = fmt.Sprintf("network-test-%s", uuid.NewUUID())
+		var subnet1Name = fmt.Sprintf("subnet-test-%s", uuid.NewUUID())
+		var subnet2Name = fmt.Sprintf("subnet-test-%s", uuid.NewUUID())
+		var subnet3Name = fmt.Sprintf("subnet-test-%s", uuid.NewUUID())
+		var nodeName = fmt.Sprintf("node-test-%s", uuid.NewUUID())
+
+		BeforeEach(func() {
+			podName = fmt.Sprintf("test-pod-%s", uuid.NewUUID())
+		})
+
+		It("Create one network with multiple subnets", func() {
+			By("create test underlay network")
+			Expect(k8sClient.Create(context.Background(),
+				underlayNetworkRender(networkName, 33))).
+				NotTo(HaveOccurred())
+
+			By("create test subnets")
+			Expect(k8sClient.Create(context.Background(),
+				subnetRender(
+					subnet1Name,
+					networkName,
+					"200.200.0.0/24",
+					nil,
+					true,
+				))).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(context.Background(),
+				subnetRender(
+					subnet2Name,
+					networkName,
+					"200.200.1.0/24",
+					nil,
+					true,
+				))).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(context.Background(),
+				subnetRender(
+					subnet3Name,
+					networkName,
+					"200.200.2.0/24",
+					nil,
+					true,
+				))).NotTo(HaveOccurred())
+
+			By("create test node binding on test network")
+			Expect(k8sClient.Create(context.Background(),
+				nodeRender(
+					nodeName,
+					map[string]string{
+						"network": networkName,
+					},
+				))).NotTo(HaveOccurred())
+		})
+
+		It("Config pod with specified subnet 1 in pod annotations", func() {
+			By("create pod with special annotations")
+			pod := simplePodRender(podName, nodeName)
+			pod.Annotations = map[string]string{
+				constants.AnnotationSpecifiedNetwork: networkName,
+				constants.AnnotationSpecifiedSubnet:  subnet1Name,
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Network).To(Equal(networkName))
+					g.Expect(ipInstance.Spec.Subnet).To(Equal(subnet1Name))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		It("Config pod with specified subnet 2 in pod annotations", func() {
+			By("create pod with special annotations")
+			pod := simplePodRender(podName, nodeName)
+			pod.Annotations = map[string]string{
+				constants.AnnotationSpecifiedNetwork: networkName,
+				constants.AnnotationSpecifiedSubnet:  subnet2Name,
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Network).To(Equal(networkName))
+					g.Expect(ipInstance.Spec.Subnet).To(Equal(subnet2Name))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		It("Config pod with specified subnet 3 in pod annotations", func() {
+			By("create pod with special annotations")
+			pod := simplePodRender(podName, nodeName)
+			pod.Annotations = map[string]string{
+				constants.AnnotationSpecifiedNetwork: networkName,
+				constants.AnnotationSpecifiedSubnet:  subnet3Name,
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Network).To(Equal(networkName))
+					g.Expect(ipInstance.Spec.Subnet).To(Equal(subnet3Name))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		It("Config pod with specified subnet 2 in namespace annotations", func() {
+			By("update assigned subnet in namespace annotations")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(controllerutil.CreateOrPatch(
+				context.Background(),
+				k8sClient,
+				ns,
+				func() error {
+					if len(ns.Annotations) == 0 {
+						ns.Annotations = map[string]string{}
+					}
+					ns.Annotations[constants.AnnotationSpecifiedNetwork] = networkName
+					ns.Annotations[constants.AnnotationSpecifiedSubnet] = subnet2Name
+					return nil
+				})).
+				Error().
+				NotTo(HaveOccurred())
+
+			By("create pod with no labels or annotations")
+			pod := simplePodRender(podName, nodeName)
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Network).To(Equal(networkName))
+					g.Expect(ipInstance.Spec.Subnet).To(Equal(subnet2Name))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("clean assigned subnet in namespace annotations")
+			ns = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(controllerutil.CreateOrPatch(
+				context.Background(),
+				k8sClient,
+				ns,
+				func() error {
+					ns.Annotations = map[string]string{}
+					return nil
+				})).
+				Error().
+				NotTo(HaveOccurred())
+		})
+
+		It("remove test objects", func() {
+			By("remove test node")
+			Expect(k8sClient.Delete(context.Background(), &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: nodeName,
+				},
+			}))
+
+			By("remove test subnets")
+			Expect(k8sClient.Delete(context.Background(), &networkingv1.Subnet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: subnet1Name,
+				},
+			})).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(context.Background(), &networkingv1.Subnet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: subnet2Name,
+				},
+			})).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(context.Background(), &networkingv1.Subnet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: subnet3Name,
+				},
+			})).NotTo(HaveOccurred())
+
+			By("remote test network")
+			Expect(k8sClient.Delete(context.Background(), &networkingv1.Network{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: networkName,
+				},
+			}))
+		})
+
+		AfterEach(func() {
+			By("remove the test pod")
+			Expect(client.IgnoreNotFound(
+				k8sClient.Delete(context.Background(),
+					&corev1.Pod{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: "default",
+							Name:      podName,
+						},
+					},
+					client.GracePeriodSeconds(0)))).NotTo(HaveOccurred())
+
+			By("clean up test ip instances")
+			Expect(k8sClient.DeleteAllOf(
+				context.Background(),
+				&networkingv1.IPInstance{},
+				client.MatchingLabels{
+					constants.LabelPod: podName,
+				},
+				client.InNamespace("default"),
+			)).NotTo(HaveOccurred())
+
+			By("make sure test pod cleaned up")
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(context.Background(),
+						types.NamespacedName{
+							Namespace: "default",
+							Name:      podName,
+						},
+						&corev1.Pod{})
+					g.Expect(err).NotTo(BeNil())
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+		})
+	})
+
+	Context("Assign network-type through labels/annotations", func() {
+		var podName string
+
+		BeforeEach(func() {
+			podName = fmt.Sprintf("test-pod-%s", uuid.NewUUID())
+		})
+
+		It("Config pod with underlay network type in pod annotations", func() {
+			By("create pod with underlay network type specified in annotation")
+			pod := simplePodRender(podName, node1Name)
+			pod.Annotations = map[string]string{
+				constants.AnnotationNetworkType: "Underlay",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Network).To(Equal(underlayNetworkName))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		It("Config pod with overlay network type in pod labels", func() {
+			By("create pod with overlay network type specified in label")
+			pod := simplePodRender(podName, node1Name)
+			pod.Labels = map[string]string{
+				constants.LabelNetworkType: "Overlay",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Network).To(Equal(overlayNetworkName))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		It("Config pod with overlay network type in namespace annotations", func() {
+			By("update assigned network type in namespace annotations")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(controllerutil.CreateOrPatch(
+				context.Background(),
+				k8sClient,
+				ns,
+				func() error {
+					if len(ns.Annotations) == 0 {
+						ns.Annotations = map[string]string{
+							constants.AnnotationNetworkType: "overlay",
+						}
+					} else {
+						ns.Annotations[constants.AnnotationNetworkType] = "overlay"
+					}
+					return nil
+				})).
+				Error().
+				NotTo(HaveOccurred())
+
+			By("create pod with no labels or annotations")
+			pod := simplePodRender(podName, node1Name)
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Network).To(Equal(overlayNetworkName))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("clean assigned network type in namespace annotations")
+			ns = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(controllerutil.CreateOrPatch(
+				context.Background(),
+				k8sClient,
+				ns,
+				func() error {
+					ns.Annotations = map[string]string{}
+					return nil
+				})).
+				Error().
+				NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			By("remove the test pod")
+			Expect(k8sClient.Delete(context.Background(),
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "default",
+						Name:      podName,
+					},
+				},
+				client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+
+			By("clean up test ip instances")
+			Expect(k8sClient.DeleteAllOf(
+				context.Background(),
+				&networkingv1.IPInstance{},
+				client.MatchingLabels{
+					constants.LabelPod: podName,
+				},
+				client.InNamespace("default"),
+			)).NotTo(HaveOccurred())
+
+			By("make sure test pod cleaned up")
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(context.Background(),
+						types.NamespacedName{
+							Namespace: "default",
+							Name:      podName,
+						},
+						&corev1.Pod{})
+					g.Expect(err).NotTo(BeNil())
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+		})
+	})
+
+	Context("Assign ip-family through annotations", func() {
+		var podName string
+
+		BeforeEach(func() {
+			podName = fmt.Sprintf("test-pod-%s", uuid.NewUUID())
+		})
+
+		It("Config pod with IPv4 family in pod annotations", func() {
+			By("create pod with IPv4 family specified in annotation")
+			pod := simplePodRender(podName, node1Name)
+			pod.Annotations = map[string]string{
+				constants.AnnotationIPFamily:    "ipv4",
+				constants.AnnotationNetworkType: "overlay",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstance.Spec.Address.Version).To(Equal(networkingv1.IPv4))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		It("Config pod with IPv6 family in pod annotations", func() {
+			By("create pod with IPv6 family specified in annotation")
+			pod := simplePodRender(podName, node1Name)
+			pod.Annotations = map[string]string{
+				constants.AnnotationIPFamily:    "IPv6Only",
+				constants.AnnotationNetworkType: "overlay",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstance.Spec.Address.Version).To(Equal(networkingv1.IPv6))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		It("Config pod with DualStack family in pod annotations", func() {
+			By("create pod with DualStack family specified in annotation")
+			pod := simplePodRender(podName, node1Name)
+			pod.Annotations = map[string]string{
+				constants.AnnotationIPFamily:    "dualStack",
+				constants.AnnotationNetworkType: "overlay",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(2))
+
+					networkingv1.SortIPInstancePointerSlice(ipInstances)
+
+					v4IPInstance := ipInstances[0]
+					g.Expect(v4IPInstance.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(v4IPInstance.Spec.Address.Version).To(Equal(networkingv1.IPv4))
+
+					v6IPInstance := ipInstances[1]
+					g.Expect(v6IPInstance.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(v6IPInstance.Spec.Address.Version).To(Equal(networkingv1.IPv6))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+
+		It("Config pod with DualStack family in namespace annotations", func() {
+			By("update assigned ip family in namespace annotations")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(controllerutil.CreateOrPatch(
+				context.Background(),
+				k8sClient,
+				ns,
+				func() error {
+					if len(ns.Annotations) == 0 {
+						ns.Annotations = map[string]string{}
+					}
+					ns.Annotations[constants.AnnotationNetworkType] = "overlay"
+					ns.Annotations[constants.AnnotationIPFamily] = "dualstack"
+					return nil
+				})).
+				Error().
+				NotTo(HaveOccurred())
+
+			By("create pod with no labels or annotations")
+			pod := simplePodRender(podName, node1Name)
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(2))
+
+					networkingv1.SortIPInstancePointerSlice(ipInstances)
+
+					v4IPInstance := ipInstances[0]
+					g.Expect(v4IPInstance.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(v4IPInstance.Spec.Address.Version).To(Equal(networkingv1.IPv4))
+
+					v6IPInstance := ipInstances[1]
+					g.Expect(v6IPInstance.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(v6IPInstance.Spec.Address.Version).To(Equal(networkingv1.IPv6))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("clean assigned network type in namespace annotations")
+			ns = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(controllerutil.CreateOrPatch(
+				context.Background(),
+				k8sClient,
+				ns,
+				func() error {
+					ns.Annotations = map[string]string{}
+					return nil
+				})).
+				Error().
+				NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			By("remove the test pod")
+			Expect(k8sClient.Delete(context.Background(),
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "default",
+						Name:      podName,
+					},
+				},
+				client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+
+			By("clean up test ip instances")
+			Expect(k8sClient.DeleteAllOf(
+				context.Background(),
+				&networkingv1.IPInstance{},
+				client.MatchingLabels{
+					constants.LabelPod: podName,
+				},
+				client.InNamespace("default"),
+			)).NotTo(HaveOccurred())
+
+			By("make sure test pod cleaned up")
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(context.Background(),
+						types.NamespacedName{
+							Namespace: "default",
+							Name:      podName,
+						},
+						&corev1.Pod{})
+					g.Expect(err).NotTo(BeNil())
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+		})
+	})
+
+	Context("Network and IP-family retain for single stateful pod", func() {
+		var podName string
+		var ownerReference metav1.OwnerReference
+
+		BeforeEach(func() {
+			podName = fmt.Sprintf("pod-%d", rand.Intn(10))
+			ownerReference = statefulOwnerReferenceRender()
+		})
+
+		It("Allocate and retain network and ip-family for single stateful pod", func() {
+			By("create a stateful pod requiring DualStack addresses and specified overlay network")
+			var ipInstanceIPv4Name string
+			var ipInstanceIPv6Name string
+			pod := simplePodRender(podName, node3Name)
+			pod.OwnerReferences = []metav1.OwnerReference{ownerReference}
+			pod.Annotations = map[string]string{
+				constants.AnnotationSpecifiedNetwork: overlayNetworkName,
+				constants.AnnotationIPFamily:         "DualStack",
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).Should(Succeed())
+
+			By("check the first allocated DualStack addresses")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(2))
+
+					// sort by ip family order
+					networkingv1.SortIPInstancePointerSlice(ipInstances)
+
+					// check IPv4 IPInstance
+					ipInstanceIPv4 := ipInstances[0]
+					ipInstanceIPv4Name = ipInstanceIPv4.Name
+					g.Expect(ipInstanceIPv4.Spec.Address.Version).To(Equal(networkingv1.IPv4))
+					g.Expect(ipInstanceIPv4.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstanceIPv4.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstanceIPv4.Spec.Binding.NodeName).To(Equal(node3Name))
+					g.Expect(ipInstanceIPv4.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstanceIPv4.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstanceIPv4.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx := *ipInstanceIPv4.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstanceIPv4.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstanceIPv4.Spec.Subnet).To(BeElementOf(overlayIPv4SubnetName))
+
+					// check IPv6 IPInstance
+					ipInstanceIPv6 := ipInstances[1]
+					ipInstanceIPv6Name = ipInstanceIPv6.Name
+					g.Expect(ipInstanceIPv6.Spec.Address.Version).To(Equal(networkingv1.IPv6))
+					g.Expect(ipInstanceIPv6.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstanceIPv6.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstanceIPv6.Spec.Binding.NodeName).To(Equal(node3Name))
+					g.Expect(ipInstanceIPv6.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstanceIPv6.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstanceIPv6.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx = *ipInstanceIPv6.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstanceIPv6.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstanceIPv6.Spec.Subnet).To(BeElementOf(overlayIPv6SubnetName))
+
+					// check MAC address
+					g.Expect(ipInstanceIPv4.Spec.Address.MAC).To(Equal(ipInstanceIPv6.Spec.Address.MAC))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("remove stateful pod")
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+
+			By("check the allocated DualStack addresses are reserved")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(2))
+
+					// sort by ip family order
+					networkingv1.SortIPInstancePointerSlice(ipInstances)
+
+					// check IPv4 IPInstance
+					ipInstanceIPv4 := ipInstances[0]
+					g.Expect(ipInstanceIPv4.Name).To(Equal(ipInstanceIPv4Name))
+					g.Expect(ipInstanceIPv4.Spec.Address.Version).To(Equal(networkingv1.IPv4))
+					g.Expect(ipInstanceIPv4.Spec.Binding.PodUID).To(BeEmpty())
+					g.Expect(ipInstanceIPv4.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstanceIPv4.Spec.Binding.NodeName).To(BeEmpty())
+					g.Expect(ipInstanceIPv4.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstanceIPv4.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstanceIPv4.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx := *ipInstanceIPv4.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstanceIPv4.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstanceIPv4.Spec.Subnet).To(BeElementOf(overlayIPv4SubnetName))
+
+					// check IPv6 IPInstance
+					ipInstanceIPv6 := ipInstances[1]
+					g.Expect(ipInstanceIPv6.Name).To(Equal(ipInstanceIPv6Name))
+					g.Expect(ipInstanceIPv6.Spec.Address.Version).To(Equal(networkingv1.IPv6))
+					g.Expect(ipInstanceIPv6.Spec.Binding.PodUID).To(BeEmpty())
+					g.Expect(ipInstanceIPv6.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstanceIPv6.Spec.Binding.NodeName).To(BeEmpty())
+					g.Expect(ipInstanceIPv6.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstanceIPv6.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstanceIPv6.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx = *ipInstanceIPv6.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstanceIPv6.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstanceIPv6.Spec.Subnet).To(BeElementOf(overlayIPv6SubnetName))
+
+					// check MAC address
+					g.Expect(ipInstanceIPv4.Spec.Address.MAC).To(Equal(ipInstanceIPv6.Spec.Address.MAC))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("make sure pod deleted")
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(context.Background(),
+						types.NamespacedName{
+							Namespace: pod.Namespace,
+							Name:      podName,
+						},
+						&corev1.Pod{})
+					g.Expect(err).NotTo(BeNil())
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("recreate the stateful pod without labels or annotations")
+			pod = simplePodRender(podName, node1Name)
+			pod.OwnerReferences = []metav1.OwnerReference{ownerReference}
+			Expect(k8sClient.Create(context.Background(), pod)).NotTo(HaveOccurred())
+
+			By("check the allocated DualStack addresses are retained and reused")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(2))
+
+					// sort by ip family order
+					networkingv1.SortIPInstancePointerSlice(ipInstances)
+
+					// check IPv4 IPInstance
+					ipInstanceIPv4 := ipInstances[0]
+					g.Expect(ipInstanceIPv4.Name).To(Equal(ipInstanceIPv4Name))
+					g.Expect(ipInstanceIPv4.Spec.Address.Version).To(Equal(networkingv1.IPv4))
+					g.Expect(ipInstanceIPv4.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstanceIPv4.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstanceIPv4.Spec.Binding.NodeName).To(Equal(node1Name))
+					g.Expect(ipInstanceIPv4.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstanceIPv4.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstanceIPv4.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx := *ipInstanceIPv4.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstanceIPv4.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstanceIPv4.Spec.Subnet).To(BeElementOf(overlayIPv4SubnetName))
+
+					// check IPv6 IPInstance
+					ipInstanceIPv6 := ipInstances[1]
+					g.Expect(ipInstanceIPv6.Name).To(Equal(ipInstanceIPv6Name))
+					g.Expect(ipInstanceIPv6.Spec.Address.Version).To(Equal(networkingv1.IPv6))
+					g.Expect(ipInstanceIPv6.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstanceIPv6.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstanceIPv6.Spec.Binding.NodeName).To(Equal(node1Name))
+					g.Expect(ipInstanceIPv6.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstanceIPv6.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstanceIPv6.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx = *ipInstanceIPv6.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-%d", idx)))
+
+					g.Expect(ipInstanceIPv6.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstanceIPv6.Spec.Subnet).To(BeElementOf(overlayIPv6SubnetName))
+
+					// check MAC address
+					g.Expect(ipInstanceIPv4.Spec.Address.MAC).To(Equal(ipInstanceIPv6.Spec.Address.MAC))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("remove the test pod")
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			By("make sure test ip instances cleaned up")
+			Expect(k8sClient.DeleteAllOf(
+				context.Background(),
+				&networkingv1.IPInstance{},
+				client.MatchingLabels{
+					constants.LabelPod: podName,
+				},
+				client.InNamespace("default"),
+			)).NotTo(HaveOccurred())
+
+			By("make sure test pod cleaned up")
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(context.Background(),
+						types.NamespacedName{
+							Namespace: "default",
+							Name:      podName,
+						},
+						&corev1.Pod{})
+					g.Expect(err).NotTo(BeNil())
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+		})
+	})
+
+	Context("Assign ip-pool for stateful pods", func() {
+		var podName string
+		var ownerReference = statefulOwnerReferenceRender()
+		var idx = 0
+		var ipPool = []string{
+			"100.10.0.150",
+			"100.10.0.160",
+			"100.10.0.170",
+		}
+
+		BeforeEach(func() {
+			podName = fmt.Sprintf("pod-sts-%d", idx)
+		})
+
+		It("Create the first stateful pod with overlay network and ip pool", func() {
+			By("create a stateful pod with special annotations")
+			pod := simplePodRender(podName, node1Name)
+			pod.OwnerReferences = []metav1.OwnerReference{ownerReference}
+			pod.Annotations = map[string]string{
+				constants.AnnotationSpecifiedNetwork: overlayNetworkName,
+				constants.AnnotationIPPool:           strings.Join(ipPool, ","),
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).Should(Succeed())
+
+			By("check the allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstance.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstance.Spec.Binding.NodeName).To(Equal(node1Name))
+					g.Expect(ipInstance.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstance.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstance.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx := *ipInstance.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-sts-%d", idx)))
+
+					g.Expect(ipInstance.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstance.Spec.Subnet).To(Equal(overlayIPv4SubnetName))
+
+					g.Expect(ipInstance.Spec.Address.Version).To(Equal(networkingv1.IPv4))
+					g.Expect(ipInstance.Spec.Address.IP).To(Equal(ipPool[idx] + "/24"))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("remove stateful pod")
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+		})
+
+		It("Create the second stateful pod with overlay network and ip pool", func() {
+			By("create a stateful pod with special annotations")
+			pod := simplePodRender(podName, node1Name)
+			pod.OwnerReferences = []metav1.OwnerReference{ownerReference}
+			pod.Annotations = map[string]string{
+				constants.AnnotationSpecifiedNetwork: overlayNetworkName,
+				constants.AnnotationIPPool:           strings.Join(ipPool, ","),
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).Should(Succeed())
+
+			By("check the allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstance.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstance.Spec.Binding.NodeName).To(Equal(node1Name))
+					g.Expect(ipInstance.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstance.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstance.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx := *ipInstance.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-sts-%d", idx)))
+
+					g.Expect(ipInstance.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstance.Spec.Subnet).To(Equal(overlayIPv4SubnetName))
+
+					g.Expect(ipInstance.Spec.Address.Version).To(Equal(networkingv1.IPv4))
+					g.Expect(ipInstance.Spec.Address.IP).To(Equal(ipPool[idx] + "/24"))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("remove stateful pod")
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+		})
+
+		It("Create the third stateful pod with overlay network and ip pool", func() {
+			By("create a stateful pod with special annotations")
+			pod := simplePodRender(podName, node1Name)
+			pod.OwnerReferences = []metav1.OwnerReference{ownerReference}
+			pod.Annotations = map[string]string{
+				constants.AnnotationSpecifiedNetwork: overlayNetworkName,
+				constants.AnnotationIPPool:           strings.Join(ipPool, ","),
+			}
+			Expect(k8sClient.Create(context.Background(), pod)).Should(Succeed())
+
+			By("check the allocated ip instance")
+			Eventually(
+				func(g Gomega) {
+					ipInstances, err := utils.ListAllocatedIPInstancesOfPod(context.Background(), k8sClient, pod)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(ipInstances).To(HaveLen(1))
+
+					ipInstance := ipInstances[0]
+					g.Expect(ipInstance.Spec.Binding.PodUID).To(Equal(pod.UID))
+					g.Expect(ipInstance.Spec.Binding.PodName).To(Equal(pod.Name))
+					g.Expect(ipInstance.Spec.Binding.NodeName).To(Equal(node1Name))
+					g.Expect(ipInstance.Spec.Binding.ReferredObject).To(Equal(networkingv1.ObjectMeta{
+						Kind: ownerReference.Kind,
+						Name: ownerReference.Name,
+						UID:  ownerReference.UID,
+					}))
+
+					g.Expect(ipInstance.Spec.Binding.Stateful).NotTo(BeNil())
+					g.Expect(ipInstance.Spec.Binding.Stateful.Index).NotTo(BeNil())
+
+					idx := *ipInstance.Spec.Binding.Stateful.Index
+					g.Expect(pod.Name).To(Equal(fmt.Sprintf("pod-sts-%d", idx)))
+
+					g.Expect(ipInstance.Spec.Network).To(Equal(overlayNetworkName))
+					g.Expect(ipInstance.Spec.Subnet).To(Equal(overlayIPv4SubnetName))
+
+					g.Expect(ipInstance.Spec.Address.Version).To(Equal(networkingv1.IPv4))
+					g.Expect(ipInstance.Spec.Address.IP).To(Equal(ipPool[idx] + "/24"))
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("remove stateful pod")
+			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			By("make sure test ip instances cleaned up")
+			Expect(k8sClient.DeleteAllOf(
+				context.Background(),
+				&networkingv1.IPInstance{},
+				client.MatchingLabels{
+					constants.LabelPod: podName,
+				},
+				client.InNamespace("default"),
+			)).NotTo(HaveOccurred())
+
+			By("make sure test pod cleaned up")
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(context.Background(),
+						types.NamespacedName{
+							Namespace: "default",
+							Name:      podName,
+						},
+						&corev1.Pod{})
+					g.Expect(err).NotTo(BeNil())
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}).
+				WithTimeout(30 * time.Second).
+				WithPolling(time.Second).
+				Should(Succeed())
+
+			By("increase pod index")
+			idx++
 		})
 	})
 
