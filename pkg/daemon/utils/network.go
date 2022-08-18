@@ -34,9 +34,10 @@ import (
 )
 
 type IPInfo struct {
-	Addr net.IP
-	Gw   net.IP
-	Cidr *net.IPNet
+	Addr  net.IP
+	Gw    net.IP
+	Cidr  *net.IPNet
+	NetID *int32
 }
 
 func GenerateVlanNetIfName(parentName string, vlanID *int32) (string, error) {
