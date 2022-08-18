@@ -154,37 +154,19 @@ func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*d
 }
 
 func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, allocatedIPs map[networkingv1.IPVersion]*daemonutils.IPInfo,
-	macAddr net.HardwareAddr, netID *int32, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration,
-	networkMode networkingv1.NetworkMode, neighGCThresh1, neighGCThresh2, neighGCThresh3 int, bgpManager *bgp.Manager) error {
+	macAddr net.HardwareAddr, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration, networkMode networkingv1.NetworkMode,
+	neighGCThresh1, neighGCThresh2, neighGCThresh3 int, bgpManager *bgp.Manager) error {
 
 	var defaultRouteNets []*types.Route
 	var ipConfigs []*current.IPConfig
-	var forwardNodeIfName string
-	var err error
 
 	ipv6AddressAllocated := false
-
-	switch networkMode {
-	case networkingv1.NetworkModeVlan:
-		forwardNodeIfName, err = daemonutils.GenerateVlanNetIfName(nodeIfName, netID)
-		if err != nil {
-			return fmt.Errorf("failed to generate vlan forward node interface name: %v", err)
-		}
-	case networkingv1.NetworkModeVxlan:
-		forwardNodeIfName, err = daemonutils.GenerateVxlanNetIfName(nodeIfName, netID)
-		if err != nil {
-			return fmt.Errorf("failed to generate vxlan forward node interface name: %v", err)
-		}
-	case networkingv1.NetworkModeBGP, networkingv1.NetworkModeGlobalBGP:
-		forwardNodeIfName = nodeIfName
-	}
-
-	forwardNodeIf, err := net.InterfaceByName(forwardNodeIfName)
-	if err != nil {
-		return fmt.Errorf("failed get forward node interface %v: %v; if not exist, waiting for daemon to create it", forwardNodeIfName, err)
-	}
-
 	if allocatedIPs[networkingv1.IPv4] != nil {
+		forwardNodeIf, err := ensureForwardNodeIf(networkMode, nodeIfName, allocatedIPs[networkingv1.IPv4].NetID)
+		if err != nil {
+			return fmt.Errorf("failed to ensure v4 forward interface: %v", err)
+		}
+
 		// ipv4 address
 		defaultRouteNets = append(defaultRouteNets, &types.Route{
 			Dst: net.IPNet{IP: net.ParseIP("0.0.0.0").To4(), Mask: net.CIDRMask(0, 32)},
@@ -241,6 +223,10 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 	}
 
 	if allocatedIPs[networkingv1.IPv6] != nil {
+		forwardNodeIf, err := ensureForwardNodeIf(networkMode, nodeIfName, allocatedIPs[networkingv1.IPv6].NetID)
+		if err != nil {
+			return fmt.Errorf("failed to ensure v4 forward interface: %v", err)
+		}
 
 		ipv6AddressAllocated = true
 		// ipv6 address
@@ -339,4 +325,35 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 	}
 
 	return nil
+}
+
+func ensureForwardNodeIf(networkMode networkingv1.NetworkMode, nodeIfName string, netID *int32) (
+	forwardNodeIf *net.Interface, err error) {
+	var forwardNodeIfName string
+
+	switch networkMode {
+	case networkingv1.NetworkModeVlan:
+		forwardNodeIfName, err = daemonutils.GenerateVlanNetIfName(nodeIfName, netID)
+		if err != nil {
+			err = fmt.Errorf("failed to generate vlan forward node interface name: %v", err)
+			return
+		}
+	case networkingv1.NetworkModeVxlan:
+		forwardNodeIfName, err = daemonutils.GenerateVxlanNetIfName(nodeIfName, netID)
+		if err != nil {
+			err = fmt.Errorf("failed to generate vxlan forward node interface name: %v", err)
+			return
+		}
+	case networkingv1.NetworkModeBGP, networkingv1.NetworkModeGlobalBGP:
+		forwardNodeIfName = nodeIfName
+	}
+
+	forwardNodeIf, err = net.InterfaceByName(forwardNodeIfName)
+	if err != nil {
+		err = fmt.Errorf("failed get forward node interface %v: %v; if not exist, waiting for daemon to create it",
+			forwardNodeIfName, err)
+		return
+	}
+
+	return
 }

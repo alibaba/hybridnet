@@ -81,7 +81,6 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	cdh.logger.V(5).Info("handle add request", "content", podRequest)
 
 	var macAddr string
-	var netID *int32
 	var affectedIPInstances []*networkingv1.IPInstance
 
 	allocatedIPs := map[networkingv1.IPVersion]*utils.IPInfo{
@@ -153,14 +152,10 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	var networkName string
 	for _, ipInstance := range ipInstanceList {
 		// IPv4 and IPv6 ip will exist at the same time
-		if netID == nil && macAddr == "" {
-			netID = ipInstance.Spec.Address.NetID
+		if macAddr == "" {
 			macAddr = ipInstance.Spec.Address.MAC
-		} else if (netID != ipInstance.Spec.Address.NetID &&
-			(netID != nil && *netID != *ipInstance.Spec.Address.NetID)) ||
-			macAddr != ipInstance.Spec.Address.MAC {
-
-			errMsg := fmt.Errorf("mac and netId for all ip instances of pod %v/%v should be the same", podRequest.PodNamespace, podRequest.PodName)
+		} else if macAddr != ipInstance.Spec.Address.MAC {
+			errMsg := fmt.Errorf("mac for all ip instances of pod %v/%v should be the same", podRequest.PodNamespace, podRequest.PodName)
 			cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
 			return
 		}
@@ -184,9 +179,10 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 			}
 
 			allocatedIPs[networkingv1.IPv4] = &utils.IPInfo{
-				Addr: containerIP,
-				Gw:   gatewayIP,
-				Cidr: cidrNet,
+				Addr:  containerIP,
+				Gw:    gatewayIP,
+				Cidr:  cidrNet,
+				NetID: ipInstance.Spec.Address.NetID,
 			}
 		case networkingv1.IPv6:
 			if allocatedIPs[networkingv1.IPv6] != nil {
@@ -196,9 +192,10 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 			}
 
 			allocatedIPs[networkingv1.IPv6] = &utils.IPInfo{
-				Addr: containerIP,
-				Gw:   gatewayIP,
-				Cidr: cidrNet,
+				Addr:  containerIP,
+				Gw:    gatewayIP,
+				Cidr:  cidrNet,
+				NetID: ipInstance.Spec.Address.NetID,
 			}
 
 			ipVersion = networkingv1.IPv6
@@ -248,8 +245,8 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 		"podNamespace", podRequest.PodNamespace,
 		"ipAddr", printAllocatedIPs(allocatedIPs),
 		"macAddr", macAddr)
-	hostInterface, err := cdh.configureNic(podRequest.PodName, podRequest.PodNamespace, podRequest.NetNs, podRequest.ContainerID,
-		macAddr, netID, allocatedIPs, networkingv1.GetNetworkMode(network))
+	hostInterface, err := cdh.configureNic(podRequest.PodName, podRequest.PodNamespace, podRequest.NetNs, macAddr,
+		allocatedIPs, networkingv1.GetNetworkMode(network))
 	if err != nil {
 		errMsg := fmt.Errorf("failed to configure nic: %v", err)
 		cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
