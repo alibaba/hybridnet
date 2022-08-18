@@ -34,9 +34,8 @@ import (
 )
 
 // ipAddr is a CIDR notation IP address and prefix length
-func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, containerID, mac string,
-	netID *int32, allocatedIPs map[networkingv1.IPVersion]*utils.IPInfo,
-	networkMode networkingv1.NetworkMode) (string, error) {
+func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, mac string,
+	allocatedIPs map[networkingv1.IPVersion]*utils.IPInfo, networkMode networkingv1.NetworkMode) (string, error) {
 
 	var err error
 	var nodeIfName string
@@ -76,7 +75,7 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, container
 	}
 
 	if err = containernetwork.ConfigureContainerNic(containerNicName, hostNicName, nodeIfName,
-		allocatedIPs, macAddr, netID, podNS, mtu, cdh.config.VlanCheckTimeout, networkMode,
+		allocatedIPs, macAddr, podNS, mtu, cdh.config.VlanCheckTimeout, networkMode,
 		cdh.config.NeighGCThresh1, cdh.config.NeighGCThresh2, cdh.config.NeighGCThresh3, cdh.bgpManager); err != nil {
 		return "", fmt.Errorf("failed to configure container nic for %v.%v: %v", podName, podNamespace, err)
 	}
