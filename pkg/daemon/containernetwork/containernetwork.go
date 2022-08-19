@@ -225,7 +225,7 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 	if allocatedIPs[networkingv1.IPv6] != nil {
 		forwardNodeIf, err := ensureForwardNodeIf(networkMode, nodeIfName, allocatedIPs[networkingv1.IPv6].NetID)
 		if err != nil {
-			return fmt.Errorf("failed to ensure v4 forward interface: %v", err)
+			return fmt.Errorf("failed to ensure v6 forward interface: %v", err)
 		}
 
 		ipv6AddressAllocated = true
@@ -350,7 +350,7 @@ func ensureForwardNodeIf(networkMode networkingv1.NetworkMode, nodeIfName string
 
 	forwardNodeIf, err = net.InterfaceByName(forwardNodeIfName)
 	if err != nil {
-		err = fmt.Errorf("failed get forward node interface %v: %v; if not exist, waiting for daemon to create it",
+		err = fmt.Errorf("failed to get forward node interface %v: %v; if not exist, waiting for daemon to create it",
 			forwardNodeIfName, err)
 		return
 	}

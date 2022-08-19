@@ -2,8 +2,8 @@ apiVersion: v2
 name: hybridnet
 # When the version is modified, make sure the artifacthub.io/changes list is updated
 # Also update CHANGELOG.md
-version: 0.5.0
-appVersion: 0.7.0
+version: 0.5.1
+appVersion: 0.7.1
 home: https://github.com/alibaba/hybridnet
 description: A container networking solution aiming at hybrid clouds.
 keywords:
@@ -22,5 +22,4 @@ annotations:
   artifacthub.io/prerelease: "false"
   # List of changes for the release in artifacthub.io
   artifacthub.io/changes: |
-    - "Update image from v0.6.0 to v0.7.0"
-    - "Introduce configmap and daemon chart flags to configure cni conf"
+    - "Update image from v0.7.0 to v0.7.1"
