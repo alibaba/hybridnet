@@ -65,16 +65,17 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 
 	// select 4 networking configs in order as below
 	var (
-		networkName   string
-		subnetNameStr string
-		networkType   ipamtypes.NetworkType
-		ipFamily      ipamtypes.IPFamilyMode
+		networkName     string
+		subnetNameStr   string
+		networkType     ipamtypes.NetworkType
+		ipFamily        ipamtypes.IPFamilyMode
+		retainedIPExist bool
 
 		networkNodeSelector map[string]string
 	)
 
 	// parsing networking configs
-	if networkName, subnetNameStr, networkType, ipFamily, networkNodeSelector,
+	if networkName, subnetNameStr, networkType, ipFamily, networkNodeSelector, retainedIPExist,
 		err = webhookutils.ParseNetworkConfigOfPodByPriority(ctx, handler.Cache, pod); err != nil {
 		return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, fmt.Errorf("unable to parse network config for pod: %v", err), logger)
 	}
@@ -99,6 +100,12 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 				constants.LabelUnderlayNetworkAttachment: constants.Attached,
 			})
 		}
+
+		// if retained ip addresses exist, the pod will always have reserved quota
+		if retainedIPExist {
+			break
+		}
+
 		// quota label selector to make sure pod will be scheduled on nodes
 		// where capacity of network is enough
 		ipFamily := ipamtypes.ParseIPFamilyFromString(pod.Annotations[constants.AnnotationIPFamily])

@@ -107,7 +107,7 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 	handledByWebhook := globalutils.ParseBoolOrDefault(pod.Annotations[constants.AnnotationHandledByWebhook], false)
 
 	if !handledByWebhook {
-		_, _, _, ipFamily, _, err = webhookutils.ParseNetworkConfigOfPodByPriority(context.TODO(), cdh.mgrAPIReader, pod)
+		_, _, _, ipFamily, _, _, err = webhookutils.ParseNetworkConfigOfPodByPriority(context.TODO(), cdh.mgrAPIReader, pod)
 		if err != nil {
 			errMsg := fmt.Errorf("failed to parse network config of pod %v: %v", pod.Name, err)
 			cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
