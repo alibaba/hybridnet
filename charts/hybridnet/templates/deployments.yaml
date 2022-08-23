@@ -8,8 +8,6 @@ spec:
   selector:
     matchLabels:
       app: hybridnet-manager
-  strategy:
-    type: Recreate
   template:
     metadata:
       labels:
@@ -32,6 +30,10 @@ spec:
         - name: hybridnet-manager
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
           imagePullPolicy: {{ .Values.images.hybridnet.imagePullPolicy }}
+          {{- if .Values.manager.resources }}
+          resources:
+            {{- toYaml .Values.manager.resources | trim | nindent 12 }}
+          {{- end }}
           command:
             - /hybridnet/hybridnet-manager
             - --default-ip-retain={{ .Values.defaultIPRetain }}
@@ -59,8 +61,6 @@ spec:
   selector:
     matchLabels:
       app: hybridnet-webhook
-  strategy:
-    type: Recreate
   template:
     metadata:
       labels:
@@ -79,6 +79,10 @@ spec:
         - name: hybridnet-webhook
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
           imagePullPolicy: {{ .Values.images.hybridnet.imagePullPolicy }}
+          {{- if .Values.webhook.resources }}
+          resources:
+            {{- toYaml .Values.webhook.resources | trim | nindent 12 }}
+          {{- end }}
           command:
             - /hybridnet/hybridnet-webhook
             - --default-ip-retain={{ .Values.defaultIPRetain }}
