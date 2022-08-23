@@ -174,3 +174,11 @@ All notable changes to this project will be documented in this file.
 - Fix kube-proxy nodeport datapath error, this happens usually if the endpoints are underlay VLAN pod (Network jitters of nodeport traffic might happen during the upgrade for old versions)
 - Fix the scheduling problem of ip-retained VM pods
 
+## v0.7.1
+### Fixed Issues
+- Fix daemon bug to allow to create dualstack pod with different v4/v6 vlan id
+
+## v0.7.2
+### Fixed Issues
+- Fix the error that underlay ip-retained pods will keep being Pending after they are deleted and recreated, if the underlay addresses run out
+
