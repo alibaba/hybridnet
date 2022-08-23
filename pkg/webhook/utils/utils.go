@@ -112,7 +112,7 @@ func AdmissionDeniedWithLog(reason string, logger logr.Logger) admission.Respons
 // 3. if namespace which pod locates on have labels or annotations which contain network config, use it all
 func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod *corev1.Pod) (
 	networkName, subnetNameStr string, networkType ipamtypes.NetworkType,
-	ipFamily ipamtypes.IPFamilyMode, networkNodeSelector map[string]string, err error) {
+	ipFamily ipamtypes.IPFamilyMode, networkNodeSelector map[string]string, retainedIPExist bool, err error) {
 	var (
 		// these two variable is needed, them could be empty after a election
 		networkTypeStr, ipFamilyStr string
@@ -144,6 +144,14 @@ func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod
 				client.MatchingLabels{
 					constants.LabelPod: pod.Name,
 				})
+			if err != nil {
+				err = fmt.Errorf("parse pod %v/%v network config by exist ip instances: %v", pod.Namespace, pod.Name, err)
+				return
+			}
+
+			if len(networkName) > 0 {
+				retainedIPExist = true
+			}
 		}
 	} else if feature.VMIPRetainEnabled() {
 		var isVMPod bool
@@ -159,6 +167,14 @@ func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod
 				client.MatchingLabels{
 					constants.LabelVM: vmName,
 				})
+			if err != nil {
+				err = fmt.Errorf("parse vm pod %v/%v network config by exist ip instances: %v", pod.Namespace, pod.Name, err)
+				return
+			}
+
+			if len(networkName) > 0 {
+				retainedIPExist = true
+			}
 		}
 	}
 
@@ -236,6 +252,8 @@ func parseNetworkConfigByExistIPInstances(ctx context.Context, c client.Reader, 
 	}
 
 	switch len(validIPList) {
+	case 0:
+		// no valid ip instances exists, do nothing
 	case 1:
 		if networkingv1.IsIPv6IPInstance(&validIPList[0]) {
 			ipFamily = ipamtypes.IPv6

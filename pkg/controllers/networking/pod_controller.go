@@ -182,7 +182,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	// parse network and network-type in the webhook way
 	if !handledByWebhook {
 		if networkStrFromWebhook, subnetStrFromWebhook, networkTypeFromWebhook,
-			ipFamily, _, err = utils.ParseNetworkConfigOfPodByPriority(ctx, r, pod); err != nil {
+			ipFamily, _, _, err = utils.ParseNetworkConfigOfPodByPriority(ctx, r, pod); err != nil {
 			return ctrl.Result{}, fmt.Errorf("unable to parse network config of pod: %v", err)
 		}
 	} else {
