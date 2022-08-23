@@ -1,7 +1,7 @@
 images:
   hybridnet:
     image: hybridnetdev/hybridnet
-    tag: v0.7.1
+    tag: v0.7.2
     imagePullPolicy: IfNotPresent
   registryURL: "docker.io"
 
@@ -26,6 +26,16 @@ manager:
   # -- The number of manager pods
   replicas: 3
 
+  # -- Specifies the resources for the manager pods
+  resources: {}
+    # limits:
+    #   cpu: 4000m
+    #   memory: 4Gi
+    # requests:
+    #   cpu: 100m
+    #   memory: 512Mi
+
+
 webhook:
   # -- Only the pods match the additionalPodMatchExpressions will be validate by hybridnet webhook.
   additionalPodMatchExpressions:
@@ -35,6 +45,15 @@ webhook:
 
   # -- The number of webhook pods
   replicas: 3
+
+  # -- Specifies the resources for the webhook pods
+  resources: {}
+    # limits:
+    #   cpu: 4000m
+    #   memory: 4Gi
+    # requests:
+    #   cpu: 100m
+    #   memory: 512Mi
 
 daemon:
   # -- Whether enable the NetworkPolicy functions of hybridnet.
@@ -66,6 +85,26 @@ daemon:
 
   # -- The name of hybridnet CNI conf file generated in the /etc/cni/net.d/ directory of host
   cniConfName: "06-hybridnet.conflist"
+
+  # -- Specifies the resources for the cni-daemon containers
+  resources: {}
+    # limits:
+    #   cpu: 200m
+    #   memory: 256Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  policy:
+    # -- Specifies the resources for the policy containers
+    resources: {}
+      # limits:
+      #   cpu: 200m
+      #   memory: 256Mi
+      # requests:
+      #   cpu: 100m
+      #   memory: 128Mi
+
 
 # -- Whether pod IP of stateful workloads will be retained by default. true or false
 ## Ref: https://github.com/alibaba/hybridnet/wiki/Static-pod-ip-addresses-for-StatefulSet

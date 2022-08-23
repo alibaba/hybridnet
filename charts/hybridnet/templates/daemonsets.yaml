@@ -64,6 +64,10 @@ spec:
           securityContext:
             runAsUser: 0
             privileged: true
+          {{- if .Values.daemon.resources }}
+          resources:
+            {{- toYaml .Values.daemon.resources | trim | nindent 12 }}
+          {{- end }}
           env:
             - name: DEFAULT_IP_FAMILY
               value: {{ .Values.defaultIPFamily }}
@@ -105,9 +109,12 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: spec.nodeName
+          {{- if .Values.daemon.policy }}
+          {{- if .Values.daemon.policy.resources }}
           resources:
-            requests:
-              cpu: 250m
+            {{- toYaml .Values.daemon.policy.resources | trim | nindent 12 }}
+          {{- end }}
+          {{- end }}
           securityContext:
             privileged: true
             runAsUser: 0
