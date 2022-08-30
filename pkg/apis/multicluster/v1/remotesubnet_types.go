@@ -43,6 +43,10 @@ type RemoteSubnetStatus struct {
 	LastModifyTime metav1.Time `json:"lastModifyTime,omitempty"`
 }
 
+// +k8s:openapi-gen=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient
+// +genclient:nonNamespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster

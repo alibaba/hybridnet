@@ -33,4 +33,12 @@ var (
 
 	// AddToScheme adds the types in this group-version to the given scheme.
 	AddToScheme = SchemeBuilder.AddToScheme
+
+	// SchemeGroupVersion is used for code-generator
+	SchemeGroupVersion = GroupVersion
 )
+
+// Resource is required by pkg/client/listers/..., for code-generator
+func Resource(resource string) schema.GroupResource {
+	return SchemeGroupVersion.WithResource(resource).GroupResource()
+}

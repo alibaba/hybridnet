@@ -83,6 +83,9 @@ type IPInstanceStatus struct {
 	UpdateTimestamp metav1.Time `json:"updateTimestamp,omitempty"`
 }
 
+// +k8s:openapi-gen=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.spec.address.ip`
