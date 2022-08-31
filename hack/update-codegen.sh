@@ -18,17 +18,20 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+TEMP_DIR=$(mktemp -d)
+ROOT_PKG=github.com/alibaba/hybridnet
+
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
-#CODEGEN_PKG=${CODEGEN_PKG:-$(cd "${SCRIPT_ROOT}"; ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo ../code-generator)}
-CODEGEN_PKG=${GOPATH}/src/k8s.io/code-generator
 
 # generate the code with:
 # --output-base    because this script should also be able to run inside the vendor dir of
 #                  k8s.io/kubernetes. The output-base is needed for the generators to output into the vendor dir
 #                  instead of the $GOPATH directly. For normal projects this can be dropped.
-bash "${CODEGEN_PKG}"/generate-groups.sh "deepcopy,client,informer,lister" \
+bash "${SCRIPT_ROOT}"/hack/generate-groups.sh "deepcopy,client,informer,lister" \
   github.com/alibaba/hybridnet/pkg/client github.com/alibaba/hybridnet/pkg/apis \
-  networking:v1 \
-  --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \
+  "networking:v1 multicluster:v1" \
+  --output-base "${TEMP_DIR}" \
   --go-header-file "${SCRIPT_ROOT}"/hack/custom-boilerplate.go.txt
 
+# Copy everything back.
+cp -a "${TEMP_DIR}/${ROOT_PKG}/." "${SCRIPT_ROOT}/"
