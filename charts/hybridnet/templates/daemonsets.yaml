@@ -96,6 +96,9 @@ spec:
               name: host-modules
             - mountPath: /run/xtables.lock
               name: xtables-lock
+            - mountPath: /var/run/
+              name: host-var-run
+              mountPropagation: Bidirectional
           # TODO: add liveness probe
         {{ if .Values.daemon.enableNetworkPolicy }}
         - name: policy
@@ -144,4 +147,8 @@ spec:
             items:
               - key: cni-config
                 path: cni-config
+        - name: host-var-run
+          hostPath:
+            path: /var/run/
+            type: "Directory"
 
