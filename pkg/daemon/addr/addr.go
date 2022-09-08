@@ -198,27 +198,34 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 			//   1. Use source address in the IP header (always fit for us)
 			//   2. Use the "inet_select_addr" function
 			//
-			// For the second possibility, kernel will use the "inet_select_addr" function with a "link" scope
+			// For the second possibility, kernel will use the "inet_select_addr" function with "link" scope
 			// to select sender IP. That means the first address that matches the subnet of the target IP (of ARP header)
 			// and has a scope greater than or equal to RT_SCOPE_LINK will be selected.
 			//
-			// If a route does not have src specified then:
-			//   1. ip with scope=host can be as backend only for a route with scope=host
-			//   2. ip with scope=link can be as backend only for a route with scope=host or scope=link
-			//   3. ip with scope=global can be as backend only for a route with any scope
+			// There are also also two kinds of results of IP source selection during (OUTPUT, not FORWARD) routing decision:
+			//   1. The egress interface of routing result has some ip addresses
+			//   2. The egress interface of the routing result doesn't have any address
 			//
-			// As for the IP source selection after routing, if egress interface of the routing result doesn't have any
-			// address and need to select from other interfaces, only the addresses with "global" scope will be selected.
-			// So the enhanced address will never be used as source address for other interfaces.
+			// For the first situation above while the target route has no "src" field specified (if the route has one,
+			// of course, the "src" address will always be selected as the source address):
+			//   1. If the route is with "host" scope, ip addresses on the egress interface with "host" scope can be
+			//      selected as source
+			//   2. If the route is with "host" or "link" scope, ip addresses on the egress interface with "link" scope
+			//      can be as source
+			//   3. IP with "global" scope can be selected as source by any route
 			//
-			// So does the ARP sender IP selection happens on a interface without any address, only the addresses of
-			// other interfaces with "global" scope will be selected as sender IP. If no valid sender IP found, it will
-			// be "0.0.0.0".
+			// If egress interface of the routing result doesn't have any address itself. Source address will be selected
+			// among the addresses on other interfaces first, and only the addresses with "global" scope will be selected.
+			// So the enhanced address will never be used as source address for other interfaces if it is with "link" scope.
+			//
+			// And things happen always the same way for ARP sender IP selection on a egress interface without any
+			// address. Only the addresses of other interfaces with "global" scope will be selected as sender IP. If no
+			// valid sender IP found, it will be "0.0.0.0".
 			//
 			// At the same time, subnet direct routes (scope lower than or equal to "link"), which match hybridnet
 			// underlay vlan subnets, are never supposed to be added to enhanced-address-attached interfaces directly by
 			// host. Because of that, we can make the enhanced addresses never be selected as source IP by creating them
-			// with a "link" scope.
+			// with "link" scope.
 			if err := ensureSubnetEnhancedAddr(forwardNodeIf, &netlink.Addr{
 				IPNet: &net.IPNet{
 					IP:   podIP,

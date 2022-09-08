@@ -326,6 +326,10 @@ func ensureRoutesForVlanSubnet(forwardLink netlink.Link, cidr *net.IPNet, gatewa
 		return fmt.Errorf("failed to list local addresses: %v", err)
 	}
 
+	if !cidr.Contains(gateway) {
+		return fmt.Errorf("vlan gateway address %v is not inside the vlan subnet cidr %v", gateway, cidr)
+	}
+
 	isLocalSubnet := false
 	for _, address := range localAddrList {
 		if cidr.Contains(address.IP) {
@@ -341,7 +345,8 @@ func ensureRoutesForVlanSubnet(forwardLink netlink.Link, cidr *net.IPNet, gatewa
 		LinkIndex: forwardLink.Attrs().Index,
 		Dst:       cidr,
 		Table:     table,
-		Scope:     netlink.SCOPE_UNIVERSE,
+		// cannot add default route if the scope of subnet direct route is not "link"
+		Scope: netlink.SCOPE_LINK,
 	}
 
 	if isLocalSubnet {
@@ -378,11 +383,11 @@ func ensureRoutesForVlanSubnet(forwardLink netlink.Link, cidr *net.IPNet, gatewa
 		subnetDirectRoute.Src = directRouteList[0].Src
 	}
 
+	// avoid to use onlink flag because it doesn't work for ipv6 routes until linux 4.16
 	defaultRoute := &netlink.Route{
 		LinkIndex: forwardLink.Attrs().Index,
 		Table:     table,
 		Scope:     netlink.SCOPE_UNIVERSE,
-		Flags:     int(netlink.FLAG_ONLINK),
 		Gw:        gateway,
 	}
 
