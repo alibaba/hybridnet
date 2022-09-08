@@ -182,3 +182,6 @@ All notable changes to this project will be documented in this file.
 ### Fixed Issues
 - Fix the error that underlay ip-retained pods will keep being Pending after they are deleted and recreated, if the underlay addresses run out
 
+## v0.7.3
+### Improvements
+- Remove all the `onlink` route flag usages to avoid ipv6 kernel bugs
