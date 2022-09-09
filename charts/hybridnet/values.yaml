@@ -23,7 +23,7 @@ init:
   vxlanID: 4
 
 manager:
-  # -- The number of manager pods
+  # -- The number of manager pods, which is supposed to be less than or equal to the number of master nodes
   replicas: 3
 
   # -- Specifies the resources for the manager pods
@@ -43,7 +43,7 @@ webhook:
       operator: NotIn
       values: [ "kube-proxy" ]
 
-  # -- The number of webhook pods
+  # -- The number of webhook pods, which is supposed to be less than or equal to the number of master nodes
   replicas: 3
 
   # -- Specifies the resources for the webhook pods
