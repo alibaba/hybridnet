@@ -337,7 +337,10 @@ func checkNodeUpdate(updateEvent event.UpdateEvent) bool {
 }
 
 func (r *nodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	nodeController, err := controller.New("node", mgr, controller.Options{Reconciler: r})
+	nodeController, err := controller.New("node", mgr, controller.Options{
+		Reconciler:   r,
+		RecoverPanic: true,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create node controller: %v", err)
 	}

@@ -160,7 +160,10 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 }
 
 func (r *ipInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	ipInstanceController, err := controller.New("ip-instance", mgr, controller.Options{Reconciler: r})
+	ipInstanceController, err := controller.New("ip-instance", mgr, controller.Options{
+		Reconciler:   r,
+		RecoverPanic: true,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create ip instance controller: %v", err)
 	}

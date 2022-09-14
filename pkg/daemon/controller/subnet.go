@@ -188,7 +188,10 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 }
 
 func (r *subnetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	subnetController, err := controller.New("subnet", mgr, controller.Options{Reconciler: r})
+	subnetController, err := controller.New("subnet", mgr, controller.Options{
+		Reconciler:   r,
+		RecoverPanic: true,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create subnet controller: %v", err)
 	}
