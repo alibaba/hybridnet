@@ -239,6 +239,7 @@ func (r *RemoteEndpointSliceReconciler) SetupWithManager(mgr ctrl.Manager) (err 
 		// TODO: Add periodic garbage collection?
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
+			RecoverPanic:            true,
 		}).
 		Complete(r)
 }
