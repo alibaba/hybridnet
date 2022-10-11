@@ -79,16 +79,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+          {{- if .Values.daemon.livenessProbe }}
           livenessProbe:
-            httpGet:
-              path: /live
-              port: 11021
-              scheme: HTTP
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            successThreshold: 1
-            timeoutSeconds: 1
-            failureThreshold: 1
+            {{- toYaml .Values.daemon.livenessProbe | trim | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - mountPath: /run/cni
               name: host-run-cni
@@ -99,7 +93,6 @@ spec:
             - mountPath: /var/run/
               name: host-var-run
               mountPropagation: Bidirectional
-          # TODO: add liveness probe
         {{ if .Values.daemon.enableNetworkPolicy }}
         - name: policy
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
