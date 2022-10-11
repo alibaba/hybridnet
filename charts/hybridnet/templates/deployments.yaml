@@ -38,10 +38,28 @@ spec:
           resources:
             {{- toYaml .Values.manager.resources | trim | nindent 12 }}
           {{- end }}
+          ports:
+            {{- if .Values.manager.metricsPort }}
+            - name: http-metrics
+              containerPort: {{ .Values.manager.metricsPort }}
+              protocol: TCP
+            {{- end }}
           command:
             - /hybridnet/hybridnet-manager
             - --default-ip-retain={{ .Values.defaultIPRetain }}
             - --feature-gates=MultiCluster={{ .Values.multiCluster }},VMIPRetain={{ .Values.vmIPRetain }}
+            {{- if .Values.manager.controllerConcurrency }}
+            - --controller-concurrency={{ .Values.manager.controllerConcurrency }}
+            {{- end }}
+            {{- if .Values.manager.kubeClientQPS }}
+            - --kube-client-qps={{ .Values.manager.kubeClientQPS }}
+            {{- end }}
+            {{- if .Values.manager.kubeClientBurst }}
+            - --kube-client-burst={{ .Values.manager.kubeClientBurst }}
+            {{- end }}
+            {{- if .Values.manager.metricsPort }}
+            - --metrics-port={{ .Values.manager.metricsPort }}
+            {{- end }}
           env:
             - name: DEFAULT_NETWORK_TYPE
               value: {{ .Values.defaultNetworkType }}
