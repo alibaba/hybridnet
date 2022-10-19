@@ -78,13 +78,13 @@ func EnsureRpFilterConfigs(containerHostIf string) error {
 	for _, key := range []string{"default", "all"} {
 		sysctlPath := fmt.Sprintf(constants.RpFilterSysctl, key)
 		if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
-			return fmt.Errorf("error set: %s sysctl path to 0, error: %v", sysctlPath, err)
+			return fmt.Errorf("failed to set %s sysctl path to 0, error: %v", sysctlPath, err)
 		}
 	}
 
 	sysctlPath := fmt.Sprintf(constants.RpFilterSysctl, containerHostIf)
 	if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
-		return fmt.Errorf("error set: %s sysctl path to 0, error: %v", sysctlPath, err)
+		return fmt.Errorf("failed to set %s sysctl path to 0, error: %v", sysctlPath, err)
 	}
 
 	existInterfaces, err := net.Interfaces()
@@ -104,7 +104,7 @@ func EnsureRpFilterConfigs(containerHostIf string) error {
 		}
 		if sysctlValue != 0 {
 			if err = daemonutils.SetSysctl(sysctlPath, 0); err != nil {
-				return fmt.Errorf("error set: %s sysctl path to 0, error: %v", sysctlPath, err)
+				return fmt.Errorf("failed to set %s sysctl path to 0, error: %v", sysctlPath, err)
 			}
 		}
 	}
