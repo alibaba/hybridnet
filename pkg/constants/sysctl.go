@@ -46,4 +46,7 @@ const (
 
 	IPv6DisableModuleParameter = "/sys/module/ipv6/parameters/disable"
 	IPv6DisableSysctl          = "/proc/sys/net/ipv6/conf/%s/disable_ipv6"
+
+	IPv6RouteCacheMaxSizeSysctl = "/proc/sys/net/ipv6/route/max_size"
+	IPv6RouteCacheGCThresh      = "/proc/sys/net/ipv6/route/gc_thresh"
 )

@@ -328,7 +328,7 @@ func EnsureNeighGCThresh(family int, neighGCThresh1, neighGCThresh2, neighGCThre
 		//     purge entries if there are fewer than this number.
 		//     Default: 128
 		if err := SetSysctl(constants.IPv4NeighGCThresh1, neighGCThresh1); err != nil {
-			return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv4NeighGCThresh1, neighGCThresh1, err)
+			return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv4NeighGCThresh1, neighGCThresh1, err)
 		}
 
 		// From kernel doc:
@@ -338,7 +338,7 @@ func EnsureNeighGCThresh(family int, neighGCThresh1, neighGCThresh2, neighGCThre
 		//     when over this number.
 		//     Default: 512
 		if err := SetSysctl(constants.IPv4NeighGCThresh2, neighGCThresh2); err != nil {
-			return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv4NeighGCThresh2, neighGCThresh2, err)
+			return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv4NeighGCThresh2, neighGCThresh2, err)
 		}
 
 		// From kernel doc:
@@ -348,24 +348,44 @@ func EnsureNeighGCThresh(family int, neighGCThresh1, neighGCThresh2, neighGCThre
 		//     with large numbers of directly-connected peers.
 		//     Default: 1024
 		if err := SetSysctl(constants.IPv4NeighGCThresh3, neighGCThresh3); err != nil {
-			return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv4NeighGCThresh3, neighGCThresh3, err)
+			return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv4NeighGCThresh3, neighGCThresh3, err)
 		}
 
 		return nil
 	}
 
 	if err := SetSysctl(constants.IPv6NeighGCThresh1, neighGCThresh1); err != nil {
-		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv6NeighGCThresh1, neighGCThresh1, err)
+		return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv6NeighGCThresh1, neighGCThresh1, err)
 	}
 
 	if err := SetSysctl(constants.IPv6NeighGCThresh2, neighGCThresh2); err != nil {
-		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv6NeighGCThresh2, neighGCThresh2, err)
+		return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv6NeighGCThresh2, neighGCThresh2, err)
 	}
 
 	if err := SetSysctl(constants.IPv6NeighGCThresh3, neighGCThresh3); err != nil {
-		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv6NeighGCThresh3, neighGCThresh3, err)
+		return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv6NeighGCThresh3, neighGCThresh3, err)
 	}
 
+	return nil
+}
+
+func EnsureIPv6RouteGCParameters(routeCacheMaxSize, gcThresh int) error {
+	// IPv6 traffic's being dropped happens suddenly in some kernel versions (e.g., 4.18.0-80.el8.x86_64 of CentOS 8), while
+	// running "ip route get" for some of the ipv6 routes in table 39999 you can get a "Network is unreachable" error (though
+	// you can see a obviously correct route table configuration by running "ip route show"), and all neighbors are
+	// invalidated at the same time. This problem will shutdown all the Pods' network on the same node.
+	//
+	// We believed that this problem is related to the kernel GC mechanism of ipv6 route cache because errors disappeared
+	// when the "net.ipv6.route.max_size" kernel parameter was configured to a much larger one (default 4096). But no related
+	// kernel patch is founded.
+
+	if err := SetSysctl(constants.IPv6RouteCacheMaxSizeSysctl, routeCacheMaxSize); err != nil {
+		return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv6RouteCacheMaxSizeSysctl, routeCacheMaxSize, err)
+	}
+
+	if err := SetSysctl(constants.IPv6RouteCacheGCThresh, gcThresh); err != nil {
+		return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv6RouteCacheGCThresh, gcThresh, err)
+	}
 	return nil
 }
 
