@@ -51,6 +51,9 @@ const (
 	DefaultLocalDirectTableNum     = 39999
 	DefaultToOverlaySubnetTableNum = 40000
 	DefaultOverlayMarkTableNum     = 40001
+
+	DefaultIPv6RouteCacheMaxSize  = 524288
+	DefaultIPv6RouteCacheGCThresh = 65536
 )
 
 // Configuration is the daemon conf
@@ -94,6 +97,9 @@ type Configuration struct {
 	NeighGCThresh2 int
 	NeighGCThresh3 int
 
+	IPv6RouteCacheMaxSize  int
+	IPv6RouteCacheGCThresh int
+
 	EnableVlanArpEnhancement bool
 }
 
@@ -122,6 +128,8 @@ func ParseFlags() (*Configuration, error) {
 		argNeighGCThresh3                       = pflag.Int("neigh-gc-thresh3", DefaultNeighGCThresh3, "Value to set net.ipv4/ipv6.neigh.default.gc_thresh3")
 		argExtraNodeLocalVxlanIPCidrs           = pflag.String("extra-node-local-vxlan-ip-cidrs", "", "The cidr list to select node extra local vxlan ip, e.g., \"192.168.10.0/24,10.2.3.0/24\"")
 		argEnableVlanArpEnhancement             = pflag.Bool("enable-vlan-arp-enhancement", true, "Whether enable arp source enhancement in a vlan environment")
+		argIPv6RouteCacheMaxSize                = pflag.Int("ipv6-route-cache-max-size", DefaultIPv6RouteCacheMaxSize, "Value to set net.ipv6.route.max_size")
+		argIPv6RouteCacheGCThresh               = pflag.Int("ipv6-route-cache-gc-thresh", DefaultIPv6RouteCacheGCThresh, "Value to set net.ipv6.route.gc_thresh")
 	)
 
 	// mute info log for ipset lib
@@ -156,6 +164,8 @@ func ParseFlags() (*Configuration, error) {
 		NeighGCThresh3:                       *argNeighGCThresh3,
 		VxlanExpiredNeighCachesClearInterval: *argVxlanExpiredNeighCachesClearInterval,
 		EnableVlanArpEnhancement:             *argEnableVlanArpEnhancement,
+		IPv6RouteCacheMaxSize:                *argIPv6RouteCacheMaxSize,
+		IPv6RouteCacheGCThresh:               *argIPv6RouteCacheGCThresh,
 	}
 
 	if *argPreferVlanInterfaces == "" {
