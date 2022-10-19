@@ -328,7 +328,7 @@ func EnsureNeighGCThresh(family int, neighGCThresh1, neighGCThresh2, neighGCThre
 		//     purge entries if there are fewer than this number.
 		//     Default: 128
 		if err := SetSysctl(constants.IPv4NeighGCThresh1, neighGCThresh1); err != nil {
-			return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv4NeighGCThresh1, neighGCThresh1, err)
+			return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv4NeighGCThresh1, neighGCThresh1, err)
 		}
 
 		// From kernel doc:
@@ -338,7 +338,7 @@ func EnsureNeighGCThresh(family int, neighGCThresh1, neighGCThresh2, neighGCThre
 		//     when over this number.
 		//     Default: 512
 		if err := SetSysctl(constants.IPv4NeighGCThresh2, neighGCThresh2); err != nil {
-			return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv4NeighGCThresh2, neighGCThresh2, err)
+			return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv4NeighGCThresh2, neighGCThresh2, err)
 		}
 
 		// From kernel doc:
@@ -348,22 +348,22 @@ func EnsureNeighGCThresh(family int, neighGCThresh1, neighGCThresh2, neighGCThre
 		//     with large numbers of directly-connected peers.
 		//     Default: 1024
 		if err := SetSysctl(constants.IPv4NeighGCThresh3, neighGCThresh3); err != nil {
-			return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv4NeighGCThresh3, neighGCThresh3, err)
+			return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv4NeighGCThresh3, neighGCThresh3, err)
 		}
 
 		return nil
 	}
 
 	if err := SetSysctl(constants.IPv6NeighGCThresh1, neighGCThresh1); err != nil {
-		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv6NeighGCThresh1, neighGCThresh1, err)
+		return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv6NeighGCThresh1, neighGCThresh1, err)
 	}
 
 	if err := SetSysctl(constants.IPv6NeighGCThresh2, neighGCThresh2); err != nil {
-		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv6NeighGCThresh2, neighGCThresh2, err)
+		return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv6NeighGCThresh2, neighGCThresh2, err)
 	}
 
 	if err := SetSysctl(constants.IPv6NeighGCThresh3, neighGCThresh3); err != nil {
-		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv6NeighGCThresh3, neighGCThresh3, err)
+		return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv6NeighGCThresh3, neighGCThresh3, err)
 	}
 
 	return nil
@@ -380,11 +380,11 @@ func EnsureIPv6RouteGCParameters(routeCacheMaxSize, gcThresh int) error {
 	// kernel patch is founded.
 
 	if err := SetSysctl(constants.IPv6RouteCacheMaxSizeSysctl, routeCacheMaxSize); err != nil {
-		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv6RouteCacheMaxSizeSysctl, routeCacheMaxSize, err)
+		return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv6RouteCacheMaxSizeSysctl, routeCacheMaxSize, err)
 	}
 
 	if err := SetSysctl(constants.IPv6RouteCacheGCThresh, gcThresh); err != nil {
-		return fmt.Errorf("error set: %s sysctl path to %v, error: %v", constants.IPv6RouteCacheGCThresh, gcThresh, err)
+		return fmt.Errorf("failed to set %s sysctl path to %v, error: %v", constants.IPv6RouteCacheGCThresh, gcThresh, err)
 	}
 	return nil
 }
