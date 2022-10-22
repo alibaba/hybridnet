@@ -80,7 +80,7 @@ func NewManager(peeringInterfaceName, grpcListenAddress string, logger logr.Logg
 		return nil, fmt.Errorf("failed to get bgp peering link %v: %v", peeringInterfaceName, err)
 	}
 
-	existLinkAddress, err := daemonutils.ListAllAddress(peeringLink)
+	existLinkAddress, err := daemonutils.ListAllGlobalUnicastAddress(peeringLink)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get link address for bgp peering interface %v: %v", peeringInterfaceName, err)
 	}

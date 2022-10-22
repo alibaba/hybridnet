@@ -8,6 +8,7 @@ require (
 	github.com/coreos/go-iptables v0.6.0
 	github.com/emicklei/go-restful v2.16.0+incompatible
 	github.com/go-logr/logr v1.2.3
+	github.com/go-ping/ping v1.1.0
 	github.com/gogf/gf v1.16.6
 	github.com/heptiolabs/healthcheck v0.0.0-20211123025425-613501dd5deb
 	github.com/mdlayher/ethernet v0.0.0-20190606142754-0394541c37b7
@@ -85,6 +86,7 @@ require (
 	go.uber.org/zap v1.19.1 // indirect
 	golang.org/x/net v0.0.0-20220826154423-83b083e8dc8b // indirect
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect

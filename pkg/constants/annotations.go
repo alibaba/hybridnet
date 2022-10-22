@@ -36,4 +36,6 @@ const (
 	AnnotationNodeLocalVxlanIPList = "networking.alibaba.com/local-vxlan-ip-list"
 
 	AnnotationHandledByWebhook = "networking.alibaba.com/handled-by-webhook"
+
+	AnnotationCalicoPodIPs = "cni.projectcalico.org/podIPs"
 )
