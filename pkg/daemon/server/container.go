@@ -76,8 +76,33 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, mac strin
 
 	if err = containernetwork.ConfigureContainerNic(containerNicName, hostNicName, nodeIfName,
 		allocatedIPs, macAddr, podNS, mtu, cdh.config.VlanCheckTimeout, networkMode,
-		cdh.config.NeighGCThresh1, cdh.config.NeighGCThresh2, cdh.config.NeighGCThresh3, cdh.bgpManager); err != nil {
+		cdh.config.NeighGCThresh1, cdh.config.NeighGCThresh2, cdh.config.NeighGCThresh3, cdh.config.IPv6RouteCacheMaxSize,
+		cdh.config.IPv6RouteCacheGCThresh, cdh.bgpManager); err != nil {
 		return "", fmt.Errorf("failed to configure container nic for %v.%v: %v", podName, podNamespace, err)
+	}
+
+	if allocatedIPs[networkingv1.IPv4] != nil {
+		podIP := allocatedIPs[networkingv1.IPv4].Addr
+
+		if cdh.config.CheckPodConnectivityFromHost {
+			// ICMP traffic from pod's node to pod is always assumed allowed.
+			// If the node has an usable ip, check the local pod's connectivity from node.
+			if err := containernetwork.CheckReachabilityFromHost(podIP, netlink.FAMILY_V4); err != nil {
+				return "", fmt.Errorf("falied to check the connectivity of local pod ip %v: %v", podIP, err)
+			}
+		}
+	}
+
+	if allocatedIPs[networkingv1.IPv6] != nil {
+		podIP := allocatedIPs[networkingv1.IPv6].Addr
+
+		if cdh.config.CheckPodConnectivityFromHost {
+			// ICMP traffic from pod's node to pod is always assumed allowed.
+			// If the node has an usable ip, check the local pod's connectivity from node.
+			if err := containernetwork.CheckReachabilityFromHost(podIP, netlink.FAMILY_V6); err != nil {
+				return "", fmt.Errorf("falied to check the connectivity of local pod ip %v: %v", podIP, err)
+			}
+		}
 	}
 
 	return hostNicName, nil

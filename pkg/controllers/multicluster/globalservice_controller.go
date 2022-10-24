@@ -225,6 +225,7 @@ func (r *GlobalServiceReconciler) SetupWithManager(mgr ctrl.Manager) (err error)
 			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.Max(),
+			RecoverPanic:            true,
 		}).
 		Complete(r)
 }

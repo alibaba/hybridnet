@@ -296,6 +296,7 @@ func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
+			RecoverPanic:            true,
 		}).
 		Complete(r)
 }

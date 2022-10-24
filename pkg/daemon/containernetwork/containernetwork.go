@@ -155,7 +155,8 @@ func ConfigureHostNic(nicName string, allocatedIPs map[networkingv1.IPVersion]*d
 
 func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, allocatedIPs map[networkingv1.IPVersion]*daemonutils.IPInfo,
 	macAddr net.HardwareAddr, netns ns.NetNS, mtu int, vlanCheckTimeout time.Duration, networkMode networkingv1.NetworkMode,
-	neighGCThresh1, neighGCThresh2, neighGCThresh3 int, bgpManager *bgp.Manager) error {
+	neighGCThresh1, neighGCThresh2, neighGCThresh3, ipv6RouteCacheMaxSize, ipv6RouteCacheGCThresh int,
+	bgpManager *bgp.Manager) error {
 
 	var defaultRouteNets []*types.Route
 	var ipConfigs []*current.IPConfig
@@ -253,6 +254,10 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 
 		if err := daemonutils.EnsureNeighGCThresh(netlink.FAMILY_V6, neighGCThresh1, neighGCThresh2, neighGCThresh3); err != nil {
 			return fmt.Errorf("failed to ensure ipv6 neigh gc thresh: %v", err)
+		}
+
+		if err := daemonutils.EnsureIPv6RouteGCParameters(ipv6RouteCacheMaxSize, ipv6RouteCacheGCThresh); err != nil {
+			return fmt.Errorf("failed to set ipv6 route cache gc parameters: %v", err)
 		}
 
 		if networkMode == networkingv1.NetworkModeVlan {

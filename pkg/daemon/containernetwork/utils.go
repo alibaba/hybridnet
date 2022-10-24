@@ -24,9 +24,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/go-ping/ping"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 	"github.com/vishvananda/netlink"
@@ -62,7 +63,7 @@ func ListLocalAddressExceptLink(exceptLinkName string) ([]netlink.Addr, error) {
 		linkName := link.Attrs().Name
 		if linkName != exceptLinkName && !CheckIfContainerNetworkLink(linkName) {
 
-			linkAddrList, err := daemonutils.ListAllAddress(link)
+			linkAddrList, err := daemonutils.ListAllGlobalUnicastAddress(link)
 			if err != nil {
 				return nil, fmt.Errorf("failed to link addr for link %v: %v", link.Attrs().Name, err)
 			}
@@ -78,13 +79,13 @@ func EnsureRpFilterConfigs(containerHostIf string) error {
 	for _, key := range []string{"default", "all"} {
 		sysctlPath := fmt.Sprintf(constants.RpFilterSysctl, key)
 		if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
-			return fmt.Errorf("error set: %s sysctl path to 0, error: %v", sysctlPath, err)
+			return fmt.Errorf("failed to set %s sysctl path to 0, error: %v", sysctlPath, err)
 		}
 	}
 
 	sysctlPath := fmt.Sprintf(constants.RpFilterSysctl, containerHostIf)
 	if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
-		return fmt.Errorf("error set: %s sysctl path to 0, error: %v", sysctlPath, err)
+		return fmt.Errorf("failed to set %s sysctl path to 0, error: %v", sysctlPath, err)
 	}
 
 	existInterfaces, err := net.Interfaces()
@@ -104,7 +105,7 @@ func EnsureRpFilterConfigs(containerHostIf string) error {
 		}
 		if sysctlValue != 0 {
 			if err = daemonutils.SetSysctl(sysctlPath, 0); err != nil {
-				return fmt.Errorf("error set: %s sysctl path to 0, error: %v", sysctlPath, err)
+				return fmt.Errorf("failed to set %s sysctl path to 0, error: %v", sysctlPath, err)
 			}
 		}
 	}
@@ -197,6 +198,44 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 
 		time.Sleep(backOffBase)
 		backOffBase = backOffBase * 2
+	}
+
+	return nil
+}
+
+func CheckReachabilityFromHost(target net.IP, family int) error {
+	addressList, err := daemonutils.ListGlobalUnicastAddress(nil, family)
+	if err != nil {
+		return fmt.Errorf("failed to list global unicase addresses: %v", err)
+	}
+
+	const retries = 5
+	interval := time.Second
+
+	if len(addressList) != 0 {
+		pinger, err := ping.NewPinger(target.String())
+		if err != nil {
+			return fmt.Errorf("failed to init pinger: %v", err)
+		}
+
+		pinger.SetPrivileged(true)
+		pinger.Count = retries
+		pinger.Timeout = retries * interval
+		pinger.Interval = interval
+
+		var success bool
+		pinger.OnRecv = func(p *ping.Packet) {
+			success = true
+			pinger.Stop()
+		}
+
+		if err = pinger.Run(); err != nil {
+			return fmt.Errorf("failed to run pinger: %v", err)
+		}
+
+		if !success {
+			return fmt.Errorf("pod network not ready after %d ping %s", retries, target)
+		}
 	}
 
 	return nil

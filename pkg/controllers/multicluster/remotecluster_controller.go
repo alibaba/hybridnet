@@ -157,6 +157,7 @@ func (r *RemoteClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.Max(),
+			RecoverPanic:            true,
 		}).
 		Complete(r)
 }
