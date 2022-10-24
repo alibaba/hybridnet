@@ -81,6 +81,30 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, mac strin
 		return "", fmt.Errorf("failed to configure container nic for %v.%v: %v", podName, podNamespace, err)
 	}
 
+	if allocatedIPs[networkingv1.IPv4] != nil {
+		podIP := allocatedIPs[networkingv1.IPv4].Addr
+
+		if cdh.config.CheckPodConnectivityFromHost {
+			// ICMP traffic from pod's node to pod is always assumed allowed.
+			// If the node has an usable ip, check the local pod's connectivity from node.
+			if err := containernetwork.CheckReachabilityFromHost(podIP, netlink.FAMILY_V4); err != nil {
+				return "", fmt.Errorf("falied to check the connectivity of local pod ip %v: %v", podIP, err)
+			}
+		}
+	}
+
+	if allocatedIPs[networkingv1.IPv6] != nil {
+		podIP := allocatedIPs[networkingv1.IPv6].Addr
+
+		if cdh.config.CheckPodConnectivityFromHost {
+			// ICMP traffic from pod's node to pod is always assumed allowed.
+			// If the node has an usable ip, check the local pod's connectivity from node.
+			if err := containernetwork.CheckReachabilityFromHost(podIP, netlink.FAMILY_V6); err != nil {
+				return "", fmt.Errorf("falied to check the connectivity of local pod ip %v: %v", podIP, err)
+			}
+		}
+	}
+
 	return hostNicName, nil
 }
 

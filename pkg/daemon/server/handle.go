@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/emicklei/go-restful"
@@ -146,6 +147,27 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 				podRequest.PodName, podRequest.PodNamespace, expectIPNumber, len(ipInstanceList))
 			cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
 			return
+		}
+	}
+
+	if cdh.config.PatchCalicoPodIPsAnnotation {
+		ipsString := ""
+		for _, instance := range ipInstanceList {
+			ip, _, _ := net.ParseCIDR(instance.Spec.Address.IP)
+
+			if len(ipsString) == 0 {
+				ipsString = ip.String()
+				continue
+			}
+			ipsString = strings.Join([]string{ipsString, ip.String()}, ",")
+		}
+
+		if err := cdh.mgrClient.Patch(context.TODO(), pod,
+			client.RawPatch(types.MergePatchType,
+				[]byte(fmt.Sprintf(`{"metadata":{"annotations":{%q:%q}}}`,
+					constants.AnnotationCalicoPodIPs, ipsString)))); err != nil {
+			errMsg := fmt.Errorf("failed to patch calico pod ips annotation %v=%v: %v", constants.AnnotationCalicoPodIPs, ipsString, err)
+			cdh.errorWrapper(errMsg, http.StatusBadRequest, resp)
 		}
 	}
 

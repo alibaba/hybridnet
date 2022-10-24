@@ -190,26 +190,31 @@ func GenerateIPListString(addrList []netlink.Addr) string {
 	return ipListString
 }
 
-func ListAllAddress(link netlink.Link) ([]netlink.Addr, error) {
+func ListAllGlobalUnicastAddress(link netlink.Link) ([]netlink.Addr, error) {
+	ipv4AddrList, err := ListGlobalUnicastAddress(link, netlink.FAMILY_V4)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ipv4 global unicast addresses for link %v: %v",
+			link.Attrs().Name, err)
+	}
+
+	ipv6AddrList, err := ListGlobalUnicastAddress(link, netlink.FAMILY_V6)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ipv6 global unicast addresses for link %v: %v",
+			link.Attrs().Name, err)
+	}
+
+	return append(ipv4AddrList, ipv6AddrList...), nil
+}
+
+func ListGlobalUnicastAddress(link netlink.Link, family int) ([]netlink.Addr, error) {
 	var addrList []netlink.Addr
 
-	ipv4AddrList, err := netlink.AddrList(link, netlink.FAMILY_V4)
+	addrList, err := netlink.AddrList(link, family)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list ipv4 address for link %v: %v", link.Attrs().Name, err)
+		return nil, err
 	}
 
-	ipv6AddrList, err := netlink.AddrList(link, netlink.FAMILY_V6)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list ipv6 address for link %v: %v", link.Attrs().Name, err)
-	}
-
-	for _, addr := range ipv4AddrList {
-		if CheckIPIsGlobalUnicast(addr.IP) {
-			addrList = append(addrList, addr)
-		}
-	}
-
-	for _, addr := range ipv6AddrList {
+	for _, addr := range addrList {
 		if CheckIPIsGlobalUnicast(addr.IP) {
 			addrList = append(addrList, addr)
 		}
@@ -554,7 +559,7 @@ func EnsureIPReachable(ip net.IP) error {
 		},
 		LinkIndex: loopback.Attrs().Index,
 	}); err != nil {
-		return err
+		return fmt.Errorf("failed to add route: %v", err)
 	}
 
 	return nil
