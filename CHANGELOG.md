@@ -185,3 +185,9 @@ All notable changes to this project will be documented in this file.
 ## v0.7.3
 ### Improvements
 - Remove all the `onlink` route flag usages to avoid ipv6 kernel bugs
+
+## v0.7.4
+### Improvements
+- Support modifying ipv6 route GC sysctl parameters by daemon (#326)
+- Enable RecoverPanic to handle unexpected panics and avoid unnecessary restarts (#323)
+- Ensure felix ready before start pod (#327)

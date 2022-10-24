@@ -59,6 +59,8 @@ spec:
             {{ if ne .Values.daemon.vtepAddressCIDRs "" }}
             - --vtep-address-cidrs={{ .Values.daemon.vtepAddressCIDRs }}
             {{ end }}
+            - --patch-calico-pod-ips-annotation={{ .Values.daemon.enableNetworkPolicy }}
+            - --check-pod-connectivity-from-host={{ .Values.daemon.checkPodConnectivityFromHost }}
             - --enable-vlan-arp-enhancement={{ .Values.daemon.enableVlanARPEnhancement }}
             - --feature-gates=MultiCluster={{ .Values.multiCluster }}
           securityContext:
