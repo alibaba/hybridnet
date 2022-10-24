@@ -100,7 +100,9 @@ type Configuration struct {
 	IPv6RouteCacheMaxSize  int
 	IPv6RouteCacheGCThresh int
 
-	EnableVlanArpEnhancement bool
+	EnableVlanArpEnhancement     bool
+	PatchCalicoPodIPsAnnotation  bool
+	CheckPodConnectivityFromHost bool
 }
 
 // ParseFlags will parse cmd args then init kubeClient and configuration
@@ -130,6 +132,8 @@ func ParseFlags() (*Configuration, error) {
 		argEnableVlanArpEnhancement             = pflag.Bool("enable-vlan-arp-enhancement", true, "Whether enable arp source enhancement in a vlan environment")
 		argIPv6RouteCacheMaxSize                = pflag.Int("ipv6-route-cache-max-size", DefaultIPv6RouteCacheMaxSize, "Value to set net.ipv6.route.max_size")
 		argIPv6RouteCacheGCThresh               = pflag.Int("ipv6-route-cache-gc-thresh", DefaultIPv6RouteCacheGCThresh, "Value to set net.ipv6.route.gc_thresh")
+		argPatchCalicoPodIPsAnnotation          = pflag.Bool("patch-calico-pod-ips-annotation", true, "Patch \"cni.projectcalico.org/podIPs\" annotations to pod")
+		argCheckPodConnectivityFromHost         = pflag.Bool("check-pod-connectivity-from-host", true, "Check pod's connectivity from host before start it")
 	)
 
 	// mute info log for ipset lib
@@ -166,6 +170,8 @@ func ParseFlags() (*Configuration, error) {
 		EnableVlanArpEnhancement:             *argEnableVlanArpEnhancement,
 		IPv6RouteCacheMaxSize:                *argIPv6RouteCacheMaxSize,
 		IPv6RouteCacheGCThresh:               *argIPv6RouteCacheGCThresh,
+		PatchCalicoPodIPsAnnotation:          *argPatchCalicoPodIPsAnnotation,
+		CheckPodConnectivityFromHost:         *argCheckPodConnectivityFromHost,
 	}
 
 	if *argPreferVlanInterfaces == "" {

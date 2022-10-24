@@ -201,7 +201,7 @@ func (r *nodeReconciler) selectVtepAddressFromLink() (net.IP, net.HardwareAddr, 
 	}
 
 	// Use parent's valid ipv4 address first, try ipv6 address if no valid ipv4 address exist.
-	existParentAddrList, err := utils.ListAllAddress(link)
+	existParentAddrList, err := utils.ListAllGlobalUnicastAddress(link)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list address for vxlan parent link %v: %v",
 			link.Attrs().Name, err)
@@ -286,7 +286,7 @@ func ensureVxlanInterfaceAddresses(vxlanDev *vxlan.Device, addresses []netlink.A
 		nodeLocalVxlanAddrMap[addr.IP.String()] = true
 	}
 
-	vxlanDevAddrList, err := utils.ListAllAddress(vxlanDev.Link())
+	vxlanDevAddrList, err := utils.ListAllGlobalUnicastAddress(vxlanDev.Link())
 	if err != nil {
 		return fmt.Errorf("failed to list address for vxlan interface %v: %v",
 			vxlanDev.Link().Name, err)
