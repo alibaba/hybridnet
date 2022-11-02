@@ -20,6 +20,12 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sort"
+
+	utils2 "github.com/alibaba/hybridnet/pkg/utils"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"golang.org/x/sys/unix"
 
@@ -41,9 +47,9 @@ import (
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/vxlan"
 	"github.com/alibaba/hybridnet/pkg/feature"
+	ipamutils "github.com/alibaba/hybridnet/pkg/ipam/utils"
 
 	"github.com/vishvananda/netlink"
 
@@ -51,24 +57,29 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-type nodeReconciler struct {
+const nodeKind = "Node"
+
+type nodeInfoReconciler struct {
 	client.Client
 	ctrlHubRef *CtrlHub
 }
 
-func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *nodeInfoReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("Reconciling node information")
+
+	var overlayNetID *int32
+	var overlayNodeNum int
 
 	networkList := &networkingv1.NetworkList{}
 	if err := r.List(ctx, networkList); err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to list network %v", err)
 	}
 
-	var overlayNetID *int32
 	for _, network := range networkList.Items {
 		if networkingv1.GetNetworkType(&network) == networkingv1.NetworkTypeOverlay {
 			overlayNetID = network.Spec.NetID
+			overlayNodeNum = len(network.Status.NodeList)
 			break
 		}
 	}
@@ -88,9 +99,12 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to generate vxlan interface name: %v", err)
 	}
 
+	// Node objects are not supposed to be in list/watch cache.
 	thisNode := &corev1.Node{}
-	if err := r.Get(ctx, types.NamespacedName{Name: r.ctrlHubRef.config.NodeName}, thisNode); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to get node %v object: %v",
+	if err := r.ctrlHubRef.mgr.GetAPIReader().Get(ctx, types.NamespacedName{
+		Name: r.ctrlHubRef.config.NodeName,
+	}, thisNode); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to get node object %v: %v",
 			r.ctrlHubRef.config.NodeName, err)
 	}
 
@@ -98,13 +112,12 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	if err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to select node local vxlan addresses: %v", err)
 	}
-
-	if err := r.updateNodeVxlanAnnotations(thisNode, vtepIP, vtepMac, nodeLocalVxlanAddrs); err != nil {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to update node vxlan annotations: %v", err)
+	if _, err := r.createOrUpdateNodeVxlanInfo(thisNode, vtepIP, vtepMac, nodeLocalVxlanAddrs); err != nil {
+		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to update node vxlan info: %v", err)
 	}
 
-	nodeList := &corev1.NodeList{}
-	if err := r.List(ctx, nodeList); err != nil {
+	nodeInfoList := &networkingv1.NodeInfoList{}
+	if err := r.List(ctx, nodeInfoList); err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed list node: %v", err)
 	}
 
@@ -121,25 +134,24 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 			vxlanLinkName, err)
 	}
 
-	var incompleteVtepInfoNodes []string
-	for _, node := range nodeList.Items {
-		if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
-			node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
-			node.Annotations[constants.AnnotationNodeLocalVxlanIPList] == "" {
-			incompleteVtepInfoNodes = append(incompleteVtepInfoNodes, node.Name)
+	for _, nodeInfo := range nodeInfoList.Items {
+		if nodeInfo.Spec.VTEPInfo == nil ||
+			len(nodeInfo.Spec.VTEPInfo.IP) == 0 ||
+			len(nodeInfo.Spec.VTEPInfo.MAC) == 0 {
+			// If node is not an overlay node, do nothing.
 			continue
 		}
 
-		vtepMac, err := net.ParseMAC(node.Annotations[constants.AnnotationNodeVtepMac])
+		vtepMac, err := net.ParseMAC(nodeInfo.Spec.VTEPInfo.MAC)
 		if err != nil {
 			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse node vtep mac string %v: %v",
-				node.Annotations[constants.AnnotationNodeVtepMac], err)
+				nodeInfo.Spec.VTEPInfo.MAC, err)
 		}
 
-		vtepIP := net.ParseIP(node.Annotations[constants.AnnotationNodeVtepIP])
+		vtepIP := net.ParseIP(nodeInfo.Spec.VTEPInfo.IP)
 		if vtepIP == nil {
 			return reconcile.Result{Requeue: true}, fmt.Errorf("failed to parse node vtep ip string %v",
-				node.Annotations[constants.AnnotationNodeVtepIP])
+				nodeInfo.Spec.VTEPInfo.IP)
 		}
 
 		vxlanDev.RecordVtepInfo(vtepMac, vtepIP)
@@ -170,13 +182,22 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 		}
 	}
 
-	if err := r.ctrlHubRef.nodeIPCache.UpdateNodeIPs(nodeList.Items, r.ctrlHubRef.config.NodeName, remoteVtepList); err != nil {
+	if err := r.ctrlHubRef.nodeIPCache.UpdateNodeIPs(nodeInfoList.Items, r.ctrlHubRef.config.NodeName,
+		remoteVtepList); err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to update node ip cache: %v", err)
 	}
 
-	if err := vxlanDev.SyncVtepInfo(); err != nil {
+	// Only delete fdb when the number of NodeInfo objects equals the number of overlay Nodes, to avoid network flapping.
+	if err := vxlanDev.SyncVtepInfo(len(nodeInfoList.Items) == overlayNodeNum); err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to sync vtep info for vxlan device %v: %v",
 			vxlanDev.Link().Name, err)
+	}
+
+	if len(nodeInfoList.Items) != overlayNodeNum {
+		logger.Info("The number of NodeInfo objects are not equal to overlay nodes, "+
+			"vxlan fdb delete operation will not be executed",
+			"NodeInfo num", len(nodeInfoList.Items),
+			"Overlay Node num", overlayNodeNum)
 	}
 
 	r.ctrlHubRef.iptablesSyncTrigger()
@@ -185,15 +206,10 @@ func (r *nodeReconciler) Reconcile(ctx context.Context, request reconcile.Reques
 	// So subnet controller need to be triggered again.
 	r.ctrlHubRef.subnetControllerTriggerSource.Trigger()
 
-	if len(incompleteVtepInfoNodes) != 0 {
-		return reconcile.Result{Requeue: true}, fmt.Errorf("some of the nodes' vtep information has not been updated, "+
-			"error nodes are: %v", incompleteVtepInfoNodes)
-	}
-
 	return reconcile.Result{}, nil
 }
 
-func (r *nodeReconciler) selectVtepAddressFromLink() (net.IP, net.HardwareAddr, error) {
+func (r *nodeInfoReconciler) selectVtepAddressFromLink() (net.IP, net.HardwareAddr, error) {
 	link, err := netlink.LinkByName(r.ctrlHubRef.config.NodeVxlanIfName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get node vxlan interface %v: %v",
@@ -231,7 +247,7 @@ existParentAddrLoop:
 	return vtepIP, link.Attrs().HardwareAddr, nil
 }
 
-func (r *nodeReconciler) selectNodeLocalVxlanAddrs(thisNode *corev1.Node, vtepIP net.IP,
+func (r *nodeInfoReconciler) selectNodeLocalVxlanAddrs(thisNode *corev1.Node, vtepIP net.IP,
 	vxlanLinkName string) ([]netlink.Addr, error) {
 	existAllAddrList, err := containernetwork.ListLocalAddressExceptLink(vxlanLinkName)
 	if err != nil {
@@ -263,21 +279,6 @@ func (r *nodeReconciler) selectNodeLocalVxlanAddrs(thisNode *corev1.Node, vtepIP
 	}
 
 	return nodeLocalVxlanAddr, nil
-}
-
-func (r *nodeReconciler) updateNodeVxlanAnnotations(thisNode *corev1.Node,
-	vtepIP net.IP, vtepMac net.HardwareAddr, nodeLocalVxlanAddr []netlink.Addr) error {
-	patchData := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s","%s":"%s","%s":"%s"}}}`,
-		constants.AnnotationNodeVtepIP, vtepIP.String(),
-		constants.AnnotationNodeVtepMac, vtepMac.String(),
-		constants.AnnotationNodeLocalVxlanIPList, utils.GenerateIPListString(nodeLocalVxlanAddr))
-
-	if err := r.ctrlHubRef.mgr.GetClient().Patch(context.TODO(),
-		thisNode, client.RawPatch(types.StrategicMergePatchType, []byte(patchData))); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func ensureVxlanInterfaceAddresses(vxlanDev *vxlan.Device, addresses []netlink.Addr) error {
@@ -324,19 +325,58 @@ func ensureVxlanInterfaceAddresses(vxlanDev *vxlan.Device, addresses []netlink.A
 	return nil
 }
 
-func checkNodeUpdate(updateEvent event.UpdateEvent) bool {
-	oldNode := updateEvent.ObjectOld.(*corev1.Node)
-	newNode := updateEvent.ObjectNew.(*corev1.Node)
-
-	if oldNode.Annotations[constants.AnnotationNodeVtepIP] != newNode.Annotations[constants.AnnotationNodeVtepIP] ||
-		oldNode.Annotations[constants.AnnotationNodeVtepMac] != newNode.Annotations[constants.AnnotationNodeVtepMac] ||
-		oldNode.Annotations[constants.AnnotationNodeLocalVxlanIPList] != newNode.Annotations[constants.AnnotationNodeLocalVxlanIPList] {
-		return true
+// createOrUpdateIPInstance will create or update an NodeInfo
+func (r *nodeInfoReconciler) createOrUpdateNodeVxlanInfo(thisNode *corev1.Node,
+	vtepIP net.IP, vtepMac net.HardwareAddr, nodeLocalVxlanAddr []netlink.Addr) (info *networkingv1.NodeInfo, err error) {
+	var nodeInfo = &networkingv1.NodeInfo{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: r.ctrlHubRef.config.NodeName,
+		},
 	}
-	return false
+
+	operationResult, err := controllerutil.CreateOrPatch(context.TODO(), r, nodeInfo, func() error {
+		if !nodeInfo.DeletionTimestamp.IsZero() {
+			return fmt.Errorf("node info %s is deleting, can not be updated", nodeInfo.Name)
+		}
+
+		localIPs := utils.GenerateIPStringList(nodeLocalVxlanAddr)
+		sort.Strings(localIPs)
+
+		nodeInfo.Spec.VTEPInfo = &networkingv1.VTEPInfo{
+			IP:       vtepIP.String(),
+			MAC:      vtepMac.String(),
+			LocalIPs: localIPs,
+		}
+
+		nodeInfo.OwnerReferences = []metav1.OwnerReference{
+			*ipamutils.NewControllerRef(thisNode, corev1.SchemeGroupVersion.WithKind(nodeKind),
+				true, false),
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create or patch node info %v:%v", nodeInfo.Name, err)
+	}
+
+	if operationResult != controllerutil.OperationResultNone {
+		var updateTimestamp string
+		updateTimestamp, err = metav1.Now().MarshalQueryParameter()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate update timestamp: %v", err)
+		}
+
+		if err = r.Status().Patch(context.TODO(), nodeInfo,
+			client.RawPatch(types.MergePatchType,
+				[]byte(fmt.Sprintf(`{"status":{"updateTimestamp":%q}}`, updateTimestamp)))); err != nil {
+			return nil, fmt.Errorf("failed to update node info status for %v: %v", nodeInfo.Name, err)
+		}
+	}
+
+	return nodeInfo, err
 }
 
-func (r *nodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *nodeInfoReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	nodeController, err := controller.New("node", mgr, controller.Options{
 		Reconciler:   r,
 		RecoverPanic: true,
@@ -345,22 +385,20 @@ func (r *nodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("failed to create node controller: %v", err)
 	}
 
-	if err := nodeController.Watch(&source.Kind{Type: &corev1.Node{}},
-		&fixedKeyHandler{key: ActionReconcileNode},
-		&predicate.ResourceVersionChangedPredicate{},
-		&predicate.AnnotationChangedPredicate{},
-		&predicate.Funcs{
-			UpdateFunc: checkNodeUpdate,
-		},
+	if err := nodeController.Watch(&source.Kind{Type: &networkingv1.NodeInfo{}},
+		&fixedKeyHandler{key: ActionReconcileNodeInfo},
+		&predicate.GenerationChangedPredicate{},
 	); err != nil {
 		return fmt.Errorf("failed to watch corev1.Node for node controller: %v", err)
 	}
 
 	if err := nodeController.Watch(&source.Kind{Type: &networkingv1.Network{}},
-		&fixedKeyHandler{key: ActionReconcileNode},
+		&fixedKeyHandler{key: ActionReconcileNodeInfo},
 		predicate.Funcs{
 			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
-				return false
+				oldNetwork := updateEvent.ObjectOld.(*networkingv1.Network)
+				newNetwork := updateEvent.ObjectNew.(*networkingv1.Network)
+				return !utils2.DeepEqualStringSlice(oldNetwork.Status.NodeList, newNetwork.Status.NodeList)
 			},
 			CreateFunc: func(createEvent event.CreateEvent) bool {
 				network := createEvent.Object.(*networkingv1.Network)
@@ -384,7 +422,7 @@ func (r *nodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	if feature.MultiClusterEnabled() {
 		if err := nodeController.Watch(&source.Kind{Type: &multiclusterv1.RemoteVtep{}},
-			&fixedKeyHandler{key: ActionReconcileNode},
+			&fixedKeyHandler{key: ActionReconcileNodeInfo},
 			predicate.Funcs{
 				UpdateFunc: func(updateEvent event.UpdateEvent) bool {
 					oldRemoteVtep := updateEvent.ObjectOld.(*multiclusterv1.RemoteVtep)
@@ -392,7 +430,7 @@ func (r *nodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 					if oldRemoteVtep.Spec.VTEPInfo.IP != newRemoteVtep.Spec.VTEPInfo.IP ||
 						oldRemoteVtep.Spec.VTEPInfo.MAC != newRemoteVtep.Spec.VTEPInfo.MAC ||
-						oldRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] != newRemoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList] ||
+						!utils2.DeepEqualStringSlice(oldRemoteVtep.Spec.VTEPInfo.LocalIPs, newRemoteVtep.Spec.LocalIPs) ||
 						!isIPListEqual(oldRemoteVtep.Spec.EndpointIPList, newRemoteVtep.Spec.EndpointIPList) {
 						return true
 					}

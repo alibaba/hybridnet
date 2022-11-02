@@ -16,13 +16,11 @@ package controller
 import (
 	"fmt"
 	"net"
-	"strings"
 	"sync"
 
-	corev1 "k8s.io/api/core/v1"
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
-	"github.com/alibaba/hybridnet/pkg/constants"
 )
 
 type NodeIPCache struct {
@@ -38,33 +36,31 @@ func NewNodeIPCache() *NodeIPCache {
 	}
 }
 
-func (nic *NodeIPCache) UpdateNodeIPs(nodeList []corev1.Node, localNodeName string, remoteVtepList []*multiclusterv1.RemoteVtep) error {
+func (nic *NodeIPCache) UpdateNodeIPs(nodeInfoList []networkingv1.NodeInfo, localNodeName string, remoteVtepList []*multiclusterv1.RemoteVtep) error {
 	nic.mu.Lock()
 	defer nic.mu.Unlock()
 
 	nic.nodeIPMap = map[string]net.HardwareAddr{}
 
-	for _, node := range nodeList {
+	for _, nodeInfo := range nodeInfoList {
 		// Only update remote node vtep information.
-		if node.Name == localNodeName {
+		if nodeInfo.Name == localNodeName {
 			continue
 		}
 
 		// ignore empty information
-		if _, exist := node.Annotations[constants.AnnotationNodeVtepMac]; !exist {
-			continue
-		}
-		if _, exist := node.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
+		if nodeInfo.Spec.VTEPInfo == nil ||
+			len(nodeInfo.Spec.VTEPInfo.IP) == 0 ||
+			len(nodeInfo.Spec.VTEPInfo.LocalIPs) == 0 {
 			continue
 		}
 
-		macAddr, err := net.ParseMAC(node.Annotations[constants.AnnotationNodeVtepMac])
+		macAddr, err := net.ParseMAC(nodeInfo.Spec.VTEPInfo.MAC)
 		if err != nil {
-			return fmt.Errorf("failed to parse node vtep mac %v: %v", node.Annotations[constants.AnnotationNodeVtepMac], err)
+			return fmt.Errorf("failed to parse node vtep mac %v: %v", nodeInfo.Spec.VTEPInfo.MAC, err)
 		}
 
-		ipStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
-		for _, ipString := range ipStringList {
+		for _, ipString := range nodeInfo.Spec.VTEPInfo.LocalIPs {
 			nic.nodeIPMap[ipString] = macAddr
 		}
 	}
@@ -75,13 +71,12 @@ func (nic *NodeIPCache) UpdateNodeIPs(nodeList []corev1.Node, localNodeName stri
 			return fmt.Errorf("failed to parse remote node vtep mac %v: %v", remoteVtep.Spec.VTEPInfo.MAC, err)
 		}
 
-		if _, exist := remoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
+		if len(remoteVtep.Spec.VTEPInfo.LocalIPs) == 0 {
 			nic.nodeIPMap[remoteVtep.Spec.VTEPInfo.IP] = macAddr
 			continue
 		}
 
-		ipStringList := strings.Split(remoteVtep.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
-		for _, ipString := range ipStringList {
+		for _, ipString := range remoteVtep.Spec.VTEPInfo.LocalIPs {
 			nic.nodeIPMap[ipString] = macAddr
 		}
 	}

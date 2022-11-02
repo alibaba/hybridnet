@@ -17,6 +17,7 @@
 package v1
 
 import (
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,8 +29,9 @@ type RemoteVtepSpec struct {
 	// NodeName is the name of corresponding node in remote cluster.
 	// +kubebuilder:validation:Required
 	NodeName string `json:"nodeName,omitempty"`
-	// VTEPInfo is the basic information of this VTEP.
-	VTEPInfo `json:",inline"`
+	// VTEPInfo is the basic information of this VTEP. Always needed for a remote vtep.
+	// +kubebuilder:validation:Required
+	networkingv1.VTEPInfo `json:",inline"`
 	// EndpointIPList is the IP list of all local endpoints of this VTEP.
 	// +kubebuilder:validation:Optional
 	EndpointIPList []string `json:"endpointIPList,omitempty"`
