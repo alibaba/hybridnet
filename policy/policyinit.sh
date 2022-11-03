@@ -1,6 +1,9 @@
 #!/bin/sh
 export DATASTORE_TYPE=kubernetes
 
+# The same parameters for felix should be passed to typha, or some of the dataplane configuration
+# will be overwrited.
+
 # default for veth
 export FELIX_LOGSEVERITYSYS=none
 export FELIX_LOGSEVERITYSCREEN=info
@@ -40,4 +43,4 @@ if [ "$(cat /sys/module/ipv6/parameters/disable)" -ne "0" ] || [ "$(cat /proc/sy
     export FELIX_IPV6SUPPORT=false
 fi
 
-exec /hybridnet/calico-felix
+exec /hybridnet/"${1}"

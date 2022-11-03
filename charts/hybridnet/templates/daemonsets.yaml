@@ -39,6 +39,20 @@ spec:
           env:
             - name: NEEDED_COMMUNITY_CNI_PLUGINS
               value: {{ .Values.daemon.neededCommunityCNIPlugins }}
+        {{ if and (not .Values.daemon.enableFelixPolicy) (.Values.daemon.cleanFelixRulesWhilePolicyDisabled) }}
+        - name: uninstall-policy
+          image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
+          imagePullPolicy: {{ .Values.images.hybridnet.imagePullPolicy }}
+          command: ["/hybridnet/uninstall-policy.sh"]
+          securityContext:
+            runAsUser: 0
+            privileged: true
+          volumeMounts:
+            - mountPath: /lib/modules
+              name: host-modules
+            - mountPath: /run/xtables.lock
+              name: xtables-lock
+        {{ end }}
       containers:
         - name: cni-daemon
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
@@ -59,7 +73,7 @@ spec:
             {{ if ne .Values.daemon.vtepAddressCIDRs "" }}
             - --vtep-address-cidrs={{ .Values.daemon.vtepAddressCIDRs }}
             {{ end }}
-            - --patch-calico-pod-ips-annotation={{ .Values.daemon.enableNetworkPolicy }}
+            - --patch-calico-pod-ips-annotation={{ .Values.daemon.enableFelixPolicy }}
             - --check-pod-connectivity-from-host={{ .Values.daemon.checkPodConnectivityFromHost }}
             - --enable-vlan-arp-enhancement={{ .Values.daemon.enableVlanARPEnhancement }}
             - --feature-gates=MultiCluster={{ .Values.multiCluster }}
@@ -95,27 +109,45 @@ spec:
             - mountPath: /var/run/
               name: host-var-run
               mountPropagation: Bidirectional
-        {{ if .Values.daemon.enableNetworkPolicy }}
-        - name: policy
+        {{ if .Values.daemon.enableFelixPolicy }}
+        - name: felix
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
           imagePullPolicy: {{ .Values.images.hybridnet.imagePullPolicy }}
           command:
             - /hybridnet/policyinit.sh
+          args:
+            - calico-felix
           env:
             - name: NODENAME
               valueFrom:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: spec.nodeName
-          {{- if .Values.daemon.policy }}
-          {{- if .Values.daemon.policy.resources }}
+            {{ if .Values.typha }}
+            - name: FELIX_TYPHAK8SSERVICENAME
+              value: calico-typha
+            {{ end }}
+          {{- if and .Values.daemon.felix .Values.daemon.felix.resources }}
           resources:
-            {{- toYaml .Values.daemon.policy.resources | trim | nindent 12 }}
-          {{- end }}
+            {{- toYaml .Values.daemon.felix.resources | trim | nindent 12 }}
           {{- end }}
           securityContext:
             privileged: true
             runAsUser: 0
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: 9099
+              host: localhost
+            periodSeconds: 10
+            initialDelaySeconds: 10
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 9099
+              host: localhost
+            periodSeconds: 10
         {{ end }}
       nodeSelector:
         kubernetes.io/os: "linux"
