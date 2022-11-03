@@ -13,3 +13,21 @@ spec:
   selector:
     app: hybridnet-webhook
   sessionAffinity: None
+
+# It seems typha need to get endpoints of this service to calculate connection limit
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: calico-typha
+  namespace: kube-system
+  labels:
+    k8s-app: calico-typha
+spec:
+  ports:
+    - port: {{ .Values.daemon.typha.serverPort }}
+      protocol: TCP
+      targetPort: calico-typha
+      name: calico-typha
+  selector:
+    app: hybridnet-daemon

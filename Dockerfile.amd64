@@ -28,18 +28,24 @@ RUN export GOCACHE=/tmp && \
 RUN cd /go/src/github.com/alibaba/hybridnet/dist/secrets && \
     sh generate-tls-certificates.sh
 
-FROM calico/go-build:v0.57 as felix-builder
+FROM calico/go-build:v0.57 as calico-builder
 ARG GOPROXY
 ENV GOPROXY $GOPROXY
-ENV GIT_BRANCH=v3.20.2
-ENV GIT_COMMIT=ab06c3940caa8ac201f85c1313b2d72d724409d2
+
+ENV FELIX_GIT_BRANCH=v3.20.2
+ENV FELIX_GIT_COMMIT=ab06c3940caa8ac201f85c1313b2d72d724409d2
+
+ENV TYPHA_GIT_BRANCH=v3.20.2
+ENV TYPHA_GIT_COMMIT=26445b9965931d0ca5cae355149435716c9883d4
 
 ENV ARCH=amd64
 ENV OS=linux
 
-RUN mkdir -p /go/src/github.com/projectcalico/ && cd /go/src/github.com/projectcalico/ && \
-    git clone -b ${GIT_BRANCH} --depth 1 https://github.com/projectcalico/felix.git && \
-    cd felix && [ "`git rev-parse HEAD`" = "${GIT_COMMIT}" ]
+RUN mkdir -p /go/src/github.com/projectcalico/
+
+RUN cd /go/src/github.com/projectcalico/ && \
+    git clone -b ${FELIX_GIT_BRANCH} --depth 1 https://github.com/projectcalico/felix.git && \
+    cd felix && [ "`git rev-parse HEAD`" = "${FELIX_GIT_COMMIT}" ]
 COPY policy/felix /hybridnet_patch
 RUN cd /go/src/github.com/projectcalico/felix && git apply /hybridnet_patch/*.patch
 RUN cd /go/src/github.com/projectcalico/felix && \
@@ -49,11 +55,27 @@ RUN cd /go/src/github.com/projectcalico/felix && \
     export CGO_ENABLED=0 && \
     export GOOS=${OS} && \
     go build -v -o bin/calico-felix -v -ldflags \
-    "-X github.com/projectcalico/felix/buildinfo.GitVersion=${GIT_BRANCH} \
+    "-X github.com/projectcalico/felix/buildinfo.GitVersion=${FELIX_GIT_BRANCH} \
     -X github.com/projectcalico/felix/buildinfo.BuildDate=$(date -u +'%FT%T%z') \
-    -X github.com/projectcalico/felix/buildinfo.GitRevision=${GIT_COMMIT} \
-    -B 0x${GIT_COMMIT}" "github.com/projectcalico/felix/cmd/calico-felix" && \
+    -X github.com/projectcalico/felix/buildinfo.GitRevision=${FELIX_GIT_COMMIT} \
+    -B 0x${FELIX_GIT_COMMIT}" "github.com/projectcalico/felix/cmd/calico-felix" && \
     chmod +x /go/src/github.com/projectcalico/felix/bin/calico-felix
+
+RUN cd /go/src/github.com/projectcalico/ && \
+    git clone -b ${TYPHA_GIT_BRANCH} --depth 1 https://github.com/projectcalico/typha.git && \
+    cd typha && [ "`git rev-parse HEAD`" = "${TYPHA_GIT_COMMIT}" ]
+RUN cd /go/src/github.com/projectcalico/typha && \
+    export GOCACHE=/tmp && \
+    export GO111MODULE=on && \
+    export GOARCH=${ARCH} && \
+    export CGO_ENABLED=0 && \
+    export GOOS=${OS} && \
+    go build -v -o bin/calico-typha -v -ldflags \
+    "-X github.com/projectcalico/typha/pkg/buildinfo.GitVersion=${TYPHA_GIT_COMMIT} \
+    -X github.com/projectcalico/typha/pkg/buildinfo.BuildDate=$(date -u +'%FT%T%z') \
+    -X github.com/projectcalico/typha/pkg/buildinfo.GitRevision=${TYPHA_GIT_COMMIT} \
+    -B 0x${TYPHA_GIT_COMMIT}" "github.com/projectcalico/typha/cmd/calico-typha" && \
+    chmod +x /go/src/github.com/projectcalico/typha/bin/calico-typha
 
 FROM alpine:3.14
 
@@ -98,7 +120,8 @@ COPY --from=builder /go/src/github.com/alibaba/hybridnet/dist/images/hybridnet-m
 COPY --from=builder /go/src/github.com/alibaba/hybridnet/dist/images/hybridnet-webhook /hybridnet/hybridnet-webhook
 COPY --from=builder /go/src/github.com/alibaba/hybridnet/COMMIT_ID /hybridnet/COMMIT_ID
 
-COPY --from=felix-builder /go/src/github.com/projectcalico/felix/bin/calico-felix /hybridnet/calico-felix
+COPY --from=calico-builder /go/src/github.com/projectcalico/felix/bin/calico-felix /hybridnet/calico-felix
+COPY --from=calico-builder /go/src/github.com/projectcalico/typha/bin/calico-typha /hybridnet/calico-typha
 COPY policy/policyinit.sh /hybridnet/
 
 RUN mkdir -p /tmp/k8s-webhook-server/serving-certs

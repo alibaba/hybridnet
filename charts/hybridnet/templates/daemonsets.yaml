@@ -96,26 +96,98 @@ spec:
               name: host-var-run
               mountPropagation: Bidirectional
         {{ if .Values.daemon.enableNetworkPolicy }}
-        - name: policy
+        - name: felix
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
           imagePullPolicy: {{ .Values.images.hybridnet.imagePullPolicy }}
           command:
             - /hybridnet/policyinit.sh
+          args:
+            - calico-felix
           env:
             - name: NODENAME
               valueFrom:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: spec.nodeName
-          {{- if .Values.daemon.policy }}
-          {{- if .Values.daemon.policy.resources }}
+            - name: FELIX_TYPHAADDR
+              value: "localhost:{{ .Values.daemon.typha.serverPort }}"
+          {{- if and .Values.daemon.felix .Values.daemon.felix.resources }}
           resources:
-            {{- toYaml .Values.daemon.policy.resources | trim | nindent 12 }}
-          {{- end }}
+            {{- toYaml .Values.daemon.felix.resources | trim | nindent 12 }}
           {{- end }}
           securityContext:
             privileged: true
             runAsUser: 0
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: 9099
+              host: localhost
+            periodSeconds: 10
+            initialDelaySeconds: 10
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 9099
+              host: localhost
+            periodSeconds: 10
+        - name: typha
+          image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
+          command:
+            - /hybridnet/policyinit.sh
+          args:
+            - calico-typha
+          ports:
+            - containerPort: {{ .Values.daemon.typha.serverPort }}
+              name: calico-typha
+              protocol: TCP
+          env:
+            # Enable "info" logging by default.  Can be set to "debug" to increase verbosity.
+            - name: TYPHA_LOGSEVERITYSCREEN
+              value: "info"
+            # Disable logging to file and syslog since those don't make sense in Kubernetes.
+            - name: TYPHA_LOGFILEPATH
+              value: "none"
+            - name: TYPHA_LOGSEVERITYSYS
+              value: "none"
+            # Monitor the Kubernetes API to find the number of running instances and rebalance
+            # connections.
+            - name: TYPHA_CONNECTIONREBALANCINGMODE
+              value: "kubernetes"
+            - name: TYPHA_DATASTORETYPE
+              value: "kubernetes"
+            - name: TYPHA_HEALTHENABLED
+              value: "true"
+            - name: TYPHA_MAXCONNECTIONSLOWERLIMIT
+              value: "1"
+            # Uncomment these lines to enable prometheus metrics.  Since Typha is host-networked,
+            # this opens a port on the host, which may need to be secured.
+            #- name: TYPHA_PROMETHEUSMETRICSENABLED
+            #  value: "true"
+            #- name: TYPHA_PROMETHEUSMETRICSPORT
+            #  value: "9093"
+            - name: ServerPort
+              value: "{{ .Values.daemon.typha.serverPort }}"
+          {{- if and .Values.daemon.typha .Values.daemon.typha.resources }}
+          resources:
+            {{- toYaml .Values.daemon.typha.resources | trim | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: 9098
+              host: localhost
+            periodSeconds: 30
+            initialDelaySeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 9098
+              host: localhost
+            periodSeconds: 10
         {{ end }}
       nodeSelector:
         kubernetes.io/os: "linux"

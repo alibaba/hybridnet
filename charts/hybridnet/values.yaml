@@ -108,8 +108,21 @@ daemon:
     #   cpu: 100m
     #   memory: 128Mi
 
-  policy:
-    # -- Specifies the resources for the policy containers
+  felix:
+    # -- Specifies the resources for the felix container
+    resources: {}
+      # limits:
+      #   cpu: 200m
+      #   memory: 256Mi
+      # requests:
+      #   cpu: 100m
+      #   memory: 128Mi
+
+  typha:
+    # -- The proxy server port of calico-typha on every node
+    serverPort: 5473
+
+    # -- Specifies the resources for the felix container
     resources: {}
       # limits:
       #   cpu: 200m
