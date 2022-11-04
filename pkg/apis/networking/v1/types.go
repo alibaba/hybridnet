@@ -108,4 +108,16 @@ type BGPPeer struct {
 	Password string `json:"password,omitempty"`
 }
 
+type VTEPInfo struct {
+	// IP is the gateway IP address of this VTEP.
+	// +kubebuilder:validation:Required
+	IP string `json:"ip,omitempty"`
+	// MAC is the MAC address of this VTEP.
+	// +kubebuilder:validation:Required
+	MAC string `json:"mac,omitempty"`
+	// localIPs are the usable ip addresses for the VTEP itself.
+	// +kubebuilder:validation:Required
+	LocalIPs []string `json:"localIPs,omitempty"`
+}
+
 type IPPhase string

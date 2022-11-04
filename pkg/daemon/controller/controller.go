@@ -55,7 +55,7 @@ import (
 const (
 	ActionReconcileSubnet     = "AllSubnetsRelatedToThisNode"
 	ActionReconcileIPInstance = "AllIPInstancesRelatedToThisNode"
-	ActionReconcileNode       = "AllNodes"
+	ActionReconcileNodeInfo   = "AllNodeInfos"
 
 	InstanceIPIndex = "instanceIP"
 	EndpointIPIndex = "endpointIP"
@@ -140,7 +140,7 @@ func NewCtrlHub(config *daemonconfig.Configuration, mgr ctrl.Manager, logger log
 
 		subnetControllerTriggerSource:     &simpleTriggerSource{key: ActionReconcileSubnet},
 		ipInstanceControllerTriggerSource: &simpleTriggerSource{key: ActionReconcileIPInstance},
-		nodeControllerTriggerSource:       &simpleTriggerSource{key: ActionReconcileNode},
+		nodeControllerTriggerSource:       &simpleTriggerSource{key: ActionReconcileNodeInfo},
 
 		routeV4Manager: routeV4Manager,
 		routeV6Manager: routeV6Manager,
@@ -199,7 +199,7 @@ func (c *CtrlHub) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to setup ip instance controller: %v", err)
 	}
 
-	if err := (&nodeReconciler{
+	if err := (&nodeInfoReconciler{
 		Client:     c.mgr.GetClient(),
 		ctrlHubRef: c,
 	}).SetupWithManager(c.mgr); err != nil {
@@ -338,17 +338,21 @@ func (c *CtrlHub) handleVxlanInterfaceNeighEvent() error {
 			}
 
 			if ipInstance != nil {
-				node := &corev1.Node{}
+				nodeInfo := &networkingv1.NodeInfo{}
 				nodeName := ipInstance.Labels[constants.LabelNode]
 
-				if err := c.mgr.GetClient().Get(context.TODO(), types.NamespacedName{Name: nodeName}, node); err != nil {
+				if err := c.mgr.GetClient().Get(context.TODO(), types.NamespacedName{Name: nodeName}, nodeInfo); err != nil {
 					return fmt.Errorf("failed to get node %v: %v", nodeName, err)
 				}
 
-				vtepMac, err = net.ParseMAC(node.Annotations[constants.AnnotationNodeVtepMac])
+				if nodeInfo.Spec.VTEPInfo == nil {
+					return fmt.Errorf("node info of %v is nil", nodeName)
+				}
+
+				vtepMac, err = net.ParseMAC(nodeInfo.Spec.VTEPInfo.MAC)
 				if err != nil {
 					return fmt.Errorf("failed to parse vtep mac %v: %v",
-						node.Annotations[constants.AnnotationNodeVtepMac], err)
+						nodeInfo.Spec.VTEPInfo.MAC, err)
 				}
 			} else if feature.MultiClusterEnabled() {
 				// try to find remote vtep according to pod ip
@@ -497,22 +501,22 @@ func (c *CtrlHub) iptablesSyncLoop() {
 		}
 
 		// Record node ips.
-		nodeList := &corev1.NodeList{}
-		if err := c.mgr.GetClient().List(context.TODO(), nodeList); err != nil {
+		nodeInfoList := &networkingv1.NodeInfoList{}
+		if err := c.mgr.GetClient().List(context.TODO(), nodeInfoList); err != nil {
 			return fmt.Errorf("failed to list node: %v", err)
 		}
 
-		for _, node := range nodeList.Items {
+		for _, nodeInfo := range nodeInfoList.Items {
 			// Underlay only environment should not print output
-			if node.Annotations[constants.AnnotationNodeVtepMac] == "" ||
-				node.Annotations[constants.AnnotationNodeVtepIP] == "" ||
-				node.Annotations[constants.AnnotationNodeLocalVxlanIPList] == "" {
-				c.logger.Info("node's vtep information has not been updated", "node", node.Name)
+			if nodeInfo.Spec.VTEPInfo == nil ||
+				len(nodeInfo.Spec.VTEPInfo.MAC) == 0 ||
+				len(nodeInfo.Spec.VTEPInfo.IP) == 0 ||
+				len(nodeInfo.Spec.VTEPInfo.LocalIPs) == 0 {
+				c.logger.Info("node's vtep information has not been updated", "node", nodeInfo.Name)
 				continue
 			}
 
-			nodeLocalVxlanIPStringList := strings.Split(node.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
-			for _, ipString := range nodeLocalVxlanIPStringList {
+			for _, ipString := range nodeInfo.Spec.VTEPInfo.LocalIPs {
 				ip := net.ParseIP(ipString)
 				if ip.To4() != nil {
 					// v4 address
@@ -589,7 +593,7 @@ func (c *CtrlHub) iptablesSyncLoop() {
 			}
 
 			for _, vtep := range vtepList.Items {
-				if _, exist := vtep.Annotations[constants.AnnotationNodeLocalVxlanIPList]; !exist {
+				if len(vtep.Spec.VTEPInfo.LocalIPs) == 0 {
 					ip := net.ParseIP(vtep.Spec.VTEPInfo.IP)
 					if ip.To4() != nil {
 						// v4 address
@@ -601,8 +605,7 @@ func (c *CtrlHub) iptablesSyncLoop() {
 					continue
 				}
 
-				nodeLocalVxlanIPStringList := strings.Split(vtep.Annotations[constants.AnnotationNodeLocalVxlanIPList], ",")
-				for _, ipString := range nodeLocalVxlanIPStringList {
+				for _, ipString := range vtep.Spec.VTEPInfo.LocalIPs {
 					ip := net.ParseIP(ipString)
 					if ip.To4() != nil {
 						// v4 address

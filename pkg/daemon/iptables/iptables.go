@@ -420,9 +420,12 @@ func generateOldSkipMasqueradeRuleSpec() []string {
 		"-o", "h_+", "-j", "RETURN"}
 }
 
+// ensure stateful firewall
 func generateVxlanFilterRuleSpec(vxlanIf, allIPSet string, protocol Protocol) []string {
 	return []string{"-A", ChainHybridnetForward, "-m", "comment", "--comment", `"hybridnet overlay vxlan if egress filter rule"`,
-		"-o", vxlanIf, "-m", "set", "!", "--match-set", allIPSet, "dst", "-j", "REJECT", "--reject-with", rejectWithOption(protocol)}
+		"-o", vxlanIf, "-m", "set", "!", "--match-set", allIPSet, "dst",
+		"-m", "conntrack", "!", "--ctstate", "RELATED,ESTABLISHED",
+		"-j", "REJECT", "--reject-with", rejectWithOption(protocol)}
 }
 
 func generateVxlanPodToNodeReplyMarkRuleSpec(overlayNetSet, nodeIPSet string) []string {
