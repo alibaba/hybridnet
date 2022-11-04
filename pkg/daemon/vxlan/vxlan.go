@@ -116,7 +116,7 @@ func (dev *Device) RecordVtepInfo(vtepMac net.HardwareAddr, vtepIP net.IP) {
 	dev.remoteIPToMacMap[vtepIP.String()] = vtepMac
 }
 
-func (dev *Device) SyncVtepInfo() error {
+func (dev *Device) SyncVtepInfo(execDel bool) error {
 	for remoteIPString, macAddr := range dev.remoteIPToMacMap {
 		unicastFdbEntry := netlink.Neigh{
 			LinkIndex:    dev.link.Index,
@@ -152,14 +152,16 @@ func (dev *Device) SyncVtepInfo() error {
 		return fmt.Errorf("failed to list neigh: %v", err)
 	}
 
-	for _, entry := range fdbEntryList {
-		// Delete invalid entries.
-		if vtepMac, exist := dev.remoteIPToMacMap[entry.IP.String()]; !exist ||
-			(vtepMac.String() != entry.HardwareAddr.String() &&
-				entry.HardwareAddr.String() != broadcastFdbMac.String() && entry.HardwareAddr != nil) {
-			entry.Family = syscall.AF_BRIDGE
-			if err := netlink.NeighDel(&entry); err != nil {
-				return fmt.Errorf("failed to delete fdb entry %v for interface %v: %v", entry.String(), dev.link.Name, err)
+	if execDel {
+		for _, entry := range fdbEntryList {
+			// Delete invalid entries.
+			if vtepMac, exist := dev.remoteIPToMacMap[entry.IP.String()]; !exist ||
+				(vtepMac.String() != entry.HardwareAddr.String() &&
+					entry.HardwareAddr.String() != broadcastFdbMac.String() && entry.HardwareAddr != nil) {
+				entry.Family = syscall.AF_BRIDGE
+				if err := netlink.NeighDel(&entry); err != nil {
+					return fmt.Errorf("failed to delete fdb entry %v for interface %v: %v", entry.String(), dev.link.Name, err)
+				}
 			}
 		}
 	}

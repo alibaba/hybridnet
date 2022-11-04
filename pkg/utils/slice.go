@@ -16,7 +16,9 @@
 
 package utils
 
-import "sort"
+import (
+	"sort"
+)
 
 func StringSliceToMap(in []string) (out map[string]struct{}) {
 	out = make(map[string]struct{}, len(in))
