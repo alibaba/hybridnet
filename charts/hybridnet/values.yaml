@@ -1,7 +1,7 @@
 images:
   hybridnet:
     image: hybridnetdev/hybridnet
-    tag: v0.6.0
+    tag: v0.7.4
     imagePullPolicy: IfNotPresent
   registryURL: "docker.io"
 
@@ -23,8 +23,28 @@ init:
   vxlanID: 4
 
 manager:
-  # -- The number of manager pods
+  # -- The number of manager pods, which is supposed to be less than or equal to the number of master nodes
   replicas: 3
+
+  # -- Specifies the resources for the manager pods
+  resources: {}
+    # limits:
+    #   cpu: 4000m
+    #   memory: 4Gi
+    # requests:
+    #   cpu: 100m
+  #   memory: 512Mi
+
+  # -- Specifies the concurrency configuration (a string of map) for manager pods
+  controllerConcurrency: "Pod=1,IPAM=1,IPInstance=1"
+
+  # -- Specifies the speed limits of manager pods to access apiserver
+  kubeClientQPS: 300
+  kubeClientBurst: 600
+
+  # -- The port of manager to listen on for prometheus metrics
+  metricsPort: 9899
+
 
 webhook:
   # -- Only the pods match the additionalPodMatchExpressions will be validate by hybridnet webhook.
@@ -33,12 +53,24 @@ webhook:
       operator: NotIn
       values: [ "kube-proxy" ]
 
-  # -- The number of webhook pods
+  # -- The number of webhook pods, which is supposed to be less than or equal to the number of master nodes
   replicas: 3
 
+  # -- Specifies the resources for the webhook pods
+  resources: {}
+    # limits:
+    #   cpu: 4000m
+    #   memory: 4Gi
+    # requests:
+    #   cpu: 100m
+  #   memory: 512Mi
+
 daemon:
-  # -- Whether enable the NetworkPolicy functions of hybridnet.
-  enableNetworkPolicy: true
+  # -- Whether enable the felix components for NetworkPolicy.
+  enableFelixPolicy: true
+
+  # -- Whether clean felix policy iptables rules while policy is disabled.
+  cleanFelixRulesWhilePolicyDisabled: true
 
   # -- The physical interfaces on each node to transmit vlan/vxlan/bgp packets, which should be confirmed
   # before network config is actually applied, or you might have to face the risk of rebooting the machine.
@@ -66,6 +98,58 @@ daemon:
 
   # -- The name of hybridnet CNI conf file generated in the /etc/cni/net.d/ directory of host
   cniConfName: "06-hybridnet.conflist"
+
+  # -- Whether will daemon check the connectivity of local pod before staring it
+  checkPodConnectivityFromHost: true
+
+  # -- Specifies the resources for the cni-daemon containers
+  resources: {}
+    # limits:
+    #   cpu: 200m
+    #   memory: 256Mi
+    # requests:
+    #   cpu: 100m
+  #   memory: 128Mi
+
+  felix:
+    # -- Specifies the resources for the felix container
+    resources: {}
+      # limits:
+      #   cpu: 200m
+      #   memory: 256Mi
+      # requests:
+      #   cpu: 100m
+    #   memory: 128Mi
+
+  livenessProbe:
+    httpGet:
+      path: /live
+      port: 11021
+      scheme: HTTP
+    initialDelaySeconds: 30
+    periodSeconds: 20
+    successThreshold: 1
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+typha:
+  # -- The number of typha pods
+  ## We recommend using Typha if you have more than 50 nodes.  Above 100 nodes it is essential.
+  ## Use one replica for every 100-200 nodes.  In production, we recommend running at least 3
+  ## replicas to reduce the impact of rolling upgrade.
+  replicas: 3
+
+  # -- The proxy server port of calico-typha on every node
+  serverPort: 5473
+
+  # -- Specifies the resources for the typha container
+  resources: {}
+    # limits:
+    #   cpu: 200m
+    #   memory: 256Mi
+    # requests:
+    #   cpu: 100m
+  #   memory: 128Mi
 
 # -- Whether pod IP of stateful workloads will be retained by default. true or false
 ## Ref: https://github.com/alibaba/hybridnet/wiki/Static-pod-ip-addresses-for-StatefulSet
