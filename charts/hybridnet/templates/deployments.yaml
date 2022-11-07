@@ -123,3 +123,109 @@ spec:
           ports:
             - containerPort: 9898
               name: webhook-port
+
+{{ if and .Values.typha .Values.daemon.enableFelixPolicy }}
+---
+# This manifest creates a Deployment of Typha to back the above service.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calico-typha
+  namespace: kube-system
+  labels:
+    k8s-app: calico-typha
+spec:
+  # We recommend using Typha if you have more than 50 nodes.  Above 100 nodes it is essential
+  # (when using the Kubernetes datastore).  Use one replica for every 100-200 nodes.  In
+  # production, we recommend running at least 3 replicas to reduce the impact of rolling upgrade.
+  replicas: {{ .Values.typha.replicas }}
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      k8s-app: calico-typha
+  template:
+    metadata:
+      labels:
+        k8s-app: calico-typha
+      annotations:
+        # This, along with the CriticalAddonsOnly toleration below, marks the pod as a critical
+        # add-on, ensuring it gets priority scheduling and that its resources are reserved
+        # if it ever gets evicted.
+        scheduler.alpha.kubernetes.io/critical-pod: ''
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
+    spec:
+      nodeSelector:
+        beta.kubernetes.io/os: linux
+      hostNetwork: true
+      tolerations:
+        # Mark the pod as a critical add-on for rescheduling.
+        - key: CriticalAddonsOnly
+          operator: Exists
+      # Since Calico can't network a pod until Typha is up, we need to run Typha itself
+      # as a host-networked pod.
+      serviceAccountName: hybridnet
+      priorityClassName: system-cluster-critical
+      # fsGroup allows using projected serviceaccount tokens as described here kubernetes/kubernetes#82573
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 1000
+      containers:
+        - name: typha
+          image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
+          command:
+            - /hybridnet/policyinit.sh
+          args:
+            - calico-typha
+          ports:
+            - containerPort: {{ .Values.typha.serverPort }}
+              name: calico-typha
+              protocol: TCP
+          env:
+            # Enable "info" logging by default.  Can be set to "debug" to increase verbosity.
+            - name: TYPHA_LOGSEVERITYSCREEN
+              value: "info"
+            # Disable logging to file and syslog since those don't make sense in Kubernetes.
+            - name: TYPHA_LOGFILEPATH
+              value: "none"
+            - name: TYPHA_LOGSEVERITYSYS
+              value: "none"
+            # Monitor the Kubernetes API to find the number of running instances and rebalance
+            # connections.
+            - name: TYPHA_CONNECTIONREBALANCINGMODE
+              value: "kubernetes"
+            - name: TYPHA_DATASTORETYPE
+              value: "kubernetes"
+            - name: TYPHA_HEALTHENABLED
+              value: "true"
+            - name: TYPHA_MAXCONNECTIONSLOWERLIMIT
+              value: "1"
+            # Uncomment these lines to enable prometheus metrics.  Since Typha is host-networked,
+            # this opens a port on the host, which may need to be secured.
+            #- name: TYPHA_PROMETHEUSMETRICSENABLED
+            #  value: "true"
+            #- name: TYPHA_PROMETHEUSMETRICSPORT
+            #  value: "9093"
+            - name: ServerPort
+              value: "{{ .Values.typha.serverPort }}"
+          {{- if and .Values.typha .Values.typha.resources }}
+          resources:
+          {{- toYaml .Values.typha.resources | trim | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: 9098
+              host: localhost
+            periodSeconds: 30
+            initialDelaySeconds: 30
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 9098
+              host: localhost
+            periodSeconds: 10
+{{ end }}

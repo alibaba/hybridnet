@@ -13,3 +13,22 @@ spec:
   selector:
     app: hybridnet-webhook
   sessionAffinity: None
+
+{{ if and .Values.typha .Values.daemon.enableFelixPolicy }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: calico-typha
+  namespace: kube-system
+  labels:
+    k8s-app: calico-typha
+spec:
+  ports:
+    - port: {{ .Values.typha.serverPort }}
+      protocol: TCP
+      targetPort: calico-typha
+      name: calico-typha
+  selector:
+    k8s-app: calico-typha
+{{ end }}
