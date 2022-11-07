@@ -76,25 +76,29 @@ func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}()
 
-	var node = &corev1.Node{}
-	if err = r.Get(ctx, req.NamespacedName, node); err != nil {
+	var nodeInfo = &networkingv1.NodeInfo{}
+	if err = r.Get(ctx, req.NamespacedName, nodeInfo); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, wrapError("unable to clean VTEP for node", r.cleanVTEPForNode(ctx, req.Name))
 		}
 		return ctrl.Result{}, wrapError("unable to get node", err)
 	}
 
-	if !node.DeletionTimestamp.IsZero() {
+	if !nodeInfo.DeletionTimestamp.IsZero() {
 		log.V(1).Info("ignore terminating node")
 		_ = r.cleanVTEPForNode(ctx, req.Name)
 		return ctrl.Result{}, nil
 	}
 
-	var vtepIP, vtepMac, vtepVxlanIPList = node.Annotations[constants.AnnotationNodeVtepIP], node.Annotations[constants.AnnotationNodeVtepMac], node.Annotations[constants.AnnotationNodeLocalVxlanIPList]
-	if len(vtepIP) == 0 || len(vtepMac) == 0 {
+	if nodeInfo.Spec.VTEPInfo == nil ||
+		len(nodeInfo.Spec.VTEPInfo.IP) == 0 ||
+		len(nodeInfo.Spec.VTEPInfo.MAC) == 0 {
 		log.V(1).Info("ignore node without vtep IP or MAC")
 		return ctrl.Result{}, nil
 	}
+
+	var vtepIP, vtepMac, vtepVxlanIPList = nodeInfo.Spec.VTEPInfo.IP, nodeInfo.Spec.VTEPInfo.MAC,
+		nodeInfo.Spec.VTEPInfo.LocalIPs
 
 	var endpointIPList []string
 	if endpointIPList, err = r.pickEndpointIPListForNode(ctx, req.Name); err != nil {
@@ -122,18 +126,18 @@ func (r *RemoteVtepReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			remoteVTEP.Labels = make(map[string]string)
 		}
 		remoteVTEP.Labels[constants.LabelCluster] = r.ClusterName
-		remoteVTEP.Labels[constants.LabelNode] = node.Name
+		remoteVTEP.Labels[constants.LabelNode] = nodeInfo.Name
 
 		if remoteVTEP.Annotations == nil {
 			remoteVTEP.Annotations = make(map[string]string)
 		}
-		remoteVTEP.Annotations[constants.AnnotationNodeLocalVxlanIPList] = vtepVxlanIPList
 
 		remoteVTEP.Spec.ClusterName = r.ClusterName
 		remoteVTEP.Spec.NodeName = req.Name
-		remoteVTEP.Spec.VTEPInfo = multiclusterv1.VTEPInfo{
-			IP:  vtepIP,
-			MAC: vtepMac,
+		remoteVTEP.Spec.VTEPInfo = networkingv1.VTEPInfo{
+			IP:       vtepIP,
+			MAC:      vtepMac,
+			LocalIPs: vtepVxlanIPList,
 		}
 		remoteVTEP.Spec.EndpointIPList = endpointIPList
 		return nil
@@ -241,16 +245,9 @@ func (r *RemoteVtepReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerRemoteVTEP).
-		For(&corev1.Node{},
+		For(&networkingv1.NodeInfo{},
 			builder.WithPredicates(
-				&predicate.ResourceVersionChangedPredicate{},
-				&utils.SpecifiedAnnotationChangedPredicate{
-					AnnotationKeys: []string{
-						constants.AnnotationNodeVtepIP,
-						constants.AnnotationNodeVtepMac,
-						constants.AnnotationNodeLocalVxlanIPList,
-					},
-				},
+				&predicate.GenerationChangedPredicate{},
 			),
 		).
 		Watches(&source.Channel{Source: r.EventTrigger, DestBufferSize: 100},

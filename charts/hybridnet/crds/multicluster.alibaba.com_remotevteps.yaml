@@ -63,8 +63,13 @@ spec:
                   type: string
                 type: array
               ip:
-                description: IP is the IP address of this VTEP.
+                description: IP is the gateway IP address of this VTEP.
                 type: string
+              localIPs:
+                description: localIPs are the usable ip addresses for the VTEP itself.
+                items:
+                  type: string
+                type: array
               mac:
                 description: MAC is the MAC address of this VTEP.
                 type: string

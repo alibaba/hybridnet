@@ -177,17 +177,16 @@ func GetInterfaceByPreferString(preferString string) (*net.Interface, error) {
 	return nil, fmt.Errorf("no valid interface found by prefer string %v", preferString)
 }
 
-func GenerateIPListString(addrList []netlink.Addr) string {
-	ipListString := ""
+func GenerateIPStringList(addrList []netlink.Addr) []string {
+	var ipStringList []string
 	for _, addr := range addrList {
-		if ipListString == "" {
-			ipListString = addr.IP.String()
-			continue
-		}
-		ipListString = ipListString + "," + addr.IP.String()
+		ipStringList = append(ipStringList, addr.IP.String())
 	}
+	return ipStringList
+}
 
-	return ipListString
+func GenerateIPListString(addrList []netlink.Addr) string {
+	return strings.Join(GenerateIPStringList(addrList), ",")
 }
 
 func ListAllGlobalUnicastAddress(link netlink.Link) ([]netlink.Addr, error) {
@@ -207,7 +206,7 @@ func ListAllGlobalUnicastAddress(link netlink.Link) ([]netlink.Addr, error) {
 }
 
 func ListGlobalUnicastAddress(link netlink.Link, family int) ([]netlink.Addr, error) {
-	var addrList []netlink.Addr
+	var result []netlink.Addr
 
 	addrList, err := netlink.AddrList(link, family)
 	if err != nil {
@@ -216,11 +215,11 @@ func ListGlobalUnicastAddress(link netlink.Link, family int) ([]netlink.Addr, er
 
 	for _, addr := range addrList {
 		if CheckIPIsGlobalUnicast(addr.IP) {
-			addrList = append(addrList, addr)
+			result = append(result, addr)
 		}
 	}
 
-	return addrList, nil
+	return result, nil
 }
 
 func CheckIPIsGlobalUnicast(ip net.IP) bool {

@@ -23,8 +23,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	ipammanager "github.com/alibaba/hybridnet/pkg/ipam/manager"
-	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/ipam/manager"
+	"github.com/alibaba/hybridnet/pkg/ipam/types"
 )
 
 var _ = Describe("IPAM controller integration test suite", func() {
@@ -35,7 +35,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 	Context("Initialization check", func() {
 		It("Check IPAM manager basic fields", func() {
 			By("Cast interface to inner type")
-			manager, ok := ipamManager.(*ipammanager.Manager)
+			manager, ok := ipamManager.(*manager.Manager)
 			Expect(ok).To(BeTrue())
 
 			By("Check all fields of IPAM manager")
@@ -47,7 +47,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 
 		It("Check IPAM manager initialization", func() {
 			By("Cast interface to inner type")
-			manager, ok := ipamManager.(*ipammanager.Manager)
+			manager, ok := ipamManager.(*manager.Manager)
 			Expect(ok).To(BeTrue())
 
 			By("Waiting for IPAM manager initialized by controller")
@@ -64,8 +64,8 @@ var _ = Describe("IPAM controller integration test suite", func() {
 			By("Check networks")
 			Expect(manager.NetworkSet.ListNetworkToNames()).To(ConsistOf(underlayNetworkName, overlayNetworkName))
 
-			Expect(manager.NetworkSet.CheckNetworkByType(underlayNetworkName, ipamtypes.Underlay)).To(BeTrue())
-			Expect(manager.NetworkSet.CheckNetworkByType(overlayNetworkName, ipamtypes.Overlay)).To(BeTrue())
+			Expect(manager.NetworkSet.CheckNetworkByType(underlayNetworkName, types.Underlay)).To(BeTrue())
+			Expect(manager.NetworkSet.CheckNetworkByType(overlayNetworkName, types.Overlay)).To(BeTrue())
 
 			By("Check underlay network")
 			underlayNetwork, err := manager.NetworkSet.GetNetworkByName(underlayNetworkName)
@@ -113,7 +113,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 			Expect(k8sClient.Create(context.Background(), network)).NotTo(HaveOccurred())
 
 			By("Cast interface to inner type")
-			manager, ok := ipamManager.(*ipammanager.Manager)
+			manager, ok := ipamManager.(*manager.Manager)
 			Expect(ok).To(BeTrue())
 
 			By("Waiting for IPAM manager refreshed by controller")
@@ -135,7 +135,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(createdOverlayNetwork.IPv4Subnets).NotTo(BeNil())
 			Expect(createdOverlayNetwork.IPv6Subnets).NotTo(BeNil())
-			Expect(createdOverlayNetwork.Type).To(Equal(ipamtypes.Overlay))
+			Expect(createdOverlayNetwork.Type).To(Equal(types.Overlay))
 			Expect(createdOverlayNetwork.SubnetCount()).To(Equal(0))
 		})
 
@@ -144,7 +144,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 			Expect(k8sClient.Create(context.Background(), subnet1)).NotTo(HaveOccurred())
 
 			By("Cast interface to inner type")
-			manager, ok := ipamManager.(*ipammanager.Manager)
+			manager, ok := ipamManager.(*manager.Manager)
 			Expect(ok).To(BeTrue())
 
 			By("Checking whether IPAM manager refreshed by controller correctly")
@@ -158,7 +158,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(parentNetwork).NotTo(BeNil())
 					g.Expect(parentNetwork.SubnetCount()).To(Equal(1))
-					g.Expect(parentNetwork.Type).To(Equal(ipamtypes.Overlay))
+					g.Expect(parentNetwork.Type).To(Equal(types.Overlay))
 					g.Expect(parentNetwork.IPv4Subnets.Subnets).To(HaveLen(1))
 
 					createdSubnet, err := parentNetwork.GetSubnetByName(testOverlaySubnetName1)
@@ -179,7 +179,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 			Expect(k8sClient.Create(context.Background(), subnet2)).NotTo(HaveOccurred())
 
 			By("Cast interface to inner type")
-			manager, ok := ipamManager.(*ipammanager.Manager)
+			manager, ok := ipamManager.(*manager.Manager)
 			Expect(ok).To(BeTrue())
 
 			By("Checking whether IPAM manager refreshed by controller correctly")
@@ -193,7 +193,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(parentNetwork).NotTo(BeNil())
 					g.Expect(parentNetwork.SubnetCount()).To(Equal(2))
-					g.Expect(parentNetwork.Type).To(Equal(ipamtypes.Overlay))
+					g.Expect(parentNetwork.Type).To(Equal(types.Overlay))
 					g.Expect(parentNetwork.IPv4Subnets.Subnets).To(HaveLen(1))
 					g.Expect(parentNetwork.IPv6Subnets.Subnets).To(HaveLen(1))
 
@@ -216,7 +216,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 			Expect(k8sClient.Delete(context.Background(), subnet2)).NotTo(HaveOccurred())
 
 			By("Cast interface to inner type")
-			manager, ok := ipamManager.(*ipammanager.Manager)
+			manager, ok := ipamManager.(*manager.Manager)
 			Expect(ok).To(BeTrue())
 
 			By("Checking whether IPAM manager refreshed by controller correctly")
@@ -230,7 +230,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(parentNetwork).NotTo(BeNil())
 					g.Expect(parentNetwork.SubnetCount()).To(Equal(0))
-					g.Expect(parentNetwork.Type).To(Equal(ipamtypes.Overlay))
+					g.Expect(parentNetwork.Type).To(Equal(types.Overlay))
 					g.Expect(parentNetwork.IPv4Subnets).NotTo(BeNil())
 					g.Expect(parentNetwork.IPv6Subnets).NotTo(BeNil())
 					g.Expect(parentNetwork.IPv4Subnets.Subnets).To(HaveLen(0))
@@ -246,7 +246,7 @@ var _ = Describe("IPAM controller integration test suite", func() {
 			Expect(k8sClient.Delete(context.Background(), network)).NotTo(HaveOccurred())
 
 			By("Cast interface to inner type")
-			manager, ok := ipamManager.(*ipammanager.Manager)
+			manager, ok := ipamManager.(*manager.Manager)
 			Expect(ok).To(BeTrue())
 
 			By("Checking whether IPAM manager refreshed by controller correctly")

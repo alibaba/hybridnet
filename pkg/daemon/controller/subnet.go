@@ -23,7 +23,6 @@ import (
 
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
 
-	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -244,23 +243,10 @@ func (r *subnetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("failed to watch networkingv1.Network for subnet controller: %v", err)
 	}
 
-	if err := subnetController.Watch(&source.Kind{Type: &corev1.Node{}},
+	if err := subnetController.Watch(&source.Kind{Type: &networkingv1.NodeInfo{}},
 		&fixedKeyHandler{key: ActionReconcileSubnet},
-		predicate.Funcs{
-			CreateFunc: func(createEvent event.CreateEvent) bool {
-				return false
-			},
-			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
-				return checkNodeUpdate(updateEvent)
-			},
-			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
-				return false
-			},
-			GenericFunc: func(genericEvent event.GenericEvent) bool {
-				return false
-			},
-		}); err != nil {
-		return fmt.Errorf("failed to watch corev1.Node for subnet controller: %v", err)
+		predicate.GenerationChangedPredicate{}); err != nil {
+		return fmt.Errorf("failed to watch networkingv1.NodeInfo for subnet controller: %v", err)
 	}
 
 	if err := subnetController.Watch(r.ctrlHubRef.subnetControllerTriggerSource, &handler.Funcs{}); err != nil {
