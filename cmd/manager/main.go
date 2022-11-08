@@ -112,7 +112,11 @@ func main() {
 	<-mgr.Elected()
 
 	// wait for manager cache client ready
-	mgr.GetCache().WaitForCacheSync(globalContext)
+	if ok := mgr.GetCache().WaitForCacheSync(globalContext); !ok {
+		err = fmt.Errorf("failed to wait for manager cache sync")
+		entryLog.Error(err, "manager exit due to cache sync failure")
+		os.Exit(1)
+	}
 
 	if err = networking.RegisterToManager(globalContext, mgr, networking.RegisterOptions{
 		ConcurrencyMap: controllerConcurrency,
