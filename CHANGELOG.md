@@ -191,3 +191,9 @@ All notable changes to this project will be documented in this file.
 - Support modifying ipv6 route GC sysctl parameters by daemon (#326)
 - Enable RecoverPanic to handle unexpected panics and avoid unnecessary restarts (#323)
 - Ensure felix ready before start pod (#327)
+
+## v0.7.5
+### Improvements
+- Introduce typha for large scale (#333)
+- List/watch NodeInfo CR objects instead of Node objects in daemon to reduce communication load (#323)
+- Add scripts to clean felix iptables rules automatically while policy is disabled (#330 #333)
