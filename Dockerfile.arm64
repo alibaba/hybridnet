@@ -123,7 +123,7 @@ COPY --from=builder /go/src/github.com/alibaba/hybridnet/COMMIT_ID /hybridnet/CO
 COPY --from=calico-builder /go/src/github.com/projectcalico/felix/bin/calico-felix /hybridnet/calico-felix
 COPY --from=calico-builder /go/src/github.com/projectcalico/typha/bin/calico-typha /hybridnet/calico-typha
 COPY policy/policyinit.sh /hybridnet/
-COPY policy/uninstall_policy.sh /hybridnet/
+COPY policy/uninstall-policy.sh /hybridnet/
 
 RUN mkdir -p /tmp/k8s-webhook-server/serving-certs
 
