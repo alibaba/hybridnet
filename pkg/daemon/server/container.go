@@ -34,7 +34,7 @@ import (
 )
 
 // ipAddr is a CIDR notation IP address and prefix length
-func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, mac string,
+func (cdh *cniDaemonHandler) configureNic(podName, podNamespace, netns, mac string,
 	allocatedIPs map[networkingv1.IPVersion]*utils.IPInfo, networkMode networkingv1.NetworkMode) (string, error) {
 
 	var err error
@@ -108,7 +108,7 @@ func (cdh cniDaemonHandler) configureNic(podName, podNamespace, netns, mac strin
 	return hostNicName, nil
 }
 
-func (cdh cniDaemonHandler) deleteNic(netns string) error {
+func (cdh *cniDaemonHandler) deleteNic(netns string) error {
 	return deleteContainerNic(netns)
 }
 
