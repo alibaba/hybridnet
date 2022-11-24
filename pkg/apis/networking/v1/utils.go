@@ -24,9 +24,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containernetworking/plugins/pkg/ip"
+	"github.com/gogf/gf/container/gset"
 
 	"github.com/alibaba/hybridnet/pkg/constants"
+	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 // TODO: unit tests
@@ -147,7 +148,7 @@ func ValidateAddressRange(ar *AddressRange) (err error) {
 	if len(ar.End) > 0 && !cidr.Contains(end) {
 		return fmt.Errorf("end %s is not in CIDR %s", ar.End, ar.CIDR)
 	}
-	if len(ar.Start) > 0 && len(ar.End) > 0 && ip.Cmp(start, end) > 0 {
+	if len(ar.Start) > 0 && len(ar.End) > 0 && utils.Cmp(start, end) > 0 {
 		return fmt.Errorf("subnet should have at least one available IP. start=%s, end=%s", start, end)
 	}
 
@@ -223,6 +224,61 @@ func IsAvailable(statistics *Count) bool {
 		return false
 	}
 	return statistics.Available > 0
+}
+
+// Intersect returns if ip address range of rangeA is overlapped with rangeB.
+func Intersect(rangeA *AddressRange, rangeB *AddressRange) bool {
+	if rangeA.Version != rangeB.Version {
+		return false
+	}
+	var (
+		netA *net.IPNet
+		netB *net.IPNet
+	)
+
+	_, netA, _ = net.ParseCIDR(rangeA.CIDR)
+	_, netB, _ = net.ParseCIDR(rangeB.CIDR)
+
+	if !netA.Contains(netB.IP) && !netB.Contains(netA.IP) {
+		return false
+	}
+
+	var (
+		startA         = net.ParseIP(rangeA.Start)
+		endA           = net.ParseIP(rangeA.End)
+		excludedIPSetA = gset.NewStrSetFrom(rangeA.ExcludeIPs)
+		startB         = net.ParseIP(rangeB.Start)
+		endB           = net.ParseIP(rangeB.End)
+		excludedIPSetB = gset.NewStrSetFrom(rangeB.ExcludeIPs)
+		rangeASet      = gset.NewStrSet()
+	)
+	if startA == nil {
+		startA = utils.NextIP(netA.IP)
+	}
+	if startB == nil {
+		startB = utils.NextIP(netB.IP)
+	}
+	if endA == nil {
+		endA = utils.LastIP(netA)
+	}
+	if endB == nil {
+		endB = utils.LastIP(netB)
+	}
+	for i := startA; utils.Cmp(i, endA) <= 0; i = utils.NextIP(i) {
+		if excludedIPSetA.Contains(i.String()) {
+			continue
+		}
+		rangeASet.Add(i.String())
+	}
+	for i := startB; utils.Cmp(i, endB) <= 0; i = utils.NextIP(i) {
+		if excludedIPSetB.Contains(i.String()) {
+			continue
+		}
+		if rangeASet.Contains(i.String()) {
+			return true
+		}
+	}
+	return false
 }
 
 func lastIP(subnet *net.IPNet) net.IP {

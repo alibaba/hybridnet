@@ -23,9 +23,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	clientutils "github.com/alibaba/hybridnet/pkg/controllers/utils"
-	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 const SubnetCheckName = "SubnetNonCross"
@@ -56,7 +56,7 @@ func (o *Subnet) Check(ctx context.Context, clusterManager ctrl.Manager, opts ..
 
 		for j := range localSubnets.Items {
 			var localSubnet = &localSubnets.Items[j]
-			if utils.Intersect(&subnetOfCluster.Spec.Range, &localSubnet.Spec.Range) {
+			if networkingv1.Intersect(&subnetOfCluster.Spec.Range, &localSubnet.Spec.Range) {
 				return NewResult(fmt.Errorf("subnet %s in cluster intersect with local subnet %s", subnetOfCluster.Name, localSubnet.Name))
 			}
 		}
@@ -65,7 +65,7 @@ func (o *Subnet) Check(ctx context.Context, clusterManager ctrl.Manager, opts ..
 			var localRemoteSubnet = &localRemoteSubnets.Items[k]
 			var loopback = localRemoteSubnet.Labels[constants.LabelCluster] == options.ClusterName &&
 				localRemoteSubnet.Labels[constants.LabelSubnet] == subnetOfCluster.Name
-			if !loopback && utils.Intersect(&subnetOfCluster.Spec.Range, &localRemoteSubnet.Spec.Range) {
+			if !loopback && networkingv1.Intersect(&subnetOfCluster.Spec.Range, &localRemoteSubnet.Spec.Range) {
 				return NewResult(fmt.Errorf("subnet %s in cluster intersect with local remote subnet %s", subnetOfCluster.Name, localRemoteSubnet.Name))
 			}
 		}

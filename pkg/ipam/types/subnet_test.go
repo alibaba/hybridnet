@@ -83,3 +83,18 @@ func TestSubnet_AllocateNext(t *testing.T) {
 		t.Logf("the %d ip is %s", i, allocatedIP)
 	}
 }
+
+func TestSubnet_SyncSubnetStartsWithZeroByteIP(t *testing.T) {
+	var err error
+	var cidr *net.IPNet
+	var ip net.IP
+
+	ip, cidr, _ = net.ParseCIDR("0.0.0.1/24")
+	subnet := NewSubnet("test", "fake", nil, net.ParseIP("0.0.0.2"), net.ParseIP("0.0.0.5"), ip, cidr, nil, nil, nil, false, false)
+	if err = subnet.Canonicalize(); err != nil {
+		t.Fatalf("fail to canonicalize: %v", err)
+	}
+	if err = subnet.Sync(nil, NewIPSet()); err != nil {
+		t.Fatalf("fail to sync: %v", err)
+	}
+}

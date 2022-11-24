@@ -22,8 +22,8 @@ import (
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
+	"github.com/alibaba/hybridnet/pkg/utils"
 
-	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 
@@ -98,7 +98,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 			}
 
 			linkName := link.Attrs().Name
-			cidr := ip.Network(addr.IPNet)
+			cidr := utils.Network(addr.IPNet)
 
 			if isEnhancedAddr {
 				if existEnhancedAddrMap[linkName] == nil {

@@ -22,14 +22,14 @@ import (
 	"net/http"
 	"sync"
 
-	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	webhookutils "github.com/alibaba/hybridnet/pkg/webhook/utils"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 var (
@@ -61,7 +61,7 @@ func RemoteSubnetCreateValidation(ctx context.Context, req *admission.Request, h
 	}
 	for i := range localSubnetList.Items {
 		var localSubnet = &localSubnetList.Items[i]
-		if utils.Intersect(&remoteSubnet.Spec.Range, &localSubnet.Spec.Range) {
+		if networkingv1.Intersect(&remoteSubnet.Spec.Range, &localSubnet.Spec.Range) {
 			return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("overlay with existing subnet %s", localSubnet.Name), logger)
 		}
 	}
@@ -72,7 +72,7 @@ func RemoteSubnetCreateValidation(ctx context.Context, req *admission.Request, h
 	}
 	for i := range remoteSubnetList.Items {
 		var comparedRemoteCluster = &remoteSubnetList.Items[i]
-		if utils.Intersect(&remoteSubnet.Spec.Range, &comparedRemoteCluster.Spec.Range) {
+		if networkingv1.Intersect(&remoteSubnet.Spec.Range, &comparedRemoteCluster.Spec.Range) {
 			return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("overlay with existing remote subnet %s", comparedRemoteCluster.Name), logger)
 		}
 	}
