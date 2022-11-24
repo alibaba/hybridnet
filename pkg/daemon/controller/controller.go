@@ -516,6 +516,19 @@ func (c *CtrlHub) iptablesSyncLoop() {
 				continue
 			}
 
+			if nodeInfo.Name == c.config.NodeName {
+				for _, ipString := range nodeInfo.Spec.VTEPInfo.LocalIPs {
+					ip := net.ParseIP(ipString)
+					if ip.To4() != nil {
+						// v4 address
+						c.iptablesV4Manager.RecordLocalNodeIP(ip)
+					} else {
+						// v6 address
+						c.iptablesV6Manager.RecordLocalNodeIP(ip)
+					}
+				}
+			}
+
 			for _, ipString := range nodeInfo.Spec.VTEPInfo.LocalIPs {
 				ip := net.ParseIP(ipString)
 				if ip.To4() != nil {
