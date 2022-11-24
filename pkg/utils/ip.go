@@ -18,14 +18,8 @@ package utils
 
 import (
 	"fmt"
-	"math/big"
 	"net"
 	"strings"
-
-	"github.com/containernetworking/plugins/pkg/ip"
-	"github.com/gogf/gf/container/gset"
-
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 )
 
 func StringToIPNet(in string) *net.IPNet {
@@ -78,61 +72,6 @@ func ToDNSFormat(ip net.IP) string {
 	return strings.ReplaceAll(ip.String(), ".", "-")
 }
 
-// Intersect returns if ip address range of rangeA is overlapped with rangeB.
-func Intersect(rangeA *networkingv1.AddressRange, rangeB *networkingv1.AddressRange) bool {
-	if rangeA.Version != rangeB.Version {
-		return false
-	}
-	var (
-		netA *net.IPNet
-		netB *net.IPNet
-	)
-
-	_, netA, _ = net.ParseCIDR(rangeA.CIDR)
-	_, netB, _ = net.ParseCIDR(rangeB.CIDR)
-
-	if !netA.Contains(netB.IP) && !netB.Contains(netA.IP) {
-		return false
-	}
-
-	var (
-		startA         = net.ParseIP(rangeA.Start)
-		endA           = net.ParseIP(rangeA.End)
-		excludedIPSetA = gset.NewStrSetFrom(rangeA.ExcludeIPs)
-		startB         = net.ParseIP(rangeB.Start)
-		endB           = net.ParseIP(rangeB.End)
-		excludedIPSetB = gset.NewStrSetFrom(rangeB.ExcludeIPs)
-		rangeASet      = gset.NewStrSet()
-	)
-	if startA == nil {
-		startA = ip.NextIP(netA.IP)
-	}
-	if startB == nil {
-		startB = ip.NextIP(netB.IP)
-	}
-	if endA == nil {
-		endA = LastIP(netA)
-	}
-	if endB == nil {
-		endB = LastIP(netB)
-	}
-	for i := startA; ip.Cmp(i, endA) <= 0; i = ip.NextIP(i) {
-		if excludedIPSetA.Contains(i.String()) {
-			continue
-		}
-		rangeASet.Add(i.String())
-	}
-	for i := startB; ip.Cmp(i, endB) <= 0; i = ip.NextIP(i) {
-		if excludedIPSetB.Contains(i.String()) {
-			continue
-		}
-		if rangeASet.Contains(i.String()) {
-			return true
-		}
-	}
-	return false
-}
-
 // LastIP Determine the last IP of a subnet, excluding the broadcast if IPv4
 func LastIP(subnet *net.IPNet) net.IP {
 	var end net.IP
@@ -160,21 +99,4 @@ func unifyIPv6AddressString(ip string) string {
 	}
 
 	return ip
-}
-
-// NextIP returns IP incremented by 1
-func NextIP(ip net.IP) net.IP {
-	i := ipToInt(ip)
-	return intToIP(i.Add(i, big.NewInt(1)))
-}
-
-func ipToInt(ip net.IP) *big.Int {
-	if v := ip.To4(); v != nil {
-		return big.NewInt(0).SetBytes(v)
-	}
-	return big.NewInt(0).SetBytes(ip.To16())
-}
-
-func intToIP(i *big.Int) net.IP {
-	return net.IP(i.Bytes())
 }

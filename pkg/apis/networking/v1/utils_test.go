@@ -384,3 +384,200 @@ func TestIsIPv6IPInstance(t *testing.T) {
 		})
 	}
 }
+
+func TestIntersect(t *testing.T) {
+	testCase := []struct {
+		name     string
+		in       []AddressRange
+		expected bool
+	}{
+		{
+			"two cidr",
+			[]AddressRange{
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+				},
+				{
+					Version: "4",
+					CIDR:    "192.168.100.5/24",
+				},
+			},
+			false,
+		},
+		{
+			"same cidr, no start end",
+			[]AddressRange{
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+				},
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+				},
+			},
+			true,
+		},
+		{
+			"same cidr, non-overlapping start end",
+			[]AddressRange{
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+					Start:   "192.168.1.10",
+					End:     "192.168.1.50",
+				},
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+					Start:   "192.168.1.51",
+					End:     "192.168.1.100",
+				},
+			},
+			false,
+		},
+		{
+			"[1]same cidr, overlap start end",
+			[]AddressRange{
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+					Start:   "192.168.1.10",
+					End:     "192.168.1.50",
+				},
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+					Start:   "192.168.1.50",
+					End:     "192.168.1.100",
+				},
+			},
+			true,
+		},
+		{
+			"[2]same cidr, overlap start end",
+			[]AddressRange{
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+					Start:   "192.168.1.50",
+					End:     "192.168.1.100",
+				},
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+					Start:   "192.168.1.10",
+					End:     "192.168.1.50",
+				},
+			},
+			true,
+		},
+		{
+			"[1]same cidr, overlap start end in excludedIPs",
+			[]AddressRange{
+				{
+					Version:    "4",
+					CIDR:       "192.168.1.5/24",
+					Start:      "192.168.1.49",
+					End:        "192.168.1.100",
+					ExcludeIPs: []string{"192.168.1.49", "192.168.1.50"},
+				},
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+					Start:   "192.168.1.10",
+					End:     "192.168.1.50",
+				},
+			},
+			false,
+		},
+		{
+			"[2]same cidr, overlap start end in excludedIPs",
+			[]AddressRange{
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+					Start:   "192.168.1.49",
+					End:     "192.168.1.100",
+				},
+				{
+					Version:    "4",
+					CIDR:       "192.168.1.5/24",
+					Start:      "192.168.1.10",
+					End:        "192.168.1.50",
+					ExcludeIPs: []string{"192.168.1.49", "192.168.1.50"},
+				},
+			},
+			false,
+		},
+		{
+			"[3]same cidr, overlap start end in excludedIPs",
+			[]AddressRange{
+				{
+					Version:    "4",
+					CIDR:       "192.168.1.5/24",
+					Start:      "192.168.1.50",
+					End:        "192.168.1.100",
+					ExcludeIPs: []string{"192.168.1.50"},
+				},
+				{
+					Version:    "4",
+					CIDR:       "192.168.1.5/24",
+					Start:      "192.168.1.10",
+					End:        "192.168.1.49",
+					ExcludeIPs: []string{"192.168.1.49"},
+				},
+			},
+			false,
+		},
+		{
+			"same cidr, overlap start end not in excludedIPs",
+			[]AddressRange{
+				{
+					Version:    "4",
+					CIDR:       "192.168.1.5/24",
+					Start:      "192.168.1.49",
+					End:        "192.168.1.100",
+					ExcludeIPs: []string{"192.168.1.100"},
+				},
+				{
+					Version:    "4",
+					CIDR:       "192.168.1.5/24",
+					Start:      "192.168.1.10",
+					End:        "192.168.1.50",
+					ExcludeIPs: []string{"192.168.1.10"},
+				},
+			},
+			true,
+		},
+		{
+			"same cidr, overlap start end not in excludedIPs, the same start and end",
+			[]AddressRange{
+				{
+					Version:    "4",
+					CIDR:       "192.168.1.5/24",
+					Start:      "192.168.1.49",
+					End:        "192.168.1.100",
+					ExcludeIPs: []string{"192.168.1.100"},
+				},
+				{
+					Version: "4",
+					CIDR:    "192.168.1.5/24",
+					Start:   "192.168.1.50",
+					End:     "192.168.1.50",
+				},
+			},
+			true,
+		},
+	}
+
+	for _, test := range testCase {
+		t.Run(test.name, func(t *testing.T) {
+			if out := Intersect(&test.in[0], &test.in[1]); out != test.expected {
+				t.Errorf("test %s fails: expected %v but got %v", test.name, test.expected, out)
+				return
+			}
+		})
+	}
+}

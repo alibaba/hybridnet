@@ -38,11 +38,9 @@ import (
 	"github.com/gogf/gf/container/gset"
 	"github.com/vishvananda/netlink"
 
-	"github.com/alibaba/hybridnet/pkg/constants"
-	"github.com/alibaba/hybridnet/pkg/utils"
-
 	multiclusterv1 "github.com/alibaba/hybridnet/pkg/apis/multicluster/v1"
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/iptables"
 	"github.com/alibaba/hybridnet/pkg/daemon/neigh"
 	"github.com/alibaba/hybridnet/pkg/daemon/route"
@@ -160,7 +158,7 @@ func (c *CtrlHub) getRemoteVtepByEndpointAddress(address net.IP) (*multiclusterv
 					continue
 				}
 
-				if utils.Intersect(&remoteSubnet.Spec.Range, &networkingv1.AddressRange{
+				if networkingv1.Intersect(&remoteSubnet.Spec.Range, &networkingv1.AddressRange{
 					CIDR:  remoteSubnet.Spec.Range.CIDR,
 					Start: address.String(),
 					End:   address.String(),
