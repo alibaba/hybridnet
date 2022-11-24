@@ -45,7 +45,8 @@ const (
 	ChainHybridnetForward     = CustomChainPrefix + "FORWARD"
 	ChainHybridnetPreRouting  = CustomChainPrefix + "PREROUTING"
 
-	ChainHybridnetFromRuleSkip = CustomChainPrefix + "FROM-RULE-SKIP"
+	ChainHybridnetFromRuleSkip         = CustomChainPrefix + "FROM-RULE-SKIP"
+	ChainHybridnetPodToNodeTrafficMark = CustomChainPrefix + "POD-TO-NODE-MARK"
 
 	HybridnetOverlayNetSetName  = "HYBRIDNET-OVERLAY-NET"
 	HybridnetAllIPSetName       = "HYBRIDNET-ALL"
@@ -79,8 +80,9 @@ type Manager struct {
 	localClusterUnderlaySubnets []*net.IPNet
 	localBGPSubnets             []*net.IPNet
 
-	nodeIPList     []net.IP
-	localPodIPList []net.IP
+	nodeIPList      []net.IP
+	localNodeIPList []net.IP
+	localPodIPList  []net.IP
 
 	overlayIfName string
 	bgpIfName     string
@@ -138,6 +140,7 @@ func CreateIPtablesManager(protocol Protocol) (*Manager, error) {
 		localClusterOverlaySubnets:  []*net.IPNet{},
 		localClusterUnderlaySubnets: []*net.IPNet{},
 		nodeIPList:                  []net.IP{},
+		localNodeIPList:             []net.IP{},
 
 		protocol: protocol,
 		c:        make(chan struct{}, 1),
@@ -155,6 +158,7 @@ func (mgr *Manager) Reset() {
 	mgr.localClusterUnderlaySubnets = []*net.IPNet{}
 	mgr.localBGPSubnets = []*net.IPNet{}
 	mgr.nodeIPList = []net.IP{}
+	mgr.localNodeIPList = []net.IP{}
 	mgr.localPodIPList = []net.IP{}
 	mgr.overlayIfName = ""
 
@@ -165,6 +169,10 @@ func (mgr *Manager) Reset() {
 
 func (mgr *Manager) RecordNodeIP(nodeIP net.IP) {
 	mgr.nodeIPList = append(mgr.nodeIPList, nodeIP)
+}
+
+func (mgr *Manager) RecordLocalNodeIP(nodeIP net.IP) {
+	mgr.localNodeIPList = append(mgr.localNodeIPList, nodeIP)
 }
 
 func (mgr *Manager) RecordLocalPodIP(podIP net.IP) {
@@ -275,6 +283,7 @@ func (mgr *Manager) SyncRules() error {
 	writeLine(mangleChains, utiliptables.MakeChainLine(ChainHybridnetPreRouting))
 	writeLine(mangleChains, utiliptables.MakeChainLine(ChainHybridnetPostRouting))
 	writeLine(mangleChains, utiliptables.MakeChainLine(ChainHybridnetFromRuleSkip))
+	writeLine(mangleChains, utiliptables.MakeChainLine(ChainHybridnetPodToNodeTrafficMark))
 
 	if len(mgr.overlayIfName) != 0 {
 		// There might be two scenarios where overlayIfName is nil
@@ -292,6 +301,10 @@ func (mgr *Manager) SyncRules() error {
 			nodeIPSet.GetNameWithProtocol())...)
 		writeLine(mangleRules, generateVxlanPodToNodeReplyRemoveMarkRuleSpec(overlayNetSet.GetNameWithProtocol(),
 			nodeIPSet.GetNameWithProtocol())...)
+		for _, localNodeIP := range mgr.localNodeIPList {
+			writeLine(mangleRules, generateLocalDNATedSkipRuleSpec(localNodeIP)...)
+		}
+		writeLine(mangleRules, generatePodToNodeMarkRuleSpec()...)
 	}
 
 	if len(mgr.bgpIfName) != 0 {
@@ -428,13 +441,30 @@ func generateVxlanFilterRuleSpec(vxlanIf, allIPSet string, protocol Protocol) []
 		"-j", "REJECT", "--reject-with", rejectWithOption(protocol)}
 }
 
+// pod -> node traffic cannot be made to overlay by iptables (because of the DNAT operation on service datapath)
+// this rule is used to make sure the connection from node to pod is ok.
 func generateVxlanPodToNodeReplyMarkRuleSpec(overlayNetSet, nodeIPSet string) []string {
 	return []string{"-A", ChainHybridnetPreRouting, "-m", "comment", "--comment", `"mark overlay pod -> node back traffic"`,
 		"-m", "addrtype", "!", "--dst-type", "LOCAL",
 		"-m", "set", "--match-set", overlayNetSet, "src",
 		"-m", "set", "--match-set", nodeIPSet, "dst",
 		"-m", "conntrack", "!", "--ctstate", "NEW,INVALID,DNAT,SNAT",
+		"-j", ChainHybridnetPodToNodeTrafficMark,
+	}
+}
+
+func generatePodToNodeMarkRuleSpec() []string {
+	return []string{"-A", ChainHybridnetPodToNodeTrafficMark, "-m", "comment", "--comment", `"do pod -> node traffic mark"`,
 		"-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s", PodToNodeBackTrafficMarkString, PodToNodeBackTrafficMarkString),
+	}
+}
+
+// if pod -> node traffic is for svc with "externalTrafficPolicy: Local" do not mark it as overlay
+// TODO: this need to be retained if we use node ip routes to build the pod -> node traffic
+func generateLocalDNATedSkipRuleSpec(localNodeIP net.IP) []string {
+	return []string{"-A", ChainHybridnetPodToNodeTrafficMark, "-m", "comment", "--comment", `"do not mark DNATed traffic"`,
+		"-m", "conntrack", "--ctorigdst", localNodeIP.String(),
+		"-j", "RETURN",
 	}
 }
 
