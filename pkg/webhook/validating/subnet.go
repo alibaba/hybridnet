@@ -131,7 +131,7 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 
 	for i := range subnetList.Items {
 		if subnet.Spec.Range.CIDR != subnetList.Items[i].Spec.Range.CIDR &&
-			utils.Intersect(&networkingv1.AddressRange{CIDR: subnet.Spec.Range.CIDR},
+			networkingv1.Intersect(&networkingv1.AddressRange{CIDR: subnet.Spec.Range.CIDR},
 				&networkingv1.AddressRange{CIDR: subnetList.Items[i].Spec.Range.CIDR}) {
 			return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("different but overlapped CIDR with existing subnet %s, this is not suppored yet",
 				subnetList.Items[i].Name), logger)
@@ -156,7 +156,7 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 		}
 		for _, rcSubnet := range rcSubnetList.Items {
-			if utils.Intersect(&subnet.Spec.Range, &rcSubnet.Spec.Range) {
+			if networkingv1.Intersect(&subnet.Spec.Range, &rcSubnet.Spec.Range) {
 				return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("overlap with existing RemoteSubnet %s", rcSubnet.Name), logger)
 			}
 		}

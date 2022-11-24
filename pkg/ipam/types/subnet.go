@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/containernetworking/plugins/pkg/ip"
-
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
@@ -149,7 +147,7 @@ func (s *Subnet) Canonicalize() error {
 	}
 
 	if s.Start == nil {
-		s.Start = ip.NextIP(s.CIDR.IP)
+		s.Start = utils.NextIP(s.CIDR.IP)
 	}
 
 	if s.End == nil {
@@ -216,15 +214,15 @@ func (s *Subnet) Contains(addr net.IP) bool {
 		return false
 	}
 
-	// We ignore nils here so we can use this function as we initialize the range
+	// We ignore nils here, so we can use this function as we initialize the range
 	if s.Start != nil {
-		if ip.Cmp(addr, s.Start) < 0 {
+		if utils.Cmp(addr, s.Start) < 0 {
 			return false
 		}
 	}
 
 	if s.End != nil {
-		if ip.Cmp(addr, s.End) > 0 {
+		if utils.Cmp(addr, s.End) > 0 {
 			return false
 		}
 	}
@@ -287,7 +285,7 @@ func (s *Subnet) Sync(parentNetID *uint32, ipSet IPSet) error {
 
 	// generate valid Available IP Slice
 	s.AvailableIPs = NewIPSlice()
-	for i := s.Start; ip.Cmp(i, s.End) <= 0; i = ip.NextIP(i) {
+	for i := s.Start; utils.Cmp(i, s.End) <= 0; i = utils.NextIP(i) {
 		if !s.Contains(i) {
 			continue
 		}

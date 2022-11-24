@@ -23,7 +23,7 @@ import (
 
 	"github.com/mikioh/ipaddr"
 
-	"github.com/containernetworking/plugins/pkg/ip"
+	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
 type IPRange struct {
@@ -36,7 +36,7 @@ func CreateIPRange(start, end net.IP) (*IPRange, error) {
 		return nil, fmt.Errorf("start and end should not be nil")
 	}
 
-	if ip.Cmp(start, end) > 0 {
+	if utils.Cmp(start, end) > 0 {
 		return nil, nil
 	}
 
@@ -47,17 +47,17 @@ func CreateIPRange(start, end net.IP) (*IPRange, error) {
 }
 
 func (ir *IPRange) TryAddIP(ipAddr net.IP) (success bool) {
-	if ipAddr.Equal(ip.PrevIP(ir.start)) {
+	if ipAddr.Equal(utils.PrevIP(ir.start)) {
 		ir.start = ipAddr
 		return true
 	}
 
-	if ipAddr.Equal(ip.NextIP(ir.end)) {
+	if ipAddr.Equal(utils.NextIP(ir.end)) {
 		ir.end = ipAddr
 		return true
 	}
 
-	if ip.Cmp(ipAddr, ir.start) >= 0 && ip.Cmp(ipAddr, ir.end) <= 0 {
+	if utils.Cmp(ipAddr, ir.start) >= 0 && utils.Cmp(ipAddr, ir.end) <= 0 {
 		// a range exist which includes this ip address
 		return true
 	}
@@ -75,17 +75,17 @@ func FindSubnetExcludeIPBlocks(cidr *net.IPNet, includedRanges []*IPRange, gatew
 	var excludeIPRanges []*IPRange
 
 	sort.Slice(includedRanges, func(i, j int) bool {
-		return ip.Cmp(includedRanges[i].start, includedRanges[j].start) < 0
+		return utils.Cmp(includedRanges[i].start, includedRanges[j].start) < 0
 	})
 
 	for currentIPRangeIndex, currentIPRange := range includedRanges {
-		if ip.Cmp(currentIPRange.start, cidrStart) < 0 || ip.Cmp(currentIPRange.end, cidrEnd) > 0 {
+		if utils.Cmp(currentIPRange.start, cidrStart) < 0 || utils.Cmp(currentIPRange.end, cidrEnd) > 0 {
 			return nil, fmt.Errorf("ip range %v~%v is out of cidr %v",
 				currentIPRange.start, currentIPRange.end, cidr)
 		}
 
 		if currentIPRangeIndex < (len(includedRanges)-1) &&
-			ip.Cmp(currentIPRange.end, includedRanges[currentIPRangeIndex+1].start) >= 0 {
+			utils.Cmp(currentIPRange.end, includedRanges[currentIPRangeIndex+1].start) >= 0 {
 			return nil, fmt.Errorf("ip range is overlapped for range %v~%v and %v~%v",
 				currentIPRange.start, currentIPRange.end,
 				includedRanges[currentIPRangeIndex+1].start, includedRanges[currentIPRangeIndex+1].end)
@@ -93,7 +93,7 @@ func FindSubnetExcludeIPBlocks(cidr *net.IPNet, includedRanges []*IPRange, gatew
 
 		if currentIPRangeIndex == 0 {
 			// add [cidrStart, currentRangeStartPrev] to exclude ip ranges
-			currentRangeStartPrev := ip.PrevIP(currentIPRange.start)
+			currentRangeStartPrev := utils.PrevIP(currentIPRange.start)
 
 			ipRange, err := CreateIPRange(cidrStart, currentRangeStartPrev)
 			if err != nil {
@@ -109,11 +109,11 @@ func FindSubnetExcludeIPBlocks(cidr *net.IPNet, includedRanges []*IPRange, gatew
 		if currentIPRangeIndex == len(includedRanges)-1 {
 			nextRangeStartPrev = cidrEnd
 		} else {
-			nextRangeStartPrev = ip.PrevIP(includedRanges[currentIPRangeIndex+1].start)
+			nextRangeStartPrev = utils.PrevIP(includedRanges[currentIPRangeIndex+1].start)
 		}
 
 		// add [endNext, nextRangeStartPrev] to exclude ip ranges
-		endNext := ip.NextIP(currentIPRange.end)
+		endNext := utils.NextIP(currentIPRange.end)
 
 		ipRange, err := CreateIPRange(endNext, nextRangeStartPrev)
 		if err != nil {
@@ -210,7 +210,7 @@ func findTheFirstLargestCidr(start, end net.IP) (*net.IPNet, net.IP) {
 		if tmpCidr.Contains(end) {
 			maxValidCidrPrefixLen++
 		} else {
-			return tmpCidr, ip.NextIP(tmpCidrEnd)
+			return tmpCidr, utils.NextIP(tmpCidrEnd)
 		}
 	}
 }
