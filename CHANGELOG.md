@@ -197,3 +197,11 @@ All notable changes to this project will be documented in this file.
 - Introduce typha for large scale (#333)
 - List/watch NodeInfo CR objects instead of Node objects in daemon to reduce communication load (#323)
 - Add scripts to clean felix iptables rules automatically while policy is disabled (#330 #333)
+
+## v0.7.6
+### Fixed Issues
+- Fix issue of manager getting stuck in processing subnet which starts with IP like 0.X.X.X (#342)
+- Fix the access error of NodePort while the externalTrafficPolicy is "Local" (#343)
+
+### Improvements
+- Handle possible cache sync failure for manager (#338)
