@@ -11,7 +11,8 @@ spec:
       targetPort: webhook-port
   type: ClusterIP
   selector:
-    app: hybridnet-webhook
+    app: hybridnet
+    component: webhook
   sessionAffinity: None
 
 {{ if and .Values.typha .Values.daemon.enableFelixPolicy }}
@@ -22,7 +23,8 @@ metadata:
   name: calico-typha
   namespace: kube-system
   labels:
-    k8s-app: calico-typha
+    app: hybridnet
+    component: calico-typha
 spec:
   ports:
     - port: {{ .Values.typha.serverPort }}
@@ -30,5 +32,6 @@ spec:
       targetPort: calico-typha
       name: calico-typha
   selector:
-    k8s-app: calico-typha
+    app: hybridnet
+    component: calico-typha
 {{ end }}

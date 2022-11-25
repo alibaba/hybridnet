@@ -6,11 +6,13 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: hybridnet-daemon
+      app: hybridnet
+      component: daemon
   template:
     metadata:
       labels:
-        app: hybridnet-daemon
+        app: hybridnet
+        component: daemon
     spec:
       tolerations:
         - operator: Exists
