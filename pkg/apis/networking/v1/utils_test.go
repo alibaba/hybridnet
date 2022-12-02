@@ -257,6 +257,34 @@ func TestCalculateCapacity(t *testing.T) {
 			},
 			99,
 		},
+		{
+			"only cidr, starts with IP like 0.x.x.x",
+			&AddressRange{
+				CIDR: "0.1.0.0/22",
+			},
+			1022,
+		},
+		{
+			"cidr, starts with IP like 0.x.x.x",
+			&AddressRange{
+				CIDR:  "0.0.1.1/24",
+				Start: "0.0.1.100",
+			},
+			155,
+		},
+		{
+			"cidr, all set, starts with IP like 0.x.x.x",
+			&AddressRange{
+				Start: "0.1.0.100",
+				End:   "0.1.0.200",
+				CIDR:  "0.1.0.0/24",
+				ExcludeIPs: []string{
+					"0.0.0.198",
+					"0.0.1.199",
+				},
+			},
+			99,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
