@@ -179,6 +179,56 @@ func TestCmpIP(t *testing.T) {
 	}
 }
 
+func TestCapacity(t *testing.T) {
+	testCases := []struct {
+		a      net.IP
+		b      net.IP
+		result int64
+	}{
+		{
+			net.ParseIP("192.168.0.1"),
+			net.ParseIP("192.168.0.2"),
+			2,
+		},
+		{
+			net.ParseIP("192.168.0.1"),
+			net.ParseIP("192.168.0.1"),
+			1,
+		},
+		{
+			net.ParseIP("192.168.0.1"),
+			net.ParseIP("AB12::210"),
+			0,
+		},
+		{
+			net.ParseIP("192.168.0.2"),
+			[]byte{192, 168, 5},
+			0,
+		},
+		{
+			net.ParseIP("AB12::123"),
+			net.ParseIP("AB12::210"),
+			238,
+		},
+		{
+			net.ParseIP("AB12::210"),
+			net.ParseIP("AB12::123"),
+			238,
+		},
+		{
+			net.ParseIP("AB12::123"),
+			net.ParseIP("AB12::123"),
+			1,
+		},
+	}
+	for _, test := range testCases {
+		outcome := Capacity(test.a, test.b)
+		if outcome != test.result {
+			t.Errorf("expect result %d but got %d", test.result, outcome)
+		}
+	}
+}
+
 func TestNetwork(t *testing.T) {
 	testCases := []struct {
 		ipNet  *net.IPNet
