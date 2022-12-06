@@ -17,7 +17,6 @@
 package utils
 
 import (
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -69,11 +68,11 @@ func IsFs(path string, magic int64) bool {
 
 // SetSysctl modifies the specified sysctl flag to the new value
 func SetSysctl(sysctlPath string, newVal int) error {
-	return ioutil.WriteFile(sysctlPath, []byte(strconv.Itoa(newVal)), 0640)
+	return os.WriteFile(sysctlPath, []byte(strconv.Itoa(newVal)), 0640)
 }
 
 func SetSysctlIgnoreNotExist(sysctlPath string, newVal int) error {
-	err := ioutil.WriteFile(sysctlPath, []byte(strconv.Itoa(newVal)), 0640)
+	err := os.WriteFile(sysctlPath, []byte(strconv.Itoa(newVal)), 0640)
 
 	if os.IsNotExist(err) {
 		return nil
@@ -83,7 +82,7 @@ func SetSysctlIgnoreNotExist(sysctlPath string, newVal int) error {
 
 // GetSysctl modifies the specified sysctl flag to the new value
 func GetSysctl(sysctlPath string) (int, error) {
-	data, err := ioutil.ReadFile(sysctlPath)
+	data, err := os.ReadFile(sysctlPath)
 	if err != nil {
 		return -1, err
 	}
