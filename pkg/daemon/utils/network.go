@@ -45,7 +45,7 @@ func GenerateVlanNetIfName(parentName string, vlanID *int32) (string, error) {
 		return "", fmt.Errorf("vlan id should not be nil")
 	}
 
-	if *vlanID > 4096 {
+	if *vlanID > 4094 {
 		return "", fmt.Errorf("vlan id's value range is from 0 to 4094")
 	}
 
