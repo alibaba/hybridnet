@@ -47,4 +47,8 @@ func PodIsCompleted(pod *v1.Pod) bool {
 	return pod.Status.Phase == v1.PodSucceeded && unknownContainerCount == 0
 }
 
+func PodIsScheduled(pod *v1.Pod) bool {
+	return len(pod.Spec.NodeName) > 0
+}
+
 var ParseNetworkConfigOfPodByPriority = utils.ParseNetworkConfigOfPodByPriority

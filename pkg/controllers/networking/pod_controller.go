@@ -200,6 +200,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		return ctrl.Result{}, wrapError("unable to decouple pod", r.decouple(ctx, pod))
 	}
 
+	// Unscheduled pods should not be processed
+	if !utils.PodIsScheduled(pod) {
+		return ctrl.Result{}, nil
+	}
+
 	var (
 		networkStrFromWebhook  string
 		subnetStrFromWebhook   string
@@ -765,22 +770,26 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 
 					if pod.DeletionTimestamp.IsZero() {
 						// only pod after scheduling should be processed
-						return len(pod.Spec.NodeName) > 0
+						return utils.PodIsScheduled(pod)
 					}
 
-					ownByVMI, _ := strategy.OwnByVirtualMachineInstance(pod)
-
-					// terminating pods owned by stateful workloads and VMs should be processed for IP reservation
-					if strategy.OwnByStatefulWorkload(pod) || ownByVMI {
-						return true
+					var ownByVMI = func() bool {
+						owned, _ := strategy.OwnByVirtualMachineInstance(pod)
+						return owned
 					}
 
-					// It is possible that stateful or vm pod's controller owner
-					// reference is removed by gc controller during fore-terminating
-					// phase, so we allow handling such kind of pods as long as
-					// they got ip allocated finalizer.
-					return metav1.GetControllerOf(pod) == nil &&
-						controllerutil.ContainsFinalizer(pod, constants.FinalizerIPAllocated)
+					var orphanWithFinalizer = func() bool {
+						// It is possible that stateful or vm pod's controller owner
+						// reference is removed by gc controller during fore-terminating
+						// phase, so we allow handling such kind of pods as long as
+						// they got ip allocated finalizer.
+						return metav1.GetControllerOf(pod) == nil &&
+							controllerutil.ContainsFinalizer(pod, constants.FinalizerIPAllocated)
+					}
+
+					// terminating pods owned by stateful workloads and VMs should be processed for IP reservation,
+					// also orphan pods with ip-allocated finalizer should be processed specially
+					return strategy.OwnByStatefulWorkload(pod) || ownByVMI() || orphanWithFinalizer()
 				}),
 			),
 		).
