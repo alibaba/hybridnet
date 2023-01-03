@@ -205,3 +205,13 @@ All notable changes to this project will be documented in this file.
 
 ### Improvements
 - Handle possible cache sync failure for manager (#338)
+
+## v0.7.7
+### Fixed Issues
+- Fix capacity calculation error of `0.X.X.X` subnets (#348 )
+- Fix invalid validation of vlan id in daemon (#352 )
+- Fix retained ip pods' suddenlly getting stuck in `Terminating` if their owner referrence is removed (#353 )
+- Skip unscheduled pods in pod reconciliation in manager (#354 )
+
+### Improvements
+- Switch package `ioutil` to `os` because of deprecation (#349 )
