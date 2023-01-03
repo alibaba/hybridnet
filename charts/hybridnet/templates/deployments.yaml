@@ -3,6 +3,9 @@ kind: Deployment
 metadata:
   name: hybridnet-manager
   namespace: kube-system
+  labels:
+    app: hybridnet
+    component: manager
 spec:
   replicas: {{ .Values.manager.replicas }}
   selector:
@@ -81,6 +84,9 @@ kind: Deployment
 metadata:
   name: hybridnet-webhook
   namespace: kube-system
+  labels:
+    app: hybridnet
+    component: webhook
 spec:
   replicas: {{ .Values.webhook.replicas }}
   selector:

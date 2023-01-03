@@ -3,6 +3,9 @@ kind: DaemonSet
 metadata:
   name: hybridnet-daemon
   namespace: kube-system
+  labels:
+    app: hybridnet
+    component: daemon
 spec:
   selector:
     matchLabels:
