@@ -19,7 +19,6 @@ package v1
 import (
 	"fmt"
 	"math"
-	"math/big"
 	"net"
 	"strconv"
 	"strings"
@@ -206,17 +205,17 @@ func CalculateCapacity(ar *AddressRange) int64 {
 		start = net.ParseIP(ar.Start)
 	}
 	if start == nil {
-		start = nextIP(cidr.IP)
+		start = utils.NextIP(cidr.IP)
 	}
 
 	if len(ar.End) > 0 {
 		end = net.ParseIP(ar.End)
 	}
 	if end == nil {
-		end = lastIP(cidr)
+		end = utils.LastIP(cidr)
 	}
 
-	return capacity(start, end) - int64(len(ar.ExcludeIPs))
+	return utils.Capacity(start, end) - int64(len(ar.ExcludeIPs))
 }
 
 func IsAvailable(statistics *Count) bool {
@@ -279,40 +278,6 @@ func Intersect(rangeA *AddressRange, rangeB *AddressRange) bool {
 		}
 	}
 	return false
-}
-
-func lastIP(subnet *net.IPNet) net.IP {
-	var end net.IP
-	for i := 0; i < len(subnet.IP); i++ {
-		end = append(end, subnet.IP[i]|^subnet.Mask[i])
-	}
-	if subnet.IP.To4() != nil {
-		end[3]--
-	}
-
-	return end
-}
-
-func nextIP(ip net.IP) net.IP {
-	i := ipToInt(ip)
-	return intToIP(i.Add(i, big.NewInt(1)))
-}
-
-func capacity(a, b net.IP) int64 {
-	aa := ipToInt(a)
-	bb := ipToInt(b)
-	return big.NewInt(0).Sub(bb, aa).Int64() + 1
-}
-
-func ipToInt(ip net.IP) *big.Int {
-	if v := ip.To4(); v != nil {
-		return big.NewInt(0).SetBytes(v)
-	}
-	return big.NewInt(0).SetBytes(ip.To16())
-}
-
-func intToIP(i *big.Int) net.IP {
-	return net.IP(i.Bytes())
 }
 
 // IsLegacyModel will show whether IPInstance has switched to new version

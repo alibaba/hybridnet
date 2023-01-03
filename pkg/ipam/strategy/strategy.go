@@ -77,33 +77,41 @@ func OwnByVirtualMachineInstance(obj client.Object) (bool, string) {
 	return true, ref.Name
 }
 
-func OwnByVirtualMachine(ctx context.Context, pod *v1.Pod, client client.Reader) (bool, string, *metav1.OwnerReference, error) {
-	ownByVMI, vmiName := OwnByVirtualMachineInstance(pod)
-	if !ownByVMI {
+// OwnByVirtualMachine takes client.Object as input, and returns whether it is owned by
+// VirtualMachine directly or indirectly (i.e., pod).
+func OwnByVirtualMachine(ctx context.Context, obj client.Object, client client.Reader) (bool, string, *metav1.OwnerReference, error) {
+	var controllee metav1.Object
+	if pod, ok := obj.(*v1.Pod); ok {
+		ownByVMI, vmiName := OwnByVirtualMachineInstance(pod)
+		if !ownByVMI {
+			return false, "", nil, nil
+		}
+
+		vmi := &kubevirtv1.VirtualMachineInstance{}
+		if err := client.Get(ctx, types.NamespacedName{
+			Name:      vmiName,
+			Namespace: pod.GetNamespace(),
+		}, vmi); err != nil {
+			return false, "", nil, fmt.Errorf("failed to get kubevirt VMI %v/%v: %v", pod.GetNamespace(), vmiName, err)
+		}
+		controllee = vmi
+	} else {
+		controllee = obj
+	}
+
+	ownerRef := metav1.GetControllerOf(controllee)
+	if ownerRef == nil {
 		return false, "", nil, nil
 	}
 
-	vmi := &kubevirtv1.VirtualMachineInstance{}
-	if err := client.Get(ctx, types.NamespacedName{
-		Name:      vmiName,
-		Namespace: pod.Namespace,
-	}, vmi); err != nil {
-		return false, "", nil, fmt.Errorf("failed to get kubevirt VMI %v/%v: %v", pod.Namespace, vmiName, err)
-	}
-
-	vmiRef := metav1.GetControllerOf(vmi)
-	if vmiRef == nil {
-		return false, "", nil, nil
-	}
-
-	if vmiRef.Kind != kubevirtv1.VirtualMachineGroupVersionKind.Kind {
+	if ownerRef.Kind != kubevirtv1.VirtualMachineGroupVersionKind.Kind {
 		return false, "", nil, nil
 	}
 
 	ifBlockOwnerDeletion := false
-	vmiRef.BlockOwnerDeletion = &ifBlockOwnerDeletion
+	ownerRef.BlockOwnerDeletion = &ifBlockOwnerDeletion
 
-	return true, vmiRef.Name, vmiRef, nil
+	return true, ownerRef.Name, ownerRef, nil
 }
 
 func GetKnownOwnReference(pod *v1.Pod) *metav1.OwnerReference {

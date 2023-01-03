@@ -111,7 +111,36 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	}
 
 	if pod.DeletionTimestamp != nil {
-		if strategy.OwnByStatefulWorkload(pod) {
+		var ownedObj client.Object = pod
+
+		// For terminating pods with no controller owner reference, try to get
+		// owner reference from ip instance.
+		if metav1.GetControllerOf(pod) == nil {
+			var ipInstanceList = &networkingv1.IPInstanceList{}
+			if err = r.List(ctx, ipInstanceList,
+				client.MatchingLabels{constants.LabelPod: pod.Name},
+				client.InNamespace(pod.Namespace),
+			); err != nil {
+				return ctrl.Result{}, wrapError("failed to list ip instance for pod", err)
+			}
+			for i := range ipInstanceList.Items {
+				ipInstance := &ipInstanceList.Items[i]
+				if !ipInstance.DeletionTimestamp.IsZero() {
+					continue
+				}
+				if metav1.GetControllerOf(ipInstance) != nil {
+					ownedObj = ipInstance.DeepCopy()
+					break
+				}
+			}
+
+			// If we still cannot find owner ref on all related ip instances, just remove pod finalizer.
+			if metav1.GetControllerOf(ownedObj) == nil {
+				return ctrl.Result{}, wrapError("unable to remove finalizer", r.removeFinalizer(ctx, pod))
+			}
+		}
+
+		if strategy.OwnByStatefulWorkload(ownedObj) {
 			if err = r.reserve(ctx, pod); err != nil {
 				return ctrl.Result{}, wrapError("unable to reserve pod", err)
 			}
@@ -120,7 +149,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 
 		if feature.VMIPRetainEnabled() {
 			// TODO: use APIReader to get VM/VMI object, because watch v1.VirtualMachine and v1.VirtualMachineInstance will always get errors
-			if isVMPod, vmName, _, err := strategy.OwnByVirtualMachine(ctx, pod, r.APIReader); isVMPod {
+			if isVMPod, vmName, _, err := strategy.OwnByVirtualMachine(ctx, ownedObj, r.APIReader); isVMPod {
 				vm := &kubevirtv1.VirtualMachine{}
 				if err = r.APIReader.Get(ctx, apitypes.NamespacedName{
 					Name:      vmName,
@@ -169,6 +198,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	// Pre decouple ip instances for completed or evicted pods
 	if utils.PodIsEvicted(pod) || utils.PodIsCompleted(pod) {
 		return ctrl.Result{}, wrapError("unable to decouple pod", r.decouple(ctx, pod))
+	}
+
+	// Unscheduled pods should not be processed
+	if !utils.PodIsScheduled(pod) {
+		return ctrl.Result{}, nil
 	}
 
 	var (
@@ -479,7 +513,7 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 func (r *PodReconciler) vmAllocate(ctx context.Context, pod *corev1.Pod, vmName, networkName, subnetStrFromWebhook string,
 	handledByWebhook bool, vmiOwnerReference *metav1.OwnerReference, ipFamily types.IPFamilyMode) (err error) {
 	if err = r.addFinalizer(ctx, pod); err != nil {
-		return wrapError("unable to add finalizer for stateful pod", err)
+		return wrapError("unable to add finalizer for vm pod", err)
 	}
 
 	vmLabels := client.MatchingLabels{
@@ -736,13 +770,26 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 
 					if pod.DeletionTimestamp.IsZero() {
 						// only pod after scheduling should be processed
-						return len(pod.Spec.NodeName) > 0
+						return utils.PodIsScheduled(pod)
 					}
 
-					ownByVMI, _ := strategy.OwnByVirtualMachineInstance(pod)
+					var ownByVMI = func() bool {
+						owned, _ := strategy.OwnByVirtualMachineInstance(pod)
+						return owned
+					}
 
-					// terminating pods owned by stateful workloads and VMs should be processed for IP reservation
-					return strategy.OwnByStatefulWorkload(pod) || ownByVMI
+					var orphanWithFinalizer = func() bool {
+						// It is possible that stateful or vm pod's controller owner
+						// reference is removed by gc controller during fore-terminating
+						// phase, so we allow handling such kind of pods as long as
+						// they got ip allocated finalizer.
+						return metav1.GetControllerOf(pod) == nil &&
+							controllerutil.ContainsFinalizer(pod, constants.FinalizerIPAllocated)
+					}
+
+					// terminating pods owned by stateful workloads and VMs should be processed for IP reservation,
+					// also orphan pods with ip-allocated finalizer should be processed specially
+					return strategy.OwnByStatefulWorkload(pod) || ownByVMI() || orphanWithFinalizer()
 				}),
 			),
 		).

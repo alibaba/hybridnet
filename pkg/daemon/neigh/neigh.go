@@ -18,8 +18,8 @@ package neigh
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
+	"os"
 	"strconv"
 
 	"github.com/vishvananda/netlink"
@@ -70,7 +70,7 @@ func (m *Manager) SyncNeighs() error {
 		if m.family == netlink.FAMILY_V6 {
 			// For ipv6, proxy_ndp need to be set.
 			sysctlPath := fmt.Sprintf("/proc/sys/net/ipv6/conf/%s/proxy_ndp", forwardNodeIfName)
-			if err := ioutil.WriteFile(sysctlPath, []byte(strconv.Itoa(1)), 0640); err != nil {
+			if err := os.WriteFile(sysctlPath, []byte(strconv.Itoa(1)), 0640); err != nil {
 				return fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 			}
 		}
