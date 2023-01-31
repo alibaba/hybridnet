@@ -111,9 +111,6 @@ spec:
               name: host-modules
             - mountPath: /run/xtables.lock
               name: xtables-lock
-            - mountPath: /var/run/
-              name: host-var-run
-              mountPropagation: Bidirectional
         {{ if .Values.daemon.enableFelixPolicy }}
         - name: felix
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
@@ -179,8 +176,4 @@ spec:
             items:
               - key: cni-config
                 path: cni-config
-        - name: host-var-run
-          hostPath:
-            path: /var/run/
-            type: "Directory"
 
