@@ -41,6 +41,8 @@ manager:
   # -- The port of manager to listen on for prometheus metrics
   metricsPort: 9899
 
+  nodeSelector: {}
+
 
 webhook:
   # -- Only the pods match the additionalPodMatchExpressions will be validate by hybridnet webhook.
@@ -60,6 +62,8 @@ webhook:
     # requests:
     #   cpu: 100m
     #   memory: 512Mi
+
+  nodeSelector: {}
 
 daemon:
   # -- Whether enable the felix components for NetworkPolicy.
@@ -146,6 +150,8 @@ typha:
     # requests:
     #   cpu: 100m
     #   memory: 128Mi
+
+  nodeSelector: {}
 
 # -- Whether pod IP of stateful workloads will be retained by default. true or false
 ## Ref: https://github.com/alibaba/hybridnet/wiki/Static-pod-ip-addresses-for-StatefulSet

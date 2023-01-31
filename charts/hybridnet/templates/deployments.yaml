@@ -75,8 +75,14 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+      {{- if and .Values.manager .Values.manager.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.manager.nodeSelector | trim | nindent 8 }}
+      {{- else }}
+      # This will bring problems after k8s 1.24
       nodeSelector:
         node-role.kubernetes.io/master: ""
+      {{- end }}
 
 ---
 apiVersion: apps/v1
@@ -107,8 +113,14 @@ spec:
       tolerations:
         - operator: Exists
           effect: NoSchedule
+      {{- if and .Values.webhook .Values.webhook.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.webhook.nodeSelector | trim | nindent 8 }}
+      {{- else }}
+      # This will bring problems after k8s 1.24
       nodeSelector:
         node-role.kubernetes.io/master: ""
+      {{- end }}
       priorityClassName: system-cluster-critical
       serviceAccountName: hybridnet
       hostNetwork: true
@@ -169,12 +181,19 @@ spec:
         scheduler.alpha.kubernetes.io/critical-pod: ''
         cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
     spec:
+      {{- if and .Values.typha .Values.typha.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.typha.nodeSelector | trim | nindent 8 }}
+      {{- else }}
       nodeSelector:
         beta.kubernetes.io/os: linux
+      {{- end }}
       hostNetwork: true
       tolerations:
         # Mark the pod as a critical add-on for rescheduling.
         - key: CriticalAddonsOnly
+          operator: Exists
+        - effect: NoSchedule
           operator: Exists
       # Since Calico can't network a pod until Typha is up, we need to run Typha itself
       # as a host-networked pod.
@@ -224,7 +243,7 @@ spec:
               value: "{{ .Values.typha.serverPort }}"
           {{- if and .Values.typha .Values.typha.resources }}
           resources:
-          {{- toYaml .Values.typha.resources | trim | nindent 12 }}
+            {{- toYaml .Values.typha.resources | trim | nindent 12 }}
           {{- end }}
           livenessProbe:
             httpGet:
