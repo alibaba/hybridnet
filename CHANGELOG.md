@@ -156,6 +156,7 @@ All notable changes to this project will be documented in this file.
 - Add limitations for creating overlapped subnets
 - Disable the automatic iptables mode detection of felix
 - Print statistics for Network CR
+- Remove conversion process from IPInstance v1.1 to v1.2
 
 ## v0.7.0
 ### New features
