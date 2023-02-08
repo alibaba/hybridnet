@@ -111,6 +111,9 @@ spec:
               name: host-modules
             - mountPath: /run/xtables.lock
               name: xtables-lock
+            - mountPath: /var/run/netns
+              name: host-netns-dir
+              mountPropagation: Bidirectional
         {{ if .Values.daemon.enableFelixPolicy }}
         - name: felix
           image: "{{ .Values.images.registryURL }}/{{ .Values.images.hybridnet.image }}:{{ .Values.images.hybridnet.tag }}"
@@ -176,4 +179,7 @@ spec:
             items:
               - key: cni-config
                 path: cni-config
+        - name: host-netns-dir
+          hostPath:
+            path: /var/run/netns
 
