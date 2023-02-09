@@ -196,7 +196,7 @@ func (r *subnetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	if err := subnetController.Watch(&source.Kind{Type: &networkingv1.Subnet{}},
-		&fixedKeyHandler{key: ActionReconcileSubnet},
+		&fixedKeyHandler{key: "ForSubnetChange"},
 		&predicate.ResourceVersionChangedPredicate{},
 		&predicate.Funcs{
 			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
@@ -221,7 +221,7 @@ func (r *subnetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	if err := subnetController.Watch(&source.Kind{Type: &networkingv1.Network{}},
-		&fixedKeyHandler{key: ActionReconcileSubnet},
+		&fixedKeyHandler{key: "ForNetworkChange"},
 		&predicate.Funcs{
 			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
 				oldNetwork := updateEvent.ObjectOld.(*networkingv1.Network)
@@ -244,20 +244,24 @@ func (r *subnetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	if err := subnetController.Watch(&source.Kind{Type: &networkingv1.NodeInfo{}},
-		&fixedKeyHandler{key: ActionReconcileSubnet},
+		&fixedKeyHandler{key: "ForNodeInfoChange"},
 		predicate.GenerationChangedPredicate{}); err != nil {
 		return fmt.Errorf("failed to watch networkingv1.NodeInfo for subnet controller: %v", err)
 	}
 
-	if err := subnetController.Watch(r.ctrlHubRef.subnetControllerTriggerSource, &handler.Funcs{}); err != nil {
-		return fmt.Errorf("failed to watch subnetControllerTriggerSource for subnet controller: %v", err)
+	if err := subnetController.Watch(r.ctrlHubRef.subnetTriggerSourceForHostLink, &handler.Funcs{}); err != nil {
+		return fmt.Errorf("failed to watch subnetTriggerSourceForHostLink for subnet controller: %v", err)
+	}
+
+	if err := subnetController.Watch(r.ctrlHubRef.subnetTriggerSourceForNodeInfoChange, &handler.Funcs{}); err != nil {
+		return fmt.Errorf("failed to watch subnetTriggerSourceForNodeInfoChange for subnet controller: %v", err)
 	}
 
 	// enable multicluster feature
 	if feature.MultiClusterEnabled() {
 		if err := subnetController.Watch(&source.Kind{
 			Type: &multiclusterv1.RemoteSubnet{}},
-			&fixedKeyHandler{key: ActionReconcileSubnet},
+			&fixedKeyHandler{key: "ForRemoteSubnetChange"},
 			predicate.Funcs{
 				UpdateFunc: func(updateEvent event.UpdateEvent) bool {
 					oldRs := updateEvent.ObjectOld.(*multiclusterv1.RemoteSubnet)
