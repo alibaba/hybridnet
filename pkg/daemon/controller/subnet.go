@@ -227,8 +227,8 @@ func (r *subnetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				oldNetwork := updateEvent.ObjectOld.(*networkingv1.Network)
 				newNetwork := updateEvent.ObjectNew.(*networkingv1.Network)
 
-				if utils.DeepEqualStringSlice(oldNetwork.Status.SubnetList, newNetwork.Status.SubnetList) ||
-					utils.DeepEqualStringSlice(oldNetwork.Status.NodeList, newNetwork.Status.NodeList) {
+				if !utils.DeepEqualStringSlice(oldNetwork.Status.SubnetList, newNetwork.Status.SubnetList) ||
+					!utils.DeepEqualStringSlice(oldNetwork.Status.NodeList, newNetwork.Status.NodeList) {
 					return true
 				}
 
