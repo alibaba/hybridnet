@@ -48,7 +48,8 @@ func CheckIfContainerNetworkLink(linkName string) bool {
 		strings.HasPrefix(linkName, "h_") ||
 		strings.HasPrefix(linkName, constants.ContainerHostLinkPrefix) ||
 		strings.HasPrefix(linkName, "veth") ||
-		strings.HasPrefix(linkName, "docker")
+		strings.HasPrefix(linkName, "docker") ||
+		strings.HasPrefix(linkName, "kube-")
 }
 
 func ListLocalAddressExceptLink(exceptLinkName string) ([]netlink.Addr, error) {
