@@ -307,7 +307,15 @@ func (c *CtrlHub) handleLocalNetworkDeviceEvent() error {
 			for {
 				select {
 				case update := <-addrCh:
-					if daemonutils.CheckIPIsGlobalUnicast(update.LinkAddress.IP) {
+					link, err := netlink.LinkByIndex(update.LinkIndex)
+					if err != nil {
+						c.logger.Error(err, "failed to get link by addr update event link index", "addr",
+							update.LinkAddress, "link index", update.LinkIndex)
+						continue
+					}
+
+					if daemonutils.CheckIPIsGlobalUnicast(update.LinkAddress.IP) &&
+						!containernetwork.CheckIfContainerNetworkLink(link.Attrs().Name) {
 						// Create event to update node configuration.
 						c.nodeInfoTriggerSourceForHostAddr.Trigger()
 					}
