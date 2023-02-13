@@ -169,7 +169,7 @@ func (r *ipInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	if err := ipInstanceController.Watch(&source.Kind{Type: &networkingv1.IPInstance{}},
-		&fixedKeyHandler{key: ActionReconcileIPInstance},
+		&fixedKeyHandler{key: "ForIPInstanceChange"},
 		&predicate.ResourceVersionChangedPredicate{},
 		&predicate.Funcs{
 			CreateFunc: func(createEvent event.CreateEvent) bool {
@@ -199,8 +199,8 @@ func (r *ipInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("failed to watch networkingv1.IPInstance for ip instance controller: %v", err)
 	}
 
-	if err := ipInstanceController.Watch(r.ctrlHubRef.ipInstanceControllerTriggerSource, &handler.Funcs{}); err != nil {
-		return fmt.Errorf("failed to watch ipInstanceControllerTriggerSource for ip instance controller: %v", err)
+	if err := ipInstanceController.Watch(r.ctrlHubRef.ipInstanceTriggerSourceForHostLink, &handler.Funcs{}); err != nil {
+		return fmt.Errorf("failed to watch ipInstanceTriggerSourceForHostLink for ip instance controller: %v", err)
 	}
 
 	return nil
