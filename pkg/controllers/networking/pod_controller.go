@@ -110,7 +110,10 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		return ctrl.Result{}, nil
 	}
 
-	if pod.DeletionTimestamp != nil {
+	// We need to reserve ip for terminating, evicted and completed ip-retained pods.
+	// For evicted and completed ip-retained pods, will be not reconciled while getting terminating, because
+	// finalizer is removed.
+	if pod.DeletionTimestamp != nil || utils.PodIsEvicted(pod) || utils.PodIsCompleted(pod) {
 		var ownedObj client.Object = pod
 
 		// For terminating pods with no controller owner reference, try to get
@@ -192,12 +195,12 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 			}
 		}
 
-		return ctrl.Result{}, nil
-	}
+		// For evicted and completed normal pods, pre decouple ip instances for completed or evicted pods
+		if utils.PodIsEvicted(pod) || utils.PodIsCompleted(pod) {
+			return ctrl.Result{}, wrapError("unable to decouple pod", r.decouple(ctx, pod))
+		}
 
-	// Pre decouple ip instances for completed or evicted pods
-	if utils.PodIsEvicted(pod) || utils.PodIsCompleted(pod) {
-		return ctrl.Result{}, wrapError("unable to decouple pod", r.decouple(ctx, pod))
+		return ctrl.Result{}, nil
 	}
 
 	// Unscheduled pods should not be processed
@@ -401,6 +404,7 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 		}
 	}()
 
+	// finalizer need to be added before ip allocation, because terminating pod without finalizer will not be reconciled
 	if err = r.addFinalizer(ctx, pod); err != nil {
 		return wrapError("unable to add finalizer for stateful pod", err)
 	}
@@ -512,6 +516,7 @@ func (r *PodReconciler) statefulAllocate(ctx context.Context, pod *corev1.Pod, n
 
 func (r *PodReconciler) vmAllocate(ctx context.Context, pod *corev1.Pod, vmName, networkName, subnetStrFromWebhook string,
 	handledByWebhook bool, vmiOwnerReference *metav1.OwnerReference, ipFamily types.IPFamilyMode) (err error) {
+	// finalizer need to be added before ip allocation, because terminating pod without finalizer will not be reconciled
 	if err = r.addFinalizer(ctx, pod); err != nil {
 		return wrapError("unable to add finalizer for vm pod", err)
 	}
@@ -773,23 +778,9 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 						return utils.PodIsScheduled(pod)
 					}
 
-					var ownByVMI = func() bool {
-						owned, _ := strategy.OwnByVirtualMachineInstance(pod)
-						return owned
-					}
-
-					var orphanWithFinalizer = func() bool {
-						// It is possible that stateful or vm pod's controller owner
-						// reference is removed by gc controller during fore-terminating
-						// phase, so we allow handling such kind of pods as long as
-						// they got ip allocated finalizer.
-						return metav1.GetControllerOf(pod) == nil &&
-							controllerutil.ContainsFinalizer(pod, constants.FinalizerIPAllocated)
-					}
-
-					// terminating pods owned by stateful workloads and VMs should be processed for IP reservation,
-					// also orphan pods with ip-allocated finalizer should be processed specially
-					return strategy.OwnByStatefulWorkload(pod) || ownByVMI() || orphanWithFinalizer()
+					// Terminating pods ip-allocated finalizer should be processed specially.
+					// Pods without ip-allocated finalizer will be considered as having no retained ip.
+					return controllerutil.ContainsFinalizer(pod, constants.FinalizerIPAllocated)
 				}),
 			),
 		).
