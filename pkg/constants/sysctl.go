@@ -22,7 +22,8 @@ const (
 	RouteLocalNetSysctl  = "/proc/sys/net/ipv4/conf/%s/route_localnet"
 	IPv4ForwardingSysctl = "/proc/sys/net/ipv4/conf/%s/forwarding"
 
-	RpFilterSysctl = "/proc/sys/net/ipv4/conf/%s/rp_filter"
+	RpFilterSysctl  = "/proc/sys/net/ipv4/conf/%s/rp_filter"
+	ArpFilterSysctl = "/proc/sys/net/ipv4/conf/%s/arp_filter"
 
 	IPv4NeighGCThresh1 = "/proc/sys/net/ipv4/neigh/default/gc_thresh1"
 	IPv4NeighGCThresh2 = "/proc/sys/net/ipv4/neigh/default/gc_thresh2"
