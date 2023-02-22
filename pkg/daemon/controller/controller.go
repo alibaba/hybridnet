@@ -45,7 +45,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/addr"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/alibaba/hybridnet/pkg/daemon/iptables"
 	"github.com/alibaba/hybridnet/pkg/daemon/neigh"
 	"github.com/alibaba/hybridnet/pkg/daemon/route"
@@ -271,7 +270,7 @@ func (c *CtrlHub) handleLocalNetworkDeviceEvent() error {
 				select {
 				case update := <-linkCh:
 					if (update.IfInfomsg.Flags&unix.IFF_UP != 0) &&
-						!containernetwork.CheckIfContainerNetworkLink(update.Link.Attrs().Name) {
+						!daemonutils.CheckIfContainerNetworkLink(update.Link.Attrs().Name) {
 
 						// Create event to flush routes and neigh caches.
 						c.subnetTriggerSourceForHostLink.Trigger()
@@ -315,7 +314,7 @@ func (c *CtrlHub) handleLocalNetworkDeviceEvent() error {
 					}
 
 					if daemonutils.CheckIPIsGlobalUnicast(update.LinkAddress.IP) &&
-						!containernetwork.CheckIfContainerNetworkLink(link.Attrs().Name) {
+						!daemonutils.CheckIfContainerNetworkLink(link.Attrs().Name) {
 						// Create event to update node configuration.
 						c.nodeInfoTriggerSourceForHostAddr.Trigger()
 					}

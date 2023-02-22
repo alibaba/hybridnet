@@ -17,7 +17,12 @@
 package main
 
 import (
+	"fmt"
 	"os"
+
+	"github.com/alibaba/hybridnet/pkg/constants"
+	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
+	"github.com/vishvananda/netlink"
 
 	zapinit "github.com/alibaba/hybridnet/pkg/zap"
 
@@ -49,6 +54,11 @@ func main() {
 		os.Exit(1)
 	}
 	entryLog.Info("generate daemon config", "config", *config)
+
+	if err := initSysctl(); err != nil {
+		entryLog.Error(err, "failed to init sysctl")
+		os.Exit(1)
+	}
 
 	// setup manager
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -90,4 +100,32 @@ func main() {
 	}()
 
 	server.RunServer(ctx, config, ctl, log.Log.WithName("cni-server"))
+}
+
+func initSysctl() error {
+	if err := daemonutils.EnableIPForward(netlink.FAMILY_V4); err != nil {
+		return fmt.Errorf("failed to enable ipv4 forwarding: %v", err)
+	}
+
+	globalDisabled, err := daemonutils.CheckIPv6GlobalDisabled()
+	if err != nil {
+		return fmt.Errorf("failed to check ipv6 global disabled: %v", err)
+	}
+
+	if !globalDisabled {
+		if err := daemonutils.EnableIPForward(netlink.FAMILY_V6); err != nil {
+			return fmt.Errorf("failed to enable ipv6 forwarding: %v", err)
+		}
+	}
+
+	if err := daemonutils.EnsureRpFilter(); err != nil {
+		return fmt.Errorf("failed to ensure rp_filter sysctl config: %v", err)
+	}
+
+	sysctlPath := fmt.Sprintf(constants.ArpFilterSysctl, "all")
+	if err = daemonutils.SetSysctl(sysctlPath, 0); err != nil {
+		return fmt.Errorf("failed to set %s sysctl path to 0, error: %v", sysctlPath, err)
+	}
+
+	return nil
 }
