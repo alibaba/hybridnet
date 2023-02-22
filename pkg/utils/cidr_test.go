@@ -17,6 +17,7 @@
 package utils
 
 import (
+	"math/big"
 	"net"
 	"reflect"
 	"testing"
@@ -183,47 +184,55 @@ func TestCapacity(t *testing.T) {
 	testCases := []struct {
 		a      net.IP
 		b      net.IP
-		result int64
+		result *big.Int
 	}{
 		{
 			net.ParseIP("192.168.0.1"),
 			net.ParseIP("192.168.0.2"),
-			2,
+			big.NewInt(2),
 		},
 		{
 			net.ParseIP("192.168.0.1"),
 			net.ParseIP("192.168.0.1"),
-			1,
+			big.NewInt(1),
 		},
 		{
 			net.ParseIP("192.168.0.1"),
 			net.ParseIP("AB12::210"),
-			0,
+			big.NewInt(0),
 		},
 		{
 			net.ParseIP("192.168.0.2"),
 			[]byte{192, 168, 5},
-			0,
+			big.NewInt(0),
 		},
 		{
 			net.ParseIP("AB12::123"),
 			net.ParseIP("AB12::210"),
-			238,
+			big.NewInt(238),
 		},
 		{
 			net.ParseIP("AB12::210"),
 			net.ParseIP("AB12::123"),
-			238,
+			big.NewInt(238),
 		},
 		{
 			net.ParseIP("AB12::123"),
 			net.ParseIP("AB12::123"),
-			1,
+			big.NewInt(1),
+		},
+		{
+			net.ParseIP("2001:db8:acad:3::ff"),
+			net.ParseIP("2001:db8:acad:3:ffff:ffff:ffff:fffe"),
+			big.NewInt(0).Sub(
+				big.NewInt(0).Lsh(big.NewInt(1), 64),
+				big.NewInt(0).Lsh(big.NewInt(1), 8),
+			),
 		},
 	}
 	for _, test := range testCases {
 		outcome := Capacity(test.a, test.b)
-		if outcome != test.result {
+		if outcome.Cmp(test.result) != 0 {
 			t.Errorf("expect result %d but got %d", test.result, outcome)
 		}
 	}
