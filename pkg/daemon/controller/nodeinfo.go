@@ -35,8 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
-
 	"github.com/alibaba/hybridnet/pkg/daemon/utils"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -249,7 +247,7 @@ existParentAddrLoop:
 
 func (r *nodeInfoReconciler) selectNodeLocalVxlanAddrs(thisNode *corev1.Node, vtepIP net.IP,
 	vxlanLinkName string) ([]netlink.Addr, error) {
-	existAllAddrList, err := containernetwork.ListLocalAddressExceptLink(vxlanLinkName)
+	existAllAddrList, err := utils.ListLocalAddressExceptLink(vxlanLinkName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list address for all interfaces: %v", err)
 	}

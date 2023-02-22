@@ -200,8 +200,8 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 			return fmt.Errorf("failed to ensure ipv4 neigh gc thresh: %v", err)
 		}
 
-		if err := EnsureRpFilterConfigs(hostNicName); err != nil {
-			return fmt.Errorf("failed to ensure sysctl config: %v", err)
+		if err := daemonutils.EnsureRpFilter(hostNicName); err != nil {
+			return fmt.Errorf("failed to ensure rp_filter sysctl config: %v", err)
 		}
 
 		// Vlan gw ipv4 ip should be resolved here.

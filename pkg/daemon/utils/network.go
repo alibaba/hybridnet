@@ -563,3 +563,68 @@ func EnsureIPReachable(ip net.IP) error {
 
 	return nil
 }
+
+func CheckIfContainerNetworkLink(linkName string) bool {
+	// TODO: suffix "_h" and prefix "h_" is deprecated, need to be removed further
+	return strings.HasSuffix(linkName, "_h") ||
+		strings.HasPrefix(linkName, "h_") ||
+		strings.HasPrefix(linkName, constants.ContainerHostLinkPrefix) ||
+		strings.HasPrefix(linkName, "veth") ||
+		strings.HasPrefix(linkName, "docker") ||
+		strings.HasPrefix(linkName, "kube-")
+}
+
+func ListLocalAddressExceptLink(exceptLinkName string) ([]netlink.Addr, error) {
+	var addrList []netlink.Addr
+
+	linkList, err := netlink.LinkList()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list link: %v", err)
+	}
+
+	for _, link := range linkList {
+		linkName := link.Attrs().Name
+		if linkName != exceptLinkName && !CheckIfContainerNetworkLink(linkName) {
+
+			linkAddrList, err := ListAllGlobalUnicastAddress(link)
+			if err != nil {
+				return nil, fmt.Errorf("failed to link addr for link %v: %v", link.Attrs().Name, err)
+			}
+
+			addrList = append(addrList, linkAddrList...)
+		}
+	}
+
+	return addrList, nil
+}
+
+func EnsureRpFilter(containerIfs ...string) error {
+	ifArray := append([]string{"default", "all"}, containerIfs...)
+
+	existInterfaces, err := net.Interfaces()
+	if err != nil {
+		return fmt.Errorf("error get exist interfaces on system: %v", err)
+	}
+
+	for _, existIf := range existInterfaces {
+		if CheckIfContainerNetworkLink(existIf.Name) {
+			continue
+		}
+		ifArray = append(ifArray, existIf.Name)
+	}
+
+	for _, key := range ifArray {
+		sysctlPath := fmt.Sprintf(constants.RpFilterSysctl, key)
+		sysctlValue, err := GetSysctl(sysctlPath)
+		if err != nil {
+			return fmt.Errorf("error get: %s sysctl path: %v", sysctlPath, err)
+		}
+		if sysctlValue != 0 {
+			if err = SetSysctl(sysctlPath, 0); err != nil {
+				return fmt.Errorf("failed to set %s sysctl path to 0, error: %v", sysctlPath, err)
+			}
+		}
+	}
+
+	return nil
+}
