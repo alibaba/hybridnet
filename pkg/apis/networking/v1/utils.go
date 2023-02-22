@@ -19,6 +19,7 @@ package v1
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"net"
 	"strconv"
 	"strings"
@@ -190,7 +191,7 @@ func IsSubnetAutoNatOutgoing(subnetSpec *SubnetSpec) bool {
 	return *subnetSpec.Config.AutoNatOutgoing
 }
 
-func CalculateCapacity(ar *AddressRange) int64 {
+func CalculateCapacity(ar *AddressRange) *big.Int {
 	var (
 		cidr       *net.IPNet
 		start, end net.IP
@@ -198,7 +199,7 @@ func CalculateCapacity(ar *AddressRange) int64 {
 	)
 
 	if _, cidr, err = net.ParseCIDR(ar.CIDR); err != nil {
-		return math.MaxInt64
+		return big.NewInt(math.MaxInt64)
 	}
 
 	if len(ar.Start) > 0 {
@@ -215,7 +216,7 @@ func CalculateCapacity(ar *AddressRange) int64 {
 		end = utils.LastIP(cidr)
 	}
 
-	return utils.Capacity(start, end) - int64(len(ar.ExcludeIPs))
+	return big.NewInt(0).Sub(utils.Capacity(start, end), big.NewInt(int64(len(ar.ExcludeIPs))))
 }
 
 func IsAvailable(statistics *Count) bool {
