@@ -216,3 +216,13 @@ All notable changes to this project will be documented in this file.
 
 ### Improvements
 - Switch package `ioutil` to `os` because of deprecation (#349 )
+
+## v0.7.8
+### Fixed Issues
+- Fix ipv6 subnet capacity calculation error because of int64 overflow. (#366 )
+- Fix felix crash because of cni-daemon's executing ipset frequently. (#364 )
+- Reserve ips for evicted and completed ip-retained pod. (#365 )
+
+### Improvements
+- Check `accept_ra` sysctl before enable `ipv6.forwarding`. (#367 ) 
+
