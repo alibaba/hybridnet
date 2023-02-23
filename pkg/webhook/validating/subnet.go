@@ -19,6 +19,7 @@ package validating
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"net/http"
 	"reflect"
 	"strings"
@@ -115,7 +116,7 @@ func SubnetCreateValidation(ctx context.Context, req *admission.Request, handler
 	}
 
 	// Capacity validation
-	if capacity := networkingv1.CalculateCapacity(&subnet.Spec.Range); capacity > MaxSubnetCapacity {
+	if capacity := networkingv1.CalculateCapacity(&subnet.Spec.Range); capacity.Cmp(big.NewInt(MaxSubnetCapacity)) == 1 {
 		return webhookutils.AdmissionDeniedWithLog(fmt.Sprintf("subnet contains more than %d IPs", MaxSubnetCapacity), logger)
 	}
 

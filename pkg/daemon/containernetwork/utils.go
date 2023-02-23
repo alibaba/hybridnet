@@ -21,7 +21,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/go-ping/ping"
@@ -30,7 +29,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/bgp"
 	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
-	"github.com/vishvananda/netlink"
 )
 
 func GenerateContainerVethPair(podNamespace, podName string) (string, string) {
@@ -40,77 +38,6 @@ func GenerateContainerVethPair(podNamespace, podName string) (string, string) {
 	h.Write([]byte(fmt.Sprintf("%s.%s", podNamespace, podName)))
 
 	return fmt.Sprintf("%s%s", constants.ContainerHostLinkPrefix, hex.EncodeToString(h.Sum(nil))[:11]), constants.ContainerNicName
-}
-
-func CheckIfContainerNetworkLink(linkName string) bool {
-	// TODO: suffix "_h" and prefix "h_" is deprecated, need to be removed further
-	return strings.HasSuffix(linkName, "_h") ||
-		strings.HasPrefix(linkName, "h_") ||
-		strings.HasPrefix(linkName, constants.ContainerHostLinkPrefix) ||
-		strings.HasPrefix(linkName, "veth") ||
-		strings.HasPrefix(linkName, "docker")
-}
-
-func ListLocalAddressExceptLink(exceptLinkName string) ([]netlink.Addr, error) {
-	var addrList []netlink.Addr
-
-	linkList, err := netlink.LinkList()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list link: %v", err)
-	}
-
-	for _, link := range linkList {
-		linkName := link.Attrs().Name
-		if linkName != exceptLinkName && !CheckIfContainerNetworkLink(linkName) {
-
-			linkAddrList, err := daemonutils.ListAllGlobalUnicastAddress(link)
-			if err != nil {
-				return nil, fmt.Errorf("failed to link addr for link %v: %v", link.Attrs().Name, err)
-			}
-
-			addrList = append(addrList, linkAddrList...)
-		}
-	}
-
-	return addrList, nil
-}
-
-func EnsureRpFilterConfigs(containerHostIf string) error {
-	for _, key := range []string{"default", "all"} {
-		sysctlPath := fmt.Sprintf(constants.RpFilterSysctl, key)
-		if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
-			return fmt.Errorf("failed to set %s sysctl path to 0, error: %v", sysctlPath, err)
-		}
-	}
-
-	sysctlPath := fmt.Sprintf(constants.RpFilterSysctl, containerHostIf)
-	if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
-		return fmt.Errorf("failed to set %s sysctl path to 0, error: %v", sysctlPath, err)
-	}
-
-	existInterfaces, err := net.Interfaces()
-	if err != nil {
-		return fmt.Errorf("error get exist interfaces on system: %v", err)
-	}
-
-	for _, existIf := range existInterfaces {
-		if CheckIfContainerNetworkLink(existIf.Name) {
-			continue
-		}
-
-		sysctlPath := fmt.Sprintf(constants.RpFilterSysctl, existIf.Name)
-		sysctlValue, err := daemonutils.GetSysctl(sysctlPath)
-		if err != nil {
-			return fmt.Errorf("error get: %s sysctl path: %v", sysctlPath, err)
-		}
-		if sysctlValue != 0 {
-			if err = daemonutils.SetSysctl(sysctlPath, 0); err != nil {
-				return fmt.Errorf("failed to set %s sysctl path to 0, error: %v", sysctlPath, err)
-			}
-		}
-	}
-
-	return nil
 }
 
 func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex int, family int,

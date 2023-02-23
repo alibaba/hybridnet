@@ -156,3 +156,63 @@ All notable changes to this project will be documented in this file.
 - Add limitations for creating overlapped subnets
 - Disable the automatic iptables mode detection of felix
 - Print statistics for Network CR
+- Remove conversion process from IPInstance v1.1 to v1.2
+
+## v0.7.0
+### New features
+- Support global service when MultiCluster feature is enabled
+- Support specifying MAC addresses for stateful workloads
+
+### Improvements
+- Remove `onlink` flag of the default route in pods to adapt to [Kata](https://katacontainers.io/)
+- Change the `failurePolicy` of hybridnet pod mutating/validating webhook configuration to `Ignore`, to reduce the risk caused by hybridnet webhook
+- Make cni conf configurable on nodes
+- Ensure routes of `169.254.1.1` on host if it's unreachable, to make sure `proxy_arp` can work
+- Refine integration test cases for manager
+- Improve the format of daemon logs
+
+### Fixed Issues
+- Fix kube-proxy nodeport datapath error, this happens usually if the endpoints are underlay VLAN pod (Network jitters of nodeport traffic might happen during the upgrade for old versions)
+- Fix the scheduling problem of ip-retained VM pods
+
+## v0.7.1
+### Fixed Issues
+- Fix daemon bug to allow to create dualstack pod with different v4/v6 vlan id
+
+## v0.7.2
+### Fixed Issues
+- Fix the error that underlay ip-retained pods will keep being Pending after they are deleted and recreated, if the underlay addresses run out
+
+## v0.7.3
+### Improvements
+- Remove all the `onlink` route flag usages to avoid ipv6 kernel bugs
+
+## v0.7.4
+### Improvements
+- Support modifying ipv6 route GC sysctl parameters by daemon (#326)
+- Enable RecoverPanic to handle unexpected panics and avoid unnecessary restarts (#323)
+- Ensure felix ready before start pod (#327)
+
+## v0.7.5
+### Improvements
+- Introduce typha for large scale (#333)
+- List/watch NodeInfo CR objects instead of Node objects in daemon to reduce communication load (#323)
+- Add scripts to clean felix iptables rules automatically while policy is disabled (#330 #333)
+
+## v0.7.6
+### Fixed Issues
+- Fix issue of manager getting stuck in processing subnet which starts with IP like 0.X.X.X (#342)
+- Fix the access error of NodePort while the externalTrafficPolicy is "Local" (#343)
+
+### Improvements
+- Handle possible cache sync failure for manager (#338)
+
+## v0.7.7
+### Fixed Issues
+- Fix capacity calculation error of `0.X.X.X` subnets (#348 )
+- Fix invalid validation of vlan id in daemon (#352 )
+- Fix retained ip pods' suddenlly getting stuck in `Terminating` if their owner referrence is removed (#353 )
+- Skip unscheduled pods in pod reconciliation in manager (#354 )
+
+### Improvements
+- Switch package `ioutil` to `os` because of deprecation (#349 )

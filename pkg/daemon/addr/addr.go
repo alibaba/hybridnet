@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"net"
 
+	daemonutils "github.com/alibaba/hybridnet/pkg/daemon/utils"
+
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/alibaba/hybridnet/pkg/utils"
 
 	"github.com/vishvananda/netlink"
@@ -82,7 +83,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 
 	for _, link := range linkList {
 		// ignore container network virtual interfaces
-		if containernetwork.CheckIfContainerNetworkLink(link.Attrs().Name) {
+		if daemonutils.CheckIfContainerNetworkLink(link.Attrs().Name) {
 			continue
 		}
 

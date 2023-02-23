@@ -45,7 +45,6 @@ import (
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/daemon/addr"
 	daemonconfig "github.com/alibaba/hybridnet/pkg/daemon/config"
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
 	"github.com/alibaba/hybridnet/pkg/daemon/iptables"
 	"github.com/alibaba/hybridnet/pkg/daemon/neigh"
 	"github.com/alibaba/hybridnet/pkg/daemon/route"
@@ -53,10 +52,6 @@ import (
 )
 
 const (
-	ActionReconcileSubnet     = "AllSubnetsRelatedToThisNode"
-	ActionReconcileIPInstance = "AllIPInstancesRelatedToThisNode"
-	ActionReconcileNodeInfo   = "AllNodeInfos"
-
 	InstanceIPIndex = "instanceIP"
 	EndpointIPIndex = "endpointIP"
 
@@ -71,9 +66,10 @@ type CtrlHub struct {
 	config *daemonconfig.Configuration
 	mgr    ctrl.Manager
 
-	subnetControllerTriggerSource     *simpleTriggerSource
-	ipInstanceControllerTriggerSource *simpleTriggerSource
-	nodeControllerTriggerSource       *simpleTriggerSource
+	subnetTriggerSourceForHostLink       *simpleTriggerSource
+	subnetTriggerSourceForNodeInfoChange *simpleTriggerSource
+	ipInstanceTriggerSourceForHostLink   *simpleTriggerSource
+	nodeInfoTriggerSourceForHostAddr     *simpleTriggerSource
 
 	routeV4Manager *route.Manager
 	routeV6Manager *route.Manager
@@ -138,9 +134,10 @@ func NewCtrlHub(config *daemonconfig.Configuration, mgr ctrl.Manager, logger log
 		config: config,
 		mgr:    mgr,
 
-		subnetControllerTriggerSource:     &simpleTriggerSource{key: ActionReconcileSubnet},
-		ipInstanceControllerTriggerSource: &simpleTriggerSource{key: ActionReconcileIPInstance},
-		nodeControllerTriggerSource:       &simpleTriggerSource{key: ActionReconcileNodeInfo},
+		subnetTriggerSourceForHostLink:       &simpleTriggerSource{key: "ForHostLinkEvent"},
+		subnetTriggerSourceForNodeInfoChange: &simpleTriggerSource{key: "ForNodeInfo"},
+		ipInstanceTriggerSourceForHostLink:   &simpleTriggerSource{key: "ForHostLinkEvent"},
+		nodeInfoTriggerSourceForHostAddr:     &simpleTriggerSource{key: "ForHostAddr"},
 
 		routeV4Manager: routeV4Manager,
 		routeV6Manager: routeV6Manager,
@@ -273,11 +270,11 @@ func (c *CtrlHub) handleLocalNetworkDeviceEvent() error {
 				select {
 				case update := <-linkCh:
 					if (update.IfInfomsg.Flags&unix.IFF_UP != 0) &&
-						!containernetwork.CheckIfContainerNetworkLink(update.Link.Attrs().Name) {
+						!daemonutils.CheckIfContainerNetworkLink(update.Link.Attrs().Name) {
 
 						// Create event to flush routes and neigh caches.
-						c.subnetControllerTriggerSource.Trigger()
-						c.ipInstanceControllerTriggerSource.Trigger()
+						c.subnetTriggerSourceForHostLink.Trigger()
+						c.ipInstanceTriggerSourceForHostLink.Trigger()
 					}
 				case <-exitCh:
 					break linkLoop
@@ -309,9 +306,17 @@ func (c *CtrlHub) handleLocalNetworkDeviceEvent() error {
 			for {
 				select {
 				case update := <-addrCh:
-					if daemonutils.CheckIPIsGlobalUnicast(update.LinkAddress.IP) {
+					link, err := netlink.LinkByIndex(update.LinkIndex)
+					if err != nil {
+						c.logger.Error(err, "failed to get link by addr update event link index", "addr",
+							update.LinkAddress, "link index", update.LinkIndex)
+						continue
+					}
+
+					if daemonutils.CheckIPIsGlobalUnicast(update.LinkAddress.IP) &&
+						!daemonutils.CheckIfContainerNetworkLink(link.Attrs().Name) {
 						// Create event to update node configuration.
-						c.nodeControllerTriggerSource.Trigger()
+						c.nodeInfoTriggerSourceForHostAddr.Trigger()
 					}
 				case <-exitCh:
 					break addrLoop

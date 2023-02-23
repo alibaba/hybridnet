@@ -19,6 +19,7 @@ package v1
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -288,7 +289,7 @@ func TestCalculateCapacity(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if calculated := CalculateCapacity(test.addressRange); calculated != test.expected {
+			if calculated := CalculateCapacity(test.addressRange); calculated.Cmp(big.NewInt(test.expected)) != 0 {
 				t.Fatalf("test %s fails, expected %d but calculated %d", test.name, test.expected, calculated)
 			}
 		})

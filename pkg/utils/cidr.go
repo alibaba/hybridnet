@@ -62,18 +62,22 @@ func Cmp(a, b net.IP) int {
 // Capacity returns the absolute number of IPs between a and b.
 // 0 is returned if a and b are of different IP families, or
 // any of those two IPs is invalid.
-func Capacity(a, b net.IP) int64 {
+func Capacity(a, b net.IP) *big.Int {
 	normalizedA := normalizeIP(a)
 	normalizedB := normalizeIP(b)
 
 	if normalizedA == nil || normalizedB == nil || len(normalizedA) != len(normalizedB) {
-		return 0
+		return big.NewInt(0)
 	}
 
 	ai := ipToInt(normalizedA)
 	bi := ipToInt(normalizedB)
 
-	return big.NewInt(0).Abs(big.NewInt(0).Sub(bi, ai)).Int64() + 1
+	return big.NewInt(0).Add(
+		big.NewInt(0).Abs(
+			big.NewInt(0).Sub(bi, ai),
+		), big.NewInt(1),
+	)
 }
 
 func ipToInt(ip net.IP) *big.Int {

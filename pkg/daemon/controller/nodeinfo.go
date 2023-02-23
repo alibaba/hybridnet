@@ -35,8 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/alibaba/hybridnet/pkg/daemon/containernetwork"
-
 	"github.com/alibaba/hybridnet/pkg/daemon/utils"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -204,7 +202,7 @@ func (r *nodeInfoReconciler) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Vxlan device might be regenerated, if that happens, all the related routes will be cleaned.
 	// So subnet controller need to be triggered again.
-	r.ctrlHubRef.subnetControllerTriggerSource.Trigger()
+	r.ctrlHubRef.subnetTriggerSourceForNodeInfoChange.Trigger()
 
 	return reconcile.Result{}, nil
 }
@@ -249,7 +247,7 @@ existParentAddrLoop:
 
 func (r *nodeInfoReconciler) selectNodeLocalVxlanAddrs(thisNode *corev1.Node, vtepIP net.IP,
 	vxlanLinkName string) ([]netlink.Addr, error) {
-	existAllAddrList, err := containernetwork.ListLocalAddressExceptLink(vxlanLinkName)
+	existAllAddrList, err := utils.ListLocalAddressExceptLink(vxlanLinkName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list address for all interfaces: %v", err)
 	}
@@ -386,14 +384,14 @@ func (r *nodeInfoReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	if err := nodeController.Watch(&source.Kind{Type: &networkingv1.NodeInfo{}},
-		&fixedKeyHandler{key: ActionReconcileNodeInfo},
+		&fixedKeyHandler{key: "ForNodeInfoChange"},
 		&predicate.GenerationChangedPredicate{},
 	); err != nil {
 		return fmt.Errorf("failed to watch corev1.Node for node controller: %v", err)
 	}
 
 	if err := nodeController.Watch(&source.Kind{Type: &networkingv1.Network{}},
-		&fixedKeyHandler{key: ActionReconcileNodeInfo},
+		&fixedKeyHandler{key: "ForNetworkChange"},
 		predicate.Funcs{
 			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
 				oldNetwork := updateEvent.ObjectOld.(*networkingv1.Network)
@@ -416,13 +414,13 @@ func (r *nodeInfoReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("failed to watch networkingv1.Network for node controller: %v", err)
 	}
 
-	if err := nodeController.Watch(r.ctrlHubRef.nodeControllerTriggerSource, &handler.Funcs{}); err != nil {
-		return fmt.Errorf("failed to watch nodeControllerTriggerSource for node controller: %v", err)
+	if err := nodeController.Watch(r.ctrlHubRef.nodeInfoTriggerSourceForHostAddr, &handler.Funcs{}); err != nil {
+		return fmt.Errorf("failed to watch nodeInfoTriggerSourceForHostAddr for node controller: %v", err)
 	}
 
 	if feature.MultiClusterEnabled() {
 		if err := nodeController.Watch(&source.Kind{Type: &multiclusterv1.RemoteVtep{}},
-			&fixedKeyHandler{key: ActionReconcileNodeInfo},
+			&fixedKeyHandler{key: "ForRemoteVtepChange"},
 			predicate.Funcs{
 				UpdateFunc: func(updateEvent event.UpdateEvent) bool {
 					oldRemoteVtep := updateEvent.ObjectOld.(*multiclusterv1.RemoteVtep)
