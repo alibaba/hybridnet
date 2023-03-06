@@ -29,6 +29,10 @@ type IPInstanceNamespaceListerExpansion interface{}
 // NetworkLister.
 type NetworkListerExpansion interface{}
 
+// NodeInfoListerExpansion allows custom methods to be added to
+// NodeInfoLister.
+type NodeInfoListerExpansion interface{}
+
 // SubnetListerExpansion allows custom methods to be added to
 // SubnetLister.
 type SubnetListerExpansion interface{}

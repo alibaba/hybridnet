@@ -35,6 +35,10 @@ func (c *FakeNetworkingV1) Networks() v1.NetworkInterface {
 	return &FakeNetworks{c}
 }
 
+func (c *FakeNetworkingV1) NodeInfos() v1.NodeInfoInterface {
+	return &FakeNodeInfos{c}
+}
+
 func (c *FakeNetworkingV1) Subnets() v1.SubnetInterface {
 	return &FakeSubnets{c}
 }

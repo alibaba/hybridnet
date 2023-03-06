@@ -21,4 +21,6 @@ type IPInstanceExpansion interface{}
 
 type NetworkExpansion interface{}
 
+type NodeInfoExpansion interface{}
+
 type SubnetExpansion interface{}

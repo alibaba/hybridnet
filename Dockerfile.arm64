@@ -1,4 +1,4 @@
-FROM golang:1.17.11 as builder
+FROM golang:1.19.6 as builder
 
 ENV ARCH=arm64
 ENV OS=linux
@@ -102,7 +102,7 @@ RUN mkdir -p cni-plugins/ && \
     | tar -xz -C cni-plugins/
 
 RUN mkdir -p gobgp/ && \
-    curl -SL https://github.com/osrg/gobgp/releases/download/v3.0.0-rc4/gobgp_3.0.0-rc4_linux_arm64.tar.gz \
+    curl -SL https://github.com/osrg/gobgp/releases/download/v3.11.0/gobgp_3.11.0_linux_arm64.tar.gz \
     | tar -xz -C gobgp/ && \
     cp gobgp/gobgp /usr/bin/ && \
     rm -rf gobgp/
