@@ -55,6 +55,7 @@ type peerInfo struct {
 	asn                    int
 	gracefulRestartSeconds uint32
 	password               string
+	allowNotEstablished    bool
 }
 
 type ipInfo struct {

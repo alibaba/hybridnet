@@ -91,9 +91,9 @@ func checkPodNetConfigReady(podIP net.IP, podCidr *net.IPNet, forwardNodeIfIndex
 			if err != nil {
 				return fmt.Errorf("failed to check bgp path for pod ip %v: %v", podIP.String(), err)
 			}
-			establishedPeerExists, err := bgpManager.CheckEstablishedRemotePeerExists()
+			establishedPeerExists, err := bgpManager.CheckRemotePeersEstablished()
 			if err != nil {
-				return fmt.Errorf("failed to check established peer eixst: %v", err)
+				return fmt.Errorf("failed to check remote peers established: %v", err)
 			}
 
 			if ruleExist && defaultRouteExist && bgpPathExist && establishedPeerExists {
