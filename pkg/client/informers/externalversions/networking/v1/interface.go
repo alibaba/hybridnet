@@ -27,6 +27,8 @@ type Interface interface {
 	IPInstances() IPInstanceInformer
 	// Networks returns a NetworkInformer.
 	Networks() NetworkInformer
+	// NodeInfos returns a NodeInfoInformer.
+	NodeInfos() NodeInfoInformer
 	// Subnets returns a SubnetInformer.
 	Subnets() SubnetInformer
 }
@@ -50,6 +52,11 @@ func (v *version) IPInstances() IPInstanceInformer {
 // Networks returns a NetworkInformer.
 func (v *version) Networks() NetworkInformer {
 	return &networkInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// NodeInfos returns a NodeInfoInformer.
+func (v *version) NodeInfos() NodeInfoInformer {
+	return &nodeInfoInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // Subnets returns a SubnetInformer.

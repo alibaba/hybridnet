@@ -150,7 +150,7 @@ func NewManager(peeringInterfaceName, grpcListenAddress string, logger logr.Logg
 	return manager, nil
 }
 
-func (m *Manager) RecordPeer(address, password string, asn int, gracefulRestartTime int32) {
+func (m *Manager) RecordPeer(address, password string, asn int, gracefulRestartTime int32, allowNotEstablished bool) {
 	if gracefulRestartTime == 0 {
 		gracefulRestartTime = 300
 	}
@@ -160,6 +160,7 @@ func (m *Manager) RecordPeer(address, password string, asn int, gracefulRestartT
 		asn:                    asn,
 		gracefulRestartSeconds: uint32(gracefulRestartTime),
 		password:               password,
+		allowNotEstablished:    allowNotEstablished,
 	}
 }
 
@@ -385,7 +386,7 @@ func (m *Manager) CheckIfIPInfoPathAdded(ipAddr net.IP) (bool, error) {
 	return exist, nil
 }
 
-func (m *Manager) CheckEstablishedRemotePeerExists() (bool, error) {
+func (m *Manager) CheckRemotePeersEstablished() (bool, error) {
 	establishedPeerMap := map[string]struct{}{}
 	if err := m.listRemoteBGPPeers(establishedPeerMap, func(peer *api.Peer) bool {
 		return peer.State.SessionState == api.PeerState_ESTABLISHED
@@ -393,8 +394,14 @@ func (m *Manager) CheckEstablishedRemotePeerExists() (bool, error) {
 		return false, fmt.Errorf("failed to list all the established bgp peers: %v", err)
 	}
 
-	if len(establishedPeerMap) == 0 {
-		return false, nil
+	for addr, peer := range m.peerMap {
+		if peer.allowNotEstablished {
+			continue
+		}
+
+		if _, established := establishedPeerMap[addr]; !established {
+			return false, fmt.Errorf("peer %v is not established", addr)
+		}
 	}
 	return true, nil
 }

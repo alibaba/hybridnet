@@ -270,7 +270,7 @@ func nodeBelongsToNetwork(nodeName string, network *networkingv1.Network) bool {
 }
 
 func collectGlobalNetworkInfoAndInit(ctx context.Context, client client.Reader, nodeVxlanIfName, nodeName string,
-	bgpManager *bgp.Manager, recordBGPPeers bool) (vxlanForwardNodeIfName string, bgpPeerIP net.IP, err error) {
+	bgpManager *bgp.Manager, recordBGPPeers bool) (vxlanForwardNodeIfName string, bgpGatewayIP net.IP, err error) {
 
 	networkList := &networkingv1.NetworkList{}
 	if err = client.List(ctx, networkList); err != nil {
@@ -305,21 +305,27 @@ func collectGlobalNetworkInfoAndInit(ctx context.Context, client client.Reader, 
 				return
 			}
 
-			if recordBGPPeers {
-				if len(network.Spec.Config.BGPPeers) != 1 {
-					err = fmt.Errorf("no bgp peer or multiple bgp peers are not supported for network %v", network.Name)
+			for _, peer := range network.Spec.Config.BGPPeers {
+				if recordBGPPeers {
+					bgpManager.RecordPeer(peer.Address, peer.Password, int(peer.ASN),
+						peer.GracefulRestartSeconds, peer.AllowNotEstablished)
+				}
+
+				if peer.DoesNotRouteTraffic {
+					continue
+				}
+
+				if bgpGatewayIP != nil {
+					err = fmt.Errorf("no more than one bgp gateway is supported for bgp network %v",
+						network.Name)
 					return
 				}
-
-				for _, peer := range network.Spec.Config.BGPPeers {
-					bgpManager.RecordPeer(peer.Address, peer.Password, int(peer.ASN), peer.GracefulRestartSeconds)
-				}
+				bgpGatewayIP = net.ParseIP(peer.Address)
 			}
 
-			bgpPeerIP = net.ParseIP(network.Spec.Config.BGPPeers[0].Address)
-			if bgpPeerIP == nil {
-				err = fmt.Errorf("get invalid bgp peer address %v for network %v",
-					network.Spec.Config.BGPPeers[0].Address, network.Name)
+			if bgpGatewayIP == nil {
+				err = fmt.Errorf("get no valid bgp gateway address for network %v",
+					network.Name)
 				return
 			}
 		}

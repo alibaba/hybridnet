@@ -106,6 +106,10 @@ type BGPPeer struct {
 	GracefulRestartSeconds int32 `json:"gracefulRestartSeconds,omitempty"`
 	// +kubebuilder:validation:Optional
 	Password string `json:"password,omitempty"`
+	// +kubebuilder:validation:Optional
+	DoesNotRouteTraffic bool `json:"doesNotRouteTraffic,omitempty"`
+	// +kubebuilder:validation:Optional
+	AllowNotEstablished bool `json:"allowNotEstablished,omitempty"`
 }
 
 type VTEPInfo struct {

@@ -111,8 +111,8 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 			return admission.Denied("must assign net ID for bgp network")
 		}
 
-		if network.Spec.Config == nil || len(network.Spec.Config.BGPPeers) != 1 {
-			return admission.Denied("one and only one bgp router need to be set")
+		if network.Spec.Config == nil || len(network.Spec.Config.BGPPeers) == 0 {
+			return admission.Denied("at least one bgp router need to be set")
 		}
 
 		for _, peer := range network.Spec.Config.BGPPeers {
@@ -182,8 +182,8 @@ func NetworkUpdateValidation(ctx context.Context, req *admission.Request, handle
 
 	switch networkingv1.GetNetworkMode(newN) {
 	case networkingv1.NetworkModeBGP:
-		if len(newN.Spec.Config.BGPPeers) != 1 {
-			return admission.Denied("one and only one bgp router need to be set")
+		if len(newN.Spec.Config.BGPPeers) == 0 {
+			return admission.Denied("at least one bgp router need to be set")
 		}
 
 		for _, peer := range newN.Spec.Config.BGPPeers {

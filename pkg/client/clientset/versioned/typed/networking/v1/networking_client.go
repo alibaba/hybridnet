@@ -29,6 +29,7 @@ type NetworkingV1Interface interface {
 	RESTClient() rest.Interface
 	IPInstancesGetter
 	NetworksGetter
+	NodeInfosGetter
 	SubnetsGetter
 }
 
@@ -43,6 +44,10 @@ func (c *NetworkingV1Client) IPInstances(namespace string) IPInstanceInterface {
 
 func (c *NetworkingV1Client) Networks() NetworkInterface {
 	return newNetworks(c)
+}
+
+func (c *NetworkingV1Client) NodeInfos() NodeInfoInterface {
+	return newNodeInfos(c)
 }
 
 func (c *NetworkingV1Client) Subnets() SubnetInterface {

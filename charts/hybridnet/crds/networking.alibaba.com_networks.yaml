@@ -77,9 +77,13 @@ spec:
                       properties:
                         address:
                           type: string
+                        allowNotEstablished:
+                          type: boolean
                         asn:
                           format: int32
                           type: integer
+                        doesNotRouteTraffic:
+                          type: boolean
                         gracefulRestartSeconds:
                           format: int32
                           type: integer
