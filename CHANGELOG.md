@@ -226,3 +226,11 @@ All notable changes to this project will be documented in this file.
 ### Improvements
 - Check `accept_ra` sysctl before enable `ipv6.forwarding`. (#367 ) 
 
+## v0.8.0
+### Improvements
+- Support multiple bgp peers for bgp network. (#370 )
+- Make unestablished BGP peers'  blocking Pod creation can be optional.  (#370 )
+
+### Other notable changes
+- Update gobgp to v3.11.0 and golang to 1.9.
+- Add `pkg/client` to release tag.
