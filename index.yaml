@@ -3,6 +3,31 @@ entries:
   hybridnet:
   - annotations:
       artifacthub.io/changes: |
+        - "Update image to v0.8.0"
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: 0.8.0
+    created: "2023-03-09T01:31:31.340237729Z"
+    description: A container networking solution aiming at hybrid clouds.
+    digest: 97ae1d22d8e8e6e327caeb9e52ca1e4bce8ed3042f8de21a9258a556b791cfaf
+    home: https://github.com/alibaba/hybridnet
+    keywords:
+    - network
+    - vlan
+    - bgp
+    - vxlan
+    - cni
+    - kubernetes
+    kubeVersion: '>=1.16.0-0'
+    name: hybridnet
+    sources:
+    - https://github.com/alibaba/hybridnet
+    type: application
+    urls:
+    - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.6.0/hybridnet-0.6.0.tgz
+    version: 0.6.0
+  - annotations:
+      artifacthub.io/changes: |
         - "Update image to v0.7.8"
       artifacthub.io/prerelease: "false"
     apiVersion: v2
@@ -584,4 +609,4 @@ entries:
     urls:
     - https://github.com/alibaba/hybridnet/releases/download/helm-chart-0.1.1/hybridnet-0.1.1.tgz
     version: 0.1.1
-generated: "2023-02-23T11:49:21.799176761Z"
+generated: "2023-03-09T01:31:31.340716334Z"
