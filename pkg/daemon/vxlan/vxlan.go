@@ -113,7 +113,10 @@ func (dev *Device) Link() *netlink.Vxlan {
 }
 
 func (dev *Device) RecordVtepInfo(vtepMac net.HardwareAddr, vtepIP net.IP) {
-	dev.remoteIPToMacMap[vtepIP.String()] = vtepMac
+	// exclude local vtep when collect remote vtep information.
+	if dev.link.HardwareAddr.String() != vtepMac.String() {
+		dev.remoteIPToMacMap[vtepIP.String()] = vtepMac
+	}
 }
 
 func (dev *Device) SyncVtepInfo(execDel bool) error {
