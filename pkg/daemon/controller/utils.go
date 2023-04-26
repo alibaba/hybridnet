@@ -270,7 +270,8 @@ func nodeBelongsToNetwork(nodeName string, network *networkingv1.Network) bool {
 }
 
 func collectGlobalNetworkInfoAndInit(ctx context.Context, client client.Reader, nodeVxlanIfName, nodeName string,
-	bgpManager *bgp.Manager, recordBGPPeers bool) (vxlanForwardNodeIfName string, bgpGatewayIP net.IP, err error) {
+	bgpManager *bgp.Manager, recordBGPPeers bool) (vxlanForwardNodeIfName string, attachedBGPNetworkExist bool,
+	bgpGatewayIP net.IP, err error) {
 
 	networkList := &networkingv1.NetworkList{}
 	if err = client.List(ctx, networkList); err != nil {
@@ -292,11 +293,11 @@ func collectGlobalNetworkInfoAndInit(ctx context.Context, client client.Reader, 
 			if !nodeBelongsToNetwork(nodeName, &network) {
 				continue
 			}
+			attachedBGPNetworkExist = true
 
 			if network.Spec.NetID == nil {
 				err = fmt.Errorf("the net id of network %v must to be set", network.Name)
 				return
-
 			}
 
 			localAS := uint32(*network.Spec.NetID)
@@ -315,19 +316,19 @@ func collectGlobalNetworkInfoAndInit(ctx context.Context, client client.Reader, 
 					continue
 				}
 
+				// TODO: support multiple bgp gateway
 				if bgpGatewayIP != nil {
 					err = fmt.Errorf("no more than one bgp gateway is supported for bgp network %v",
 						network.Name)
 					return
 				}
-				bgpGatewayIP = net.ParseIP(peer.Address)
-			}
 
-			if bgpGatewayIP == nil {
-				err = fmt.Errorf("get no valid bgp gateway address for network %v",
-					network.Name)
-				return
+				bgpGatewayIP = net.ParseIP(peer.Address)
+				if bgpGatewayIP == nil {
+					err = fmt.Errorf("invalid bgp gateway ip: %v", peer.Address)
+				}
 			}
+			// bgpGatewayIP might be nil
 		}
 	}
 
