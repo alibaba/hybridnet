@@ -38,7 +38,7 @@ const (
 	MaxRulePriority   = 32767
 	NodeLocalTableNum = 255
 
-	fromRuleMask = iptables.KubeProxyMasqueradeMark + iptables.FuleNATedPodTrafficMark
+	fromRuleMask = iptables.KubeProxyMasqueradeMark + iptables.FullNATedPodTrafficMark
 	fromRuleMark = 0x0
 )
 

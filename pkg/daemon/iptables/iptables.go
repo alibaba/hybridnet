@@ -55,9 +55,9 @@ const (
 	HybridnetLocalBGPNetSetName = "HYBRIDNET-LOCAL-BGP-NET"
 
 	PodToNodeBackTrafficMarkString = "0x20"
-	FuleNATedPodTrafficMarkString  = "0x40"
+	FullNATedPodTrafficMarkString  = "0x40"
 	PodToNodeBackTrafficMark       = 0x20
-	FuleNATedPodTrafficMark        = 0x40
+	FullNATedPodTrafficMark        = 0x40
 
 	KubeProxyMasqueradeMark = 0x4000
 )
@@ -497,7 +497,7 @@ func generateFullNATMarkSNATRuleSpec() []string {
 func generateFullNATMarkDNATRuleSpec(cidr *net.IPNet) []string {
 	return []string{"-A", ChainHybridnetFromRuleSkip, "-m", "conntrack", "--ctstate", "DNAT",
 		"--ctreplsrc", cidr.String(), "-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s",
-			FuleNATedPodTrafficMarkString, FuleNATedPodTrafficMarkString),
+			FullNATedPodTrafficMarkString, FullNATedPodTrafficMarkString),
 	}
 }
 

@@ -203,7 +203,7 @@ func (m *Manager) SyncAddresses(getIPInstanceByAddress func(net.IP) (*networking
 			// to select sender IP. That means the first address that matches the subnet of the target IP (of ARP header)
 			// and has a scope greater than or equal to RT_SCOPE_LINK will be selected.
 			//
-			// There are also also two kinds of results of IP source selection during (OUTPUT, not FORWARD) routing decision:
+			// There are also two kinds of results of IP source selection during (OUTPUT, not FORWARD) routing decision:
 			//   1. The egress interface of routing result has some ip addresses
 			//   2. The egress interface of the routing result doesn't have any address
 			//
