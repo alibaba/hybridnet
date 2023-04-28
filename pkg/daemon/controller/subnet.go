@@ -65,7 +65,7 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 	r.ctrlHubRef.bgpManager.ResetPeerAndSubnetInfos()
 
 	// only update bgp peer info in subnet reconcile
-	overlayForwardNodeIfName, bgpGatewayIP, err := collectGlobalNetworkInfoAndInit(ctx, r,
+	overlayForwardNodeIfName, attachedBGPNetworkExist, bgpGatewayIP, err := collectGlobalNetworkInfoAndInit(ctx, r,
 		r.ctrlHubRef.config.NodeVxlanIfName, r.ctrlHubRef.config.NodeName, r.ctrlHubRef.bgpManager, true)
 	if err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to collect global network info and init: %v", err)
@@ -115,7 +115,7 @@ func (r *subnetReconciler) Reconcile(ctx context.Context, request reconcile.Requ
 				gatewayIP = bgpGatewayIP
 			}
 		case networkingv1.NetworkModeGlobalBGP:
-			if bgpGatewayIP == nil {
+			if !attachedBGPNetworkExist {
 				// node does not belong to any underlay bgp network
 				isUnderlayOnHost = false
 			} else {
