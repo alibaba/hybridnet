@@ -67,7 +67,7 @@ func (r *ipInstanceReconciler) Reconcile(ctx context.Context, request reconcile.
 	r.ctrlHubRef.addrV4Manager.ResetInfos()
 	r.ctrlHubRef.bgpManager.ResetIPInfos()
 
-	overlayForwardNodeIfName, _, err := collectGlobalNetworkInfoAndInit(ctx, r,
+	overlayForwardNodeIfName, _, _, err := collectGlobalNetworkInfoAndInit(ctx, r,
 		r.ctrlHubRef.config.NodeVxlanIfName, r.ctrlHubRef.config.NodeName, r.ctrlHubRef.bgpManager, false)
 	if err != nil {
 		return reconcile.Result{Requeue: true}, fmt.Errorf("failed to collect global network info and init: %v", err)
