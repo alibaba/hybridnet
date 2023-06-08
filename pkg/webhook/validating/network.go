@@ -23,6 +23,9 @@ import (
 	"net/http"
 	"reflect"
 
+	controllerutils "github.com/alibaba/hybridnet/pkg/controllers/utils"
+	"github.com/alibaba/hybridnet/pkg/utils"
+
 	"github.com/alibaba/hybridnet/pkg/constants"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -62,6 +65,14 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 		if network.Spec.NodeSelector == nil || len(network.Spec.NodeSelector) == 0 {
 			return webhookutils.AdmissionDeniedWithLog("must have node selector for underlay network", logger)
 		}
+
+		if overlapped, _, err := checkUnderlayNetworkOverlapped(ctx, handler.Client, network); err != nil {
+			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError,
+				fmt.Errorf("failed to check underlay network overlapped: %v", err), logger)
+		} else if overlapped {
+			return webhookutils.AdmissionDeniedWithLog("underlay network cannot be overlapped", logger)
+		}
+
 	case networkingv1.NetworkTypeOverlay:
 		// check uniqueness
 		if exist, _, err := checkNetworkTypeExist(ctx, handler.Client, networkType); err != nil {
@@ -271,6 +282,38 @@ func checkNetworkTypeExist(ctx context.Context, client client.Reader, networkTyp
 	for i := range networks.Items {
 		if networkingv1.GetNetworkType(&networks.Items[i]) == networkType {
 			return true, networks.Items[i].Name, nil
+		}
+	}
+	return false, "", nil
+}
+
+func checkUnderlayNetworkOverlapped(ctx context.Context, c client.Reader, network *networkingv1.Network) (bool, string, error) {
+	networks := &networkingv1.NetworkList{}
+	if err := c.List(ctx, networks); err != nil {
+		return false, "", err
+	}
+
+	nodeList, err := controllerutils.ListActiveNodesToNames(ctx, c, client.MatchingLabels(network.Spec.NodeSelector))
+	if err != nil {
+		return false, "", fmt.Errorf("unable to update node list %v", err)
+	}
+
+	nodeListMap := utils.StringSliceToMap(nodeList)
+
+	for i := range networks.Items {
+		if networkingv1.GetNetworkType(&networks.Items[i]) != networkingv1.NetworkTypeUnderlay {
+			continue
+		}
+
+		// ignore the network itself
+		if networks.Items[i].Name == network.Name {
+			continue
+		}
+
+		for _, node := range networks.Items[i].Status.NodeList {
+			if _, exist := nodeListMap[node]; exist {
+				return true, networks.Items[i].Name, nil
+			}
 		}
 	}
 	return false, "", nil

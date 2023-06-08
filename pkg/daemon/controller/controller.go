@@ -559,6 +559,11 @@ func (c *CtrlHub) iptablesSyncLoop() {
 				continue
 			}
 
+			// skip terminating ip instance
+			if ipInstance.DeletionTimestamp != nil {
+				continue
+			}
+
 			podIP, _, err := net.ParseCIDR(ipInstance.Spec.Address.IP)
 			if err != nil {
 				return fmt.Errorf("parse pod ip %v error: %v", ipInstance.Spec.Address.IP, err)
@@ -589,10 +594,29 @@ func (c *CtrlHub) iptablesSyncLoop() {
 			}
 
 			iptablesManager := c.getIPtablesManager(subnet.Spec.Range.Version)
+
+			// isLocal means whether this node belongs to this network
+			isLocal := nodeBelongsToNetwork(c.config.NodeName, network)
+
+			// if network is local vlan, record vlan forward interface names
+			if isLocal && networkingv1.GetNetworkMode(network) == networkingv1.NetworkModeVlan {
+				netID := subnet.Spec.NetID
+				if netID == nil {
+					netID = network.Spec.NetID
+				}
+
+				vlanForwardIfName, err := daemonutils.GenerateVlanNetIfName(c.config.NodeVlanIfName, netID)
+				if err != nil {
+					c.logger.Error(err, "failed to generate vlan network interface name", "vlanMasterInterface", c.config.NodeVlanIfName, "netID", netID)
+					continue
+				}
+
+				iptablesManager.RecordVlanForwardIfName(vlanForwardIfName)
+			}
+
 			iptablesManager.RecordSubnet(cidr,
 				networkingv1.GetNetworkType(network) == networkingv1.NetworkTypeOverlay,
-				networkingv1.GetNetworkMode(network) == networkingv1.NetworkModeBGP &&
-					nodeBelongsToNetwork(c.config.NodeName, network))
+				isLocal)
 		}
 
 		if feature.MultiClusterEnabled() {

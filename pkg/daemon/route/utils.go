@@ -38,7 +38,7 @@ const (
 	MaxRulePriority   = 32767
 	NodeLocalTableNum = 255
 
-	fromRuleMask = iptables.KubeProxyMasqueradeMark + iptables.FuleNATedPodTrafficMark
+	fromRuleMask = iptables.KubeProxyMasqueradeMark + iptables.FullNATedPodTrafficMark
 	fromRuleMark = 0x0
 )
 
@@ -230,7 +230,7 @@ func ensureFromPodSubnetRuleAndRoutes(forwardNodeIfName string, cidr *net.IPNet,
 			return fmt.Errorf("failed to ensure routes for vlan subnet %v: %v", cidr.String(), err)
 		}
 	case networkingv1.NetworkModeBGP, networkingv1.NetworkModeGlobalBGP:
-		if err := ensureRoutesForBGPSubnet(forwardLink, cidr, table, gateway); err != nil {
+		if err := ensureRoutesForBGPSubnet(forwardLink, cidr, gateway, table, family); err != nil {
 			return fmt.Errorf("failed to ensure routes for bgp subnet %v: %v", cidr.String(), err)
 		}
 	default:
@@ -402,17 +402,50 @@ func ensureRoutesForVlanSubnet(forwardLink netlink.Link, cidr *net.IPNet, gatewa
 	return nil
 }
 
-func ensureRoutesForBGPSubnet(forwardLink netlink.Link, cidr *net.IPNet, table int, gateway net.IP) error {
-	// don't use onlink flag in case the gateway is not a reachable next hop
-	defaultRoute := &netlink.Route{
-		LinkIndex: forwardLink.Attrs().Index,
-		Table:     table,
-		Scope:     netlink.SCOPE_UNIVERSE,
-		Gw:        gateway,
+func ensureRoutesForBGPSubnet(forwardLink netlink.Link, cidr *net.IPNet, gateway net.IP, table, family int) error {
+	// default route is always needed
+	var defaultRoute *netlink.Route
+	var err error
+
+	if gateway == nil {
+		// copy the origin node default route in bgp subnet table
+		defaultRoute, err = daemonutils.GetDefaultRoute(family)
+		if err != nil {
+			return fmt.Errorf("failed to get default route in mian table: %v", err)
+		}
+		defaultRoute.Table = table
+	} else {
+		// TODO: support multiple bgp gateway
+		// don't use onlink flag in case the gateway is not a reachable next hop
+		defaultRoute = &netlink.Route{
+			LinkIndex: forwardLink.Attrs().Index,
+			Table:     table,
+			Scope:     netlink.SCOPE_UNIVERSE,
+			Gw:        gateway,
+		}
 	}
 
 	if err := netlink.RouteReplace(defaultRoute); err != nil {
 		return fmt.Errorf("failed to add bgp subnet %v default route %v: %v", cidr.String(), defaultRoute.String(), err)
+	}
+
+	// Because `ip route replace` will not delete default route if gateway changed, we need to delete it additionally.
+	routeList, err := netlink.RouteListFiltered(family, &netlink.Route{
+		Table: table,
+	}, netlink.RT_FILTER_TABLE)
+	if err != nil {
+		return fmt.Errorf("failed to list route for table %v: %v", table, err)
+	}
+
+	for _, route := range routeList {
+		// cannot use route.Equal() because of empty fields
+		if daemonutils.IsDefaultRoute(&route, family) &&
+			// TODO: support multiple bgp gateway
+			(!route.Gw.Equal(defaultRoute.Gw) || route.LinkIndex != defaultRoute.LinkIndex) {
+			if err := netlink.RouteDel(&route); err != nil {
+				return fmt.Errorf("failed to delete bgp route %v for table %v: %v", route.String(), table, err)
+			}
+		}
 	}
 
 	return nil

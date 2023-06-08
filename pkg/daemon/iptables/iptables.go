@@ -23,8 +23,9 @@ import (
 
 	"github.com/alibaba/hybridnet/pkg/constants"
 
-	"github.com/alibaba/hybridnet/pkg/daemon/ipset"
 	extraliptables "github.com/coreos/go-iptables/iptables"
+
+	"github.com/alibaba/hybridnet/pkg/daemon/ipset"
 
 	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
 	"k8s.io/utils/exec"
@@ -48,18 +49,19 @@ const (
 	ChainHybridnetFromRuleSkip         = CustomChainPrefix + "FROM-RULE-SKIP"
 	ChainHybridnetPodToNodeTrafficMark = CustomChainPrefix + "POD-TO-NODE-MARK"
 
-	HybridnetOverlayNetSetName  = "HYBRIDNET-OVERLAY-NET"
-	HybridnetAllIPSetName       = "HYBRIDNET-ALL"
-	HybridnetNodeIPSetName      = "HYBRIDNET-NODE-IP"
-	HybridnetLocalPodIPSetName  = "HYBRIDNET-LOCAL-POD-IP"
-	HybridnetLocalBGPNetSetName = "HYBRIDNET-LOCAL-BGP-NET"
+	HybridnetOverlayNetSetName       = "HYBRIDNET-OVERLAY-NET"
+	HybridnetAllIPSetName            = "HYBRIDNET-ALL"
+	HybridnetNodeIPSetName           = "HYBRIDNET-NODE-IP"
+	HybridnetLocalPodIPSetName       = "HYBRIDNET-LOCAL-POD-IP"
+	HybridnetLocalUnderlayNetSetName = "HYBRIDNET-LOCAL-UNDERLAY-NET"
 
 	PodToNodeBackTrafficMarkString = "0x20"
-	FuleNATedPodTrafficMarkString  = "0x40"
+	FullNATedPodTrafficMarkString  = "0x40"
 	PodToNodeBackTrafficMark       = 0x20
-	FuleNATedPodTrafficMark        = 0x40
+	FullNATedPodTrafficMark        = 0x40
 
-	KubeProxyMasqueradeMark = 0x4000
+	KubeProxyMasqueradeMark       = 0x4000
+	KubeProxyMasqueradeMarkString = "0x4000"
 )
 
 // Protocol defines the ip protocol either ipv4 or ipv6
@@ -78,14 +80,16 @@ type Manager struct {
 
 	localClusterOverlaySubnets  []*net.IPNet
 	localClusterUnderlaySubnets []*net.IPNet
-	localBGPSubnets             []*net.IPNet
+
+	localUnderlaySubnets []*net.IPNet
 
 	nodeIPList      []net.IP
 	localNodeIPList []net.IP
 	localPodIPList  []net.IP
 
-	overlayIfName string
-	bgpIfName     string
+	overlayIfName      string
+	bgpIfName          string
+	vlanForwardIfNames []string
 
 	protocol Protocol
 
@@ -139,8 +143,10 @@ func CreateIPtablesManager(protocol Protocol) (*Manager, error) {
 
 		localClusterOverlaySubnets:  []*net.IPNet{},
 		localClusterUnderlaySubnets: []*net.IPNet{},
+		localUnderlaySubnets:        []*net.IPNet{},
 		nodeIPList:                  []net.IP{},
 		localNodeIPList:             []net.IP{},
+		vlanForwardIfNames:          []string{},
 
 		protocol: protocol,
 		c:        make(chan struct{}, 1),
@@ -156,10 +162,11 @@ func CreateIPtablesManager(protocol Protocol) (*Manager, error) {
 func (mgr *Manager) Reset() {
 	mgr.localClusterOverlaySubnets = []*net.IPNet{}
 	mgr.localClusterUnderlaySubnets = []*net.IPNet{}
-	mgr.localBGPSubnets = []*net.IPNet{}
+	mgr.localUnderlaySubnets = []*net.IPNet{}
 	mgr.nodeIPList = []net.IP{}
 	mgr.localNodeIPList = []net.IP{}
 	mgr.localPodIPList = []net.IP{}
+	mgr.vlanForwardIfNames = []string{}
 	mgr.overlayIfName = ""
 
 	mgr.remoteClusterOverlaySubnets = []*net.IPNet{}
@@ -179,13 +186,13 @@ func (mgr *Manager) RecordLocalPodIP(podIP net.IP) {
 	mgr.localPodIPList = append(mgr.localPodIPList, podIP)
 }
 
-func (mgr *Manager) RecordSubnet(subnetCidr *net.IPNet, isOverlay, isLocalBGP bool) {
+func (mgr *Manager) RecordSubnet(subnetCidr *net.IPNet, isOverlay, isLocal bool) {
 	if isOverlay {
 		mgr.localClusterOverlaySubnets = append(mgr.localClusterOverlaySubnets, subnetCidr)
 	} else {
 		mgr.localClusterUnderlaySubnets = append(mgr.localClusterUnderlaySubnets, subnetCidr)
-		if isLocalBGP {
-			mgr.localBGPSubnets = append(mgr.localBGPSubnets, subnetCidr)
+		if isLocal {
+			mgr.localUnderlaySubnets = append(mgr.localUnderlaySubnets, subnetCidr)
 		}
 	}
 }
@@ -210,6 +217,16 @@ func (mgr *Manager) SetBgpIfName(bgpIfName string) {
 	mgr.bgpIfName = bgpIfName
 }
 
+func (mgr *Manager) RecordVlanForwardIfName(vlanForwardIfName string) {
+	// deduplication
+	for i := range mgr.vlanForwardIfNames {
+		if vlanForwardIfName == mgr.vlanForwardIfNames[i] {
+			return
+		}
+	}
+	mgr.vlanForwardIfNames = append(mgr.vlanForwardIfNames, vlanForwardIfName)
+}
+
 func (mgr *Manager) SyncRules() error {
 	mgr.lock()
 	defer mgr.unlock()
@@ -218,7 +235,7 @@ func (mgr *Manager) SyncRules() error {
 	nodeIPs := generateStringsFromIPs(mgr.nodeIPList)
 	allIPNets := generateStringsFromIPNets(mgr.localClusterUnderlaySubnets)
 
-	localBGPIPNets := generateStringsFromIPNets(mgr.localBGPSubnets)
+	localUnderlayIPNets := generateStringsFromIPNets(mgr.localUnderlaySubnets)
 	localPodIPs := generateStringsFromIPs(mgr.localPodIPList)
 
 	// remote subnets & nodes
@@ -234,7 +251,7 @@ func (mgr *Manager) SyncRules() error {
 		return fmt.Errorf("failed to create ipset instance: %v", err)
 	}
 
-	var overlayNetSet, allIPSet, nodeIPSet, localBGPNetSet, localPodIPSet *ipset.Set
+	var overlayNetSet, allIPSet, nodeIPSet, localUnderlayNetSet, localPodIPSet *ipset.Set
 
 	if overlayNetSet, err = createAndRefreshIPSet(ipsetInterface, HybridnetOverlayNetSetName, overlayIPNets,
 		ipset.TypeHashNet, ipset.OptionTimeout, "0"); err != nil {
@@ -251,9 +268,9 @@ func (mgr *Manager) SyncRules() error {
 		return fmt.Errorf("failed to create and refresh ip set %v: %v", HybridnetNodeIPSetName, err)
 	}
 
-	if localBGPNetSet, err = createAndRefreshIPSet(ipsetInterface, HybridnetLocalBGPNetSetName, localBGPIPNets,
+	if localUnderlayNetSet, err = createAndRefreshIPSet(ipsetInterface, HybridnetLocalUnderlayNetSetName, localUnderlayIPNets,
 		ipset.TypeHashNet, ipset.OptionTimeout, "0"); err != nil {
-		return fmt.Errorf("failed to create and refresh ip set %v: %v", HybridnetLocalBGPNetSetName, err)
+		return fmt.Errorf("failed to create and refresh ip set %v: %v", HybridnetLocalUnderlayNetSetName, err)
 	}
 
 	if localPodIPSet, err = createAndRefreshIPSet(ipsetInterface, HybridnetLocalPodIPSetName, localPodIPs,
@@ -308,8 +325,13 @@ func (mgr *Manager) SyncRules() error {
 	}
 
 	if len(mgr.bgpIfName) != 0 {
-		writeLine(filterRules, generateBGPEndLoopRuleSpec(mgr.bgpIfName, localPodIPSet.GetNameWithProtocol(),
-			localBGPNetSet.GetNameWithProtocol())...)
+		writeLine(filterRules, generateUnderlayEndLoopRuleSpec(mgr.bgpIfName, localPodIPSet.GetNameWithProtocol(),
+			localUnderlayNetSet.GetNameWithProtocol())...)
+	}
+
+	for i := range mgr.vlanForwardIfNames {
+		writeLine(filterRules, generateUnderlayEndLoopRuleSpec(mgr.vlanForwardIfNames[i], localPodIPSet.GetNameWithProtocol(),
+			localUnderlayNetSet.GetNameWithProtocol())...)
 	}
 
 	writeLine(mangleRules, generateFullNATMarkSNATRuleSpec()...)
@@ -478,11 +500,12 @@ func generateVxlanPodToNodeReplyRemoveMarkRuleSpec(overlayNetSet, nodeIPSet stri
 	}
 }
 
-func generateBGPEndLoopRuleSpec(bgpIf, localPodIPSet, localBGPNetSet string) []string {
-	return []string{"-A", ChainHybridnetForward, "-m", "comment", "--comment", `"drop endless bgp traffic because of route loop"`,
-		"-i", bgpIf,
+func generateUnderlayEndLoopRuleSpec(underlayIf, localPodIPSet, localUnderlayNetSet string) []string {
+	return []string{"-A", ChainHybridnetForward, "-m", "comment", "--comment", `"drop endless underlay traffic because of route loop"`,
+		"-i", underlayIf,
+		"-m", "mark", "!", "--mark", fmt.Sprintf("%s/%s", KubeProxyMasqueradeMarkString, KubeProxyMasqueradeMarkString),
 		"-m", "set", "!", "--match-set", localPodIPSet, "dst",
-		"-m", "set", "--match-set", localBGPNetSet, "dst",
+		"-m", "set", "--match-set", localUnderlayNetSet, "dst",
 		"-j", "DROP",
 	}
 }
@@ -497,7 +520,7 @@ func generateFullNATMarkSNATRuleSpec() []string {
 func generateFullNATMarkDNATRuleSpec(cidr *net.IPNet) []string {
 	return []string{"-A", ChainHybridnetFromRuleSkip, "-m", "conntrack", "--ctstate", "DNAT",
 		"--ctreplsrc", cidr.String(), "-j", "MARK", "--set-xmark", fmt.Sprintf("%s/%s",
-			FuleNATedPodTrafficMarkString, FuleNATedPodTrafficMarkString),
+			FullNATedPodTrafficMarkString, FullNATedPodTrafficMarkString),
 	}
 }
 
