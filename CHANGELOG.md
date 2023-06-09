@@ -234,3 +234,10 @@ All notable changes to this project will be documented in this file.
 ### Other notable changes
 - Update gobgp to v3.11.0 and golang to 1.9.
 - Add `pkg/client` to release tag.
+
+## v0.8.1
+### Improvements
+- Skip local vtep when generate vxlan fdb entry. (#373)
+- Add underlay network nodes conflict validation in webhook. (#377)
+- Allow no routable bgp peer exists for a BGP Network and inherit node default route in such cases. (#378)
+- Drop possible endless VLAN underlay traffic to avoid route loop. (#379)
