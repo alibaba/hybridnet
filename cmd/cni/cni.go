@@ -24,16 +24,15 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/vishvananda/netlink"
-
-	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
-
-	"github.com/alibaba/hybridnet/pkg/request"
-
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
+	"github.com/containernetworking/plugins/pkg/ns"
+	"github.com/vishvananda/netlink"
+
+	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/request"
 )
 
 func init() {
@@ -59,6 +58,12 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return err
 	}
 
+	var netNs ns.NetNS
+	if netNs, err = ns.GetNS(args.Netns); err != nil {
+		return fmt.Errorf("unable to open netns %q: %v", args.Netns, err)
+	}
+	defer netNs.Close()
+
 	podName, err := parseValueFromArgs("K8S_POD_NAME", args.Args)
 	if err != nil {
 		return err
@@ -80,7 +85,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return err
 	}
 
-	result, err := generateCNIResult(cniVersion, response)
+	result, err := generateCNIResult(cniVersion, response, args.IfName, netNs)
 	if err != nil {
 		return fmt.Errorf("generate cni result failed: %v", err)
 	}
@@ -88,11 +93,13 @@ func cmdAdd(args *skel.CmdArgs) error {
 	return types.PrintResult(result, cniVersion)
 }
 
-func generateCNIResult(cniVersion string, cniResponse *request.PodResponse) (*current.Result, error) {
+func generateCNIResult(cniVersion string, cniResponse *request.PodResponse, ifName string, netNs ns.NetNS) (*current.Result, error) {
 	result := &current.Result{CNIVersion: cniVersion}
 	result.IPs = []*current.IPConfig{}
 	result.Routes = []*types.Route{}
+	result.Interfaces = []*current.Interface{}
 
+	// fulfill ips and routes by daemon response
 	for _, address := range cniResponse.IPAddress {
 		ipAddr, mask, _ := net.ParseCIDR(address.IP)
 		ip := current.IPConfig{}
@@ -127,17 +134,28 @@ func generateCNIResult(cniVersion string, cniResponse *request.PodResponse) (*cu
 		result.Routes = append(result.Routes, &route)
 	}
 
-	// for chained cni plugins
-	hostVeth, err := netlink.LinkByName(cniResponse.HostInterface)
-	if err != nil {
-		return nil, fmt.Errorf("failed to lookup host veth %q: %v", cniResponse.HostInterface, err)
+	// fetch interface info by name in container namespace
+	if err := netNs.Do(func(_ ns.NetNS) error {
+		createdInterface, err := netlink.LinkByName(ifName)
+		if err != nil {
+			return fmt.Errorf("unable to get created interface %q: %v", ifName, err)
+		}
+
+		result.Interfaces = append(result.Interfaces, &current.Interface{
+			Name:    ifName,
+			Mac:     createdInterface.Attrs().HardwareAddr.String(),
+			Sandbox: netNs.Path(),
+		})
+
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
-	hostIface := &current.Interface{}
-	hostIface.Name = hostVeth.Attrs().Name
-	hostIface.Mac = hostVeth.Attrs().HardwareAddr.String()
-
-	result.Interfaces = []*current.Interface{hostIface}
+	// bind ips with created interface
+	for _, ip := range result.IPs {
+		ip.Interface = current.Int(0)
+	}
 
 	return result, nil
 }
