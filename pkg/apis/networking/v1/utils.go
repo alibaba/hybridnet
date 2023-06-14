@@ -26,7 +26,6 @@ import (
 
 	"github.com/gogf/gf/container/gset"
 
-	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/utils"
 )
 
@@ -281,33 +280,15 @@ func Intersect(rangeA *AddressRange, rangeB *AddressRange) bool {
 	return false
 }
 
-// IsLegacyModel will show whether IPInstance has switched to new version
-// TODO: legacy mode, to be removed in the next major version
-func IsLegacyModel(ipInstance *IPInstance) bool {
-	return len(ipInstance.Spec.Binding.ReferredObject.Kind) == 0
-}
-
 func IsReserved(ipInstance *IPInstance) bool {
-	if IsLegacyModel(ipInstance) {
-		return len(ipInstance.Status.NodeName) == 0
-	}
-
 	return len(ipInstance.Spec.Binding.NodeName) == 0
 }
 
 func FetchBindingPodName(ipInstance *IPInstance) string {
-	if IsLegacyModel(ipInstance) {
-		return ipInstance.Labels[constants.LabelPod]
-	}
-
 	return ipInstance.Spec.Binding.PodName
 }
 
 func FetchBindingNodeName(ipInstance *IPInstance) string {
-	if IsLegacyModel(ipInstance) {
-		return ipInstance.Labels[constants.LabelNode]
-	}
-
 	return ipInstance.Spec.Binding.NodeName
 }
 
@@ -316,10 +297,7 @@ func IsValidIPInstance(ipInstance *IPInstance) bool {
 		return false
 	}
 
-	if IsLegacyModel(ipInstance) {
-		return len(ipInstance.Status.Phase) > 0
-	}
-
+	// old version IPInstance is no longer valid
 	return len(ipInstance.Spec.Binding.ReferredObject.Kind) > 0
 }
 

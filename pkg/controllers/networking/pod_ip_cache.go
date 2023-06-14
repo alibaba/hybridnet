@@ -68,30 +68,15 @@ func NewPodIPCache(ctx context.Context, c client.Reader, logger logr.Logger) (Po
 	}
 
 	for _, ip := range ipList.Items {
-		if networkingv1.IsLegacyModel(&ip) {
-			return nil, fmt.Errorf("get legacy model ip instance, if this happens more than once, " +
-				"please check if the networking CRD yamls is updated to the latest v0.5 version")
+		if !networkingv1.IsValidIPInstance(&ip) {
+			return nil, fmt.Errorf("get legacy model ip instance, " +
+				"please check if the networking CRD yamls is updated to the latest v0.5 version and manager should also be " +
+				"updated to v0.5.x at first to update IPInstances")
 		}
 
 		podName := networkingv1.FetchBindingPodName(&ip)
 		if len(podName) != 0 {
-			var podUID types.UID
-
-			if len(ip.Spec.Binding.PodUID) != 0 {
-				podUID = ip.Spec.Binding.PodUID
-			} else if !networkingv1.IsReserved(&ip) {
-				// TODO: no longer need to get pod if all the ip instances is updated to the v1.2 version
-				pod, err := controllerutils.GetPod(ctx, c, podName, ip.Namespace)
-				if err != nil {
-					if err = client.IgnoreNotFound(err); err != nil {
-						return nil, fmt.Errorf("unable to get Pod %v for IPInstance %v: %v", podName, ip.Name, err)
-					}
-				}
-
-				if pod != nil {
-					podUID = pod.UID
-				}
-			}
+			podUID := ip.Spec.Binding.PodUID
 
 			var recordedIPInstances []string
 			if cache.podToIP[namespacedKey(podName, ip.Namespace)] == nil {
