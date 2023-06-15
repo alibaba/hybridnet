@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/alibaba/hybridnet/pkg/utils/transform"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -360,7 +362,7 @@ var _ = Describe("Subnet status controller integration test suite", func() {
 				context.Background(),
 				&networkingv1.IPInstance{},
 				client.MatchingLabels{
-					constants.LabelPod: pod.Name,
+					constants.LabelPod: transform.TransferPodNameForLabelValue(pod.Name),
 				},
 				client.InNamespace("default"),
 			)).NotTo(HaveOccurred())

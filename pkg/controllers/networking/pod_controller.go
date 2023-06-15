@@ -121,7 +121,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		if metav1.GetControllerOf(pod) == nil {
 			var ipInstanceList = &networkingv1.IPInstanceList{}
 			if err = r.List(ctx, ipInstanceList,
-				client.MatchingLabels{constants.LabelPod: pod.Name},
+				client.MatchingLabels{constants.LabelPod: transform.TransferPodNameForLabelValue(pod.Name)},
 				client.InNamespace(pod.Namespace),
 			); err != nil {
 				return ctrl.Result{}, wrapError("failed to list ip instance for pod", err)
