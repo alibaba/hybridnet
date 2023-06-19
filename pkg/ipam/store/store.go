@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/alibaba/hybridnet/pkg/utils/transform"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -141,7 +143,7 @@ func (s *crdStore) DeCouple(ctx context.Context, pod *corev1.Pod) (err error) {
 	if err = s.List(ctx,
 		ipInstanceList,
 		client.MatchingLabels{
-			constants.LabelPod: pod.Name,
+			constants.LabelPod: transform.TransferPodNameForLabelValue(pod.Name),
 		},
 		client.InNamespace(pod.Namespace),
 	); err != nil {
@@ -170,7 +172,7 @@ func (s *crdStore) IPReserve(ctx context.Context, pod *corev1.Pod, opts ...ipamt
 	if err = s.List(ctx,
 		ipInstanceList,
 		client.MatchingLabels{
-			constants.LabelPod: pod.Name,
+			constants.LabelPod: transform.TransferPodNameForLabelValue(pod.Name),
 		},
 		client.InNamespace(pod.Namespace),
 	); err != nil {
@@ -327,7 +329,7 @@ func assembleIPInstance(ipIns *networkingv1.IPInstance, ip *ipamtypes.IP, pod *c
 	ipIns.Labels[constants.LabelSubnet] = ip.Subnet
 	ipIns.Labels[constants.LabelNetwork] = ip.Network
 	ipIns.Labels[constants.LabelNode] = pod.Spec.NodeName
-	ipIns.Labels[constants.LabelPod] = pod.Name
+	ipIns.Labels[constants.LabelPod] = transform.TransferPodNameForLabelValue(pod.Name)
 	ipIns.Labels[constants.LabelPodUID] = string(pod.UID)
 
 	// additional labels will be patched
