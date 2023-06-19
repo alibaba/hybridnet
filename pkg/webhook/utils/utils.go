@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/alibaba/hybridnet/pkg/utils/transform"
+
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
 
 	"github.com/go-logr/logr"
@@ -142,7 +144,7 @@ func ParseNetworkConfigOfPodByPriority(ctx context.Context, c client.Reader, pod
 			// if networkName is not empty, elected will be true
 			networkName, ipFamily, err = parseNetworkConfigByExistIPInstances(ctx, c, client.InNamespace(pod.Namespace),
 				client.MatchingLabels{
-					constants.LabelPod: pod.Name,
+					constants.LabelPod: transform.TransferPodNameForLabelValue(pod.Name),
 				})
 			if err != nil {
 				err = fmt.Errorf("parse pod %v/%v network config by exist ip instances: %v", pod.Namespace, pod.Name, err)

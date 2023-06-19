@@ -22,6 +22,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alibaba/hybridnet/pkg/utils/transform"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -94,7 +96,7 @@ func PodCreateValidation(ctx context.Context, req *admission.Request, handler *H
 			ipList,
 			client.InNamespace(pod.Namespace),
 			client.MatchingLabels{
-				constants.LabelPod: pod.Name,
+				constants.LabelPod: transform.TransferPodNameForLabelValue(pod.Name),
 			}); err != nil {
 			return webhookutils.AdmissionErroredWithLog(http.StatusInternalServerError, err, logger)
 		}

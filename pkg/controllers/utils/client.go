@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/alibaba/hybridnet/pkg/utils/transform"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -271,7 +273,7 @@ func ListAllocatedIPInstances(ctx context.Context, c client.Reader, opts ...clie
 func ListAllocatedIPInstancesOfPod(ctx context.Context, c client.Reader, pod *corev1.Pod) (ips []*networkingv1.IPInstance, err error) {
 	return ListAllocatedIPInstances(ctx, c,
 		client.MatchingLabels{
-			constants.LabelPod: pod.Name,
+			constants.LabelPod: transform.TransferPodNameForLabelValue(pod.Name),
 		},
 		client.InNamespace(pod.Namespace),
 	)
