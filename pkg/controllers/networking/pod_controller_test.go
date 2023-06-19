@@ -37,6 +37,7 @@ import (
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
+	"github.com/alibaba/hybridnet/pkg/utils/transform"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -181,7 +182,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				context.Background(),
 				&networkingv1.IPInstance{},
 				client.MatchingLabels{
-					constants.LabelPod: podName,
+					constants.LabelPod: transform.TransferPodNameForLabelValue(podName),
 				},
 				client.InNamespace("default"),
 			)).NotTo(HaveOccurred())
@@ -706,7 +707,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				context.Background(),
 				&networkingv1.IPInstance{},
 				client.MatchingLabels{
-					constants.LabelPod: podName,
+					constants.LabelPod: transform.TransferPodNameForLabelValue(podName),
 				},
 				client.InNamespace("default"),
 			)).NotTo(HaveOccurred())
@@ -855,7 +856,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				context.Background(),
 				&networkingv1.IPInstance{},
 				client.MatchingLabels{
-					constants.LabelPod: podName,
+					constants.LabelPod: transform.TransferPodNameForLabelValue(podName),
 				},
 				client.InNamespace("default"),
 			)).NotTo(HaveOccurred())
@@ -1117,7 +1118,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				context.Background(),
 				&networkingv1.IPInstance{},
 				client.MatchingLabels{
-					constants.LabelPod: podName,
+					constants.LabelPod: transform.TransferPodNameForLabelValue(podName),
 				},
 				client.InNamespace("default"),
 			)).NotTo(HaveOccurred())
@@ -1270,7 +1271,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				context.Background(),
 				&networkingv1.IPInstance{},
 				client.MatchingLabels{
-					constants.LabelPod: podName,
+					constants.LabelPod: transform.TransferPodNameForLabelValue(podName),
 				},
 				client.InNamespace("default"),
 			)).NotTo(HaveOccurred())
@@ -1463,7 +1464,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				context.Background(),
 				&networkingv1.IPInstance{},
 				client.MatchingLabels{
-					constants.LabelPod: podName,
+					constants.LabelPod: transform.TransferPodNameForLabelValue(podName),
 				},
 				client.InNamespace("default"),
 			)).NotTo(HaveOccurred())
@@ -1725,7 +1726,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				context.Background(),
 				&networkingv1.IPInstance{},
 				client.MatchingLabels{
-					constants.LabelPod: podName,
+					constants.LabelPod: transform.TransferPodNameForLabelValue(podName),
 				},
 				client.InNamespace("default"),
 			)).NotTo(HaveOccurred())
@@ -1909,7 +1910,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				context.Background(),
 				&networkingv1.IPInstance{},
 				client.MatchingLabels{
-					constants.LabelPod: podName,
+					constants.LabelPod: transform.TransferPodNameForLabelValue(podName),
 				},
 				client.InNamespace("default"),
 			)).NotTo(HaveOccurred())
@@ -2080,7 +2081,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 				context.Background(),
 				&networkingv1.IPInstance{},
 				client.MatchingLabels{
-					constants.LabelPod: podName,
+					constants.LabelPod: transform.TransferPodNameForLabelValue(podName),
 				},
 				client.InNamespace("default"),
 			)).NotTo(HaveOccurred())

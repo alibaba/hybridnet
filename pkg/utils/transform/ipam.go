@@ -17,6 +17,8 @@
 package transform
 
 import (
+	"crypto/md5"
+	"fmt"
 	"net"
 
 	v1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
@@ -52,6 +54,7 @@ func TransferNetworkForIPAM(in *v1.Network) *ipamtypes.Network {
 }
 
 func TransferIPInstanceForIPAM(in *v1.IPInstance) *ipamtypes.IP {
+	// Pod name will not be hashed in IPAM.
 	return &ipamtypes.IP{
 		Address:      utils.StringToIPNet(in.Spec.Address.IP),
 		Gateway:      net.ParseIP(in.Spec.Address.Gateway),
@@ -75,6 +78,16 @@ func TransferIPInstancesForIPAM(ips []*v1.IPInstance) []*ipamtypes.IP {
 		ret[idx] = TransferIPInstanceForIPAM(ip)
 	}
 	return ret
+}
+
+func TransferPodNameForLabelValue(podName string) string {
+	// Value of k8s label cannot be over 63 characters
+	if len(podName) > 63 {
+		h := md5.Sum([]byte(podName[31:]))
+		return podName[:31] + fmt.Sprintf("%x", h)
+	}
+
+	return podName
 }
 
 func int32pToUint32p(in *int32) *uint32 {
