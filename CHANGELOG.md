@@ -241,3 +241,8 @@ All notable changes to this project will be documented in this file.
 - Add underlay network nodes conflict validation in webhook. (#377)
 - Allow no routable bgp peer exists for a BGP Network and inherit node default route in such cases. (#378)
 - Drop possible endless VLAN underlay traffic to avoid route loop. (#379)
+
+## v0.8.2
+### Fixed Issues
+- Allow Pod names to be over 63 characters length. (#385)
+- Make hybridnet support chained plugins. (#384)
