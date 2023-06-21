@@ -134,16 +134,27 @@ func generateCNIResult(cniVersion string, cniResponse *request.PodResponse, ifNa
 		result.Routes = append(result.Routes, &route)
 	}
 
-	// fetch interface info by name in container namespace
-	if err := netNs.Do(func(_ ns.NetNS) error {
-		createdInterface, err := netlink.LinkByName(ifName)
+	// fetch created host interface by name
+	hostInterface, err := netlink.LinkByName(cniResponse.HostInterface)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get created host interface %q: %v", cniResponse.HostInterface, err)
+	}
+
+	result.Interfaces = append(result.Interfaces, &current.Interface{
+		Name: hostInterface.Attrs().Name,
+		Mac:  hostInterface.Attrs().HardwareAddr.String(),
+	})
+
+	// fetch created container interface by name in container namespace
+	if err = netNs.Do(func(_ ns.NetNS) error {
+		containerInterface, err := netlink.LinkByName(ifName)
 		if err != nil {
-			return fmt.Errorf("unable to get created interface %q: %v", ifName, err)
+			return fmt.Errorf("unable to get created container interface %q: %v", ifName, err)
 		}
 
 		result.Interfaces = append(result.Interfaces, &current.Interface{
-			Name:    ifName,
-			Mac:     createdInterface.Attrs().HardwareAddr.String(),
+			Name:    containerInterface.Attrs().Name,
+			Mac:     containerInterface.Attrs().HardwareAddr.String(),
 			Sandbox: netNs.Path(),
 		})
 
@@ -152,9 +163,9 @@ func generateCNIResult(cniVersion string, cniResponse *request.PodResponse, ifNa
 		return nil, err
 	}
 
-	// bind ips with created interface
+	// bind ips with created container interface
 	for _, ip := range result.IPs {
-		ip.Interface = current.Int(0)
+		ip.Interface = current.Int(1)
 	}
 
 	return result, nil
