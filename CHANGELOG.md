@@ -246,3 +246,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed Issues
 - Allow Pod names to be over 63 characters length. (#385)
 - Make hybridnet support chained plugins. (#384)
+
+## v0.8.3
+### Fixed Issues
+- Add created host interface into CNI result for chained plugins like bandwidth. (#388)
