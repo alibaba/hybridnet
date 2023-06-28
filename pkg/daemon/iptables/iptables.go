@@ -49,11 +49,14 @@ const (
 	ChainHybridnetFromRuleSkip         = CustomChainPrefix + "FROM-RULE-SKIP"
 	ChainHybridnetPodToNodeTrafficMark = CustomChainPrefix + "POD-TO-NODE-MARK"
 
-	HybridnetOverlayNetSetName       = "HYBRIDNET-OVERLAY-NET"
-	HybridnetAllIPSetName            = "HYBRIDNET-ALL"
-	HybridnetNodeIPSetName           = "HYBRIDNET-NODE-IP"
-	HybridnetLocalPodIPSetName       = "HYBRIDNET-LOCAL-POD-IP"
-	HybridnetLocalUnderlayNetSetName = "HYBRIDNET-LOCAL-UNDERLAY-NET"
+	// The origin ip set name below should not be longer than 25 characters, because v6 ip set name will get an "inet6:" prefix,
+	// and the actual length of ip set name should not be longer than 31 characters.
+
+	HybridnetOverlayNetSetName       = "HYBR-OVERLAY-NET"
+	HybridnetAllIPSetName            = "HYBR-ALL"
+	HybridnetNodeIPSetName           = "HYBR-NODE-IP"
+	HybridnetLocalPodIPSetName       = "HYBR-LOCAL-POD-IP"
+	HybridnetLocalUnderlayNetSetName = "HYBR-LOCAL-UNDERLAY-NET"
 
 	PodToNodeBackTrafficMarkString = "0x20"
 	FullNATedPodTrafficMarkString  = "0x40"
