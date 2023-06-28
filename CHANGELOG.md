@@ -250,3 +250,8 @@ All notable changes to this project will be documented in this file.
 ## v0.8.3
 ### Fixed Issues
 - Add created host interface into CNI result for chained plugins like bandwidth. (#388)
+
+## v0.8.4
+### Fixed Issues
+- Fix nil pointer error which might happen in daemon during initializiation. (#391)
+- Fix the error that ipv6 "local underlay net" ipset name is longer than 31 characters. (#391)
