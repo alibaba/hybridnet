@@ -59,6 +59,11 @@ func (t *simpleTriggerSource) Start(ctx context.Context, handler handler.EventHa
 }
 
 func (t *simpleTriggerSource) Trigger() {
+	// do nothing if source is not started
+	if t.queue == nil {
+		return
+	}
+
 	t.queue.Add(reconcile.Request{NamespacedName: types.NamespacedName{
 		Name: t.key,
 	}})
