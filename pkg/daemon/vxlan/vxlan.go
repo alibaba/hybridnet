@@ -17,10 +17,14 @@
 package vxlan
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"syscall"
 	"time"
+
+	"os/exec"
 
 	"github.com/alibaba/hybridnet/pkg/constants"
 
@@ -30,7 +34,7 @@ import (
 )
 
 var (
-	broadcastFdbMac, _ = net.ParseMAC("00:00:00:00:00:00")
+	broadcastFdbMac, _ = net.ParseMAC("FF:FF:FF:FF:FF:F1")
 )
 
 type Device struct {
@@ -96,6 +100,10 @@ func NewVxlanDevice(name string, vxlanID int, parent string, localAddr net.IP, p
 		if err := daemonutils.SetSysctl(sysctlPath, 0); err != nil {
 			return nil, fmt.Errorf("failed to set sysctl parameter %v: %v", sysctlPath, err)
 		}
+	}
+
+	if err = ensureTCRules(link); err != nil {
+		return nil, fmt.Errorf("failed to ensure tc rules: %v", err)
 	}
 
 	return &Device{
@@ -214,7 +222,7 @@ func ensureLink(vxlan *netlink.Vxlan) (*netlink.Vxlan, error) {
 		return nil, fmt.Errorf("created vxlan device with index %v is not vxlan", ifIndex)
 	}
 
-	if err := netlink.LinkSetUp(link); err != nil {
+	if err = netlink.LinkSetUp(link); err != nil {
 		return nil, fmt.Errorf("failed to set link %v up: %v", link.Attrs().Name, err)
 	}
 
@@ -269,4 +277,54 @@ func vxlanLinksIncompat(l1, l2 netlink.Link) string {
 	}
 
 	return ""
+}
+
+func ensureTCRules(link *netlink.Vxlan) error {
+	// Ensure egress root qdisc for vxlan interface, need a classful qdisc for pedit action.
+	if err := netlink.QdiscReplace(netlink.NewPrio(
+		netlink.QdiscAttrs{
+			LinkIndex: link.Index,
+			Parent:    netlink.HANDLE_ROOT,
+		})); err != nil {
+		return fmt.Errorf("failed to ensure root qdisc for vxlan interface: %v", err)
+	}
+
+	qdiscs, err := netlink.QdiscList(link)
+	if err != nil {
+		return fmt.Errorf("failed to list qdisc for vxlan interface: %v", err)
+	}
+
+	var rootQdisc netlink.Qdisc
+	for _, item := range qdiscs {
+		if item.Attrs().Parent == netlink.HANDLE_ROOT {
+			rootQdisc = item
+		}
+	}
+
+	tcPath, err := exec.LookPath("tc")
+	if err != nil {
+		return fmt.Errorf("tc command not found: %v", err)
+	}
+
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
+
+	// This filter will transform multicast/broadcast dst mac addresses (of witch the last bit of the first byte is 1) to broadcastFdbMac.
+	// TODO: tc filter replace command seems not upgrade filter while command changed
+	runCmd := exec.Cmd{
+		Path: tcPath,
+		Args: append([]string{tcPath},
+			// "tc filter replace dev eth0.vxlan4 parent 8001: handle 800::800 prio 1 u32 match u8 0x01 0x01 at -14 action pedit ex munge eth dst set ff:ff:ff:ff:ff:f1"
+			"filter", "replace", "dev", link.Name, "parent", netlink.HandleStr(rootQdisc.Attrs().Handle),
+			"handle", "800::800", "prio", "1", "u32", "match", "u8", "0x01", "0x01", "at", "-14",
+			"action", "pedit", "ex", "munge", "eth", "dst", "set", broadcastFdbMac.String()),
+		Stderr: &stderr,
+		Stdout: &stdout,
+	}
+
+	if err = runCmd.Run(); err != nil {
+		return fmt.Errorf("failed to exec %v: %v", runCmd.String(), errors.New(stdout.String()+"\n"+stderr.String()))
+	}
+
+	return nil
 }
