@@ -106,6 +106,10 @@ func NewVxlanDevice(name string, vxlanID int, parent string, localAddr net.IP, p
 		return nil, fmt.Errorf("failed to ensure tc rules: %v", err)
 	}
 
+	if err = netlink.LinkSetAllmulticastOn(link); err != nil {
+		return nil, fmt.Errorf("failed to set allmuticast on: %v", err)
+	}
+
 	return &Device{
 		link:             link,
 		remoteIPToMacMap: map[string]net.HardwareAddr{},
