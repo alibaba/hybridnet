@@ -260,3 +260,7 @@ All notable changes to this project will be documented in this file.
 ### Improvements
 - Fix nil pointer error which might happen in daemon during initializiation. (#391)
 - Fix the error that ipv6 "local underlay net" ipset name is longer than 31 characters. (#391)
+
+## v0.8.6
+### Fixed Issues
+- Forbid flooing for unicast dst mac address in vxlan network. (#397)
