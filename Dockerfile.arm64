@@ -90,6 +90,7 @@ RUN apk add --no-cache --allow-untrusted \
 	iptables \
 	ip6tables \
 	iproute2 \
+	iproute2-tc \
 	ipset \
 	conntrack-tools \
 	curl \
