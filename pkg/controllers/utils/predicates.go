@@ -186,24 +186,6 @@ func (s SpecifiedLabelChangedPredicate) Update(e event.UpdateEvent) bool {
 	return false
 }
 
-type IPInstancePhaseChangePredicate struct {
-	predicate.Funcs
-}
-
-// Update implements default UpdateEvent filter for checking whether IPInstance phase change
-func (IPInstancePhaseChangePredicate) Update(e event.UpdateEvent) bool {
-	oldIPInstance, ok := e.ObjectOld.(*networkingv1.IPInstance)
-	if !ok {
-		return false
-	}
-	newIPInstance, ok := e.ObjectNew.(*networkingv1.IPInstance)
-	if !ok {
-		return false
-	}
-
-	return oldIPInstance.Status.Phase != newIPInstance.Status.Phase
-}
-
 type RemoteClusterUUIDChangePredicate struct {
 	predicate.Funcs
 }

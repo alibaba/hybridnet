@@ -67,11 +67,13 @@ spec:
                     a service.
                   properties:
                     addresses:
-                      description: addresses of this endpoint. The contents of this
+                      description: 'addresses of this endpoint. The contents of this
                         field are interpreted according to the corresponding EndpointSlice
                         addressType field. Consumers must handle different types of
                         addresses in the context of their own capabilities. This must
-                        contain at least one address but no more than 100.
+                        contain at least one address but no more than 100. These are
+                        all assumed to be fungible and clients may choose to only
+                        use the first element. Refer to: https://issue.k8s.io/106267'
                       items:
                         type: string
                       type: array
@@ -136,8 +138,7 @@ spec:
                     nodeName:
                       description: nodeName represents the name of the Node hosting
                         this endpoint. This can be used to determine endpoints local
-                        to a Node. This field can be enabled with the EndpointSliceNodeName
-                        feature gate.
+                        to a Node.
                       type: string
                     targetRef:
                       description: targetRef is a reference to a Kubernetes object
@@ -212,7 +213,7 @@ spec:
                       description: The application protocol for this port. This field
                         follows standard Kubernetes label syntax. Un-prefixed names
                         are reserved for IANA standard service names (as per RFC-6335
-                        and http://www.iana.org/assignments/service-names). Non-standard
+                        and https://www.iana.org/assignments/service-names). Non-standard
                         protocols should use prefixed names such as mycompany.com/my-custom-protocol.
                       type: string
                     name:

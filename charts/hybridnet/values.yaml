@@ -90,7 +90,7 @@ daemon:
 
   ## If it is empty, daemon on each node will take one of the valid address of the vxlan interface's parent
   ## (try ipv4 addresses first and then ipv6 addresses if no valid ipv4 address exists) as node's VTEP address
-  ## randomly. If is is not empty, the first result matches any of the CIDRs will be chose as VTEP address.
+  ## randomly. If it is not empty, the first result matches any of the CIDRs will be chosen as VTEP address.
   vtepAddressCIDRs: "0.0.0.0/0,::/0"
 
   # -- The community CNI plugins needed to be copied by hybridnet from inside container to the /opt/cni/bin/ directory of host
@@ -101,6 +101,9 @@ daemon:
 
   # -- Whether will daemon check the connectivity of local pod before staring it
   checkPodConnectivityFromHost: true
+
+  # -- Whether will daemon update the status of IPInstance while create pod sandbox
+  updateIPInstanceStatus: true
 
   # -- Specifies the resources for the cni-daemon containers
   resources: {}
