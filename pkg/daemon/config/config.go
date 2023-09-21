@@ -103,6 +103,7 @@ type Configuration struct {
 	EnableVlanArpEnhancement     bool
 	PatchCalicoPodIPsAnnotation  bool
 	CheckPodConnectivityFromHost bool
+	UpdateIPInstanceStatus       bool
 }
 
 // ParseFlags will parse cmd args then init kubeClient and configuration
@@ -134,6 +135,7 @@ func ParseFlags() (*Configuration, error) {
 		argIPv6RouteCacheGCThresh               = pflag.Int("ipv6-route-cache-gc-thresh", DefaultIPv6RouteCacheGCThresh, "Value to set net.ipv6.route.gc_thresh")
 		argPatchCalicoPodIPsAnnotation          = pflag.Bool("patch-calico-pod-ips-annotation", true, "Patch \"cni.projectcalico.org/podIPs\" annotations to pod")
 		argCheckPodConnectivityFromHost         = pflag.Bool("check-pod-connectivity-from-host", true, "Check pod's connectivity from host before start it")
+		argUpdateIPInstanceStatus               = pflag.Bool("update-ipinstance-status", true, "Update ipinstance status while creating pod sandbox")
 	)
 
 	// mute info log for ipset lib
@@ -172,6 +174,7 @@ func ParseFlags() (*Configuration, error) {
 		IPv6RouteCacheGCThresh:               *argIPv6RouteCacheGCThresh,
 		PatchCalicoPodIPsAnnotation:          *argPatchCalicoPodIPsAnnotation,
 		CheckPodConnectivityFromHost:         *argCheckPodConnectivityFromHost,
+		UpdateIPInstanceStatus:               *argUpdateIPInstanceStatus,
 	}
 
 	if *argPreferVlanInterfaces == "" {

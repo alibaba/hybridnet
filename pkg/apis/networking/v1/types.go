@@ -124,8 +124,6 @@ type VTEPInfo struct {
 	LocalIPs []string `json:"localIPs,omitempty"`
 }
 
-type IPPhase string
-
 // The conversion process from IPInstance v1.1 to v1.2 has been removed after hybridnet v0.6.0.
 const (
 	IPInstanceV12           = "v1.2"

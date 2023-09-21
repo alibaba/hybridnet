@@ -144,6 +144,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 		}
 
 		if strategy.OwnByStatefulWorkload(ownedObj) {
+			// Before pod terminated, should not reserve ip instance because of pre-stop
+			if !utils.PodIsTerminated(pod) {
+				return ctrl.Result{}, nil
+			}
+
 			if err = r.reserve(ctx, pod); err != nil {
 				return ctrl.Result{}, wrapError("unable to reserve pod", err)
 			}
@@ -164,6 +169,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 				if apierrors.IsNotFound(err) || !vm.DeletionTimestamp.IsZero() {
 					// if vm is deleted, should not reserve pod ips any more
 					return ctrl.Result{}, wrapError("unable to remove finalizer", r.removeFinalizer(ctx, pod))
+				}
+
+				// Before pod terminated, should not reserve ip instance because of pre-stop
+				if !utils.PodIsTerminated(pod) {
+					return ctrl.Result{}, nil
 				}
 
 				log.V(1).Info("reserve ip for VM pod")
@@ -692,7 +702,7 @@ func (r *PodReconciler) checkMACAddressCollision(pod *corev1.Pod, networkName st
 		if !ipInstance.DeletionTimestamp.IsZero() {
 			continue
 		}
-		if ipInstance.Status.PodNamespace != pod.GetNamespace() || ipInstance.Status.PodName != pod.GetName() {
+		if ipInstance.Namespace != pod.GetNamespace() || ipInstance.Spec.Binding.PodName != pod.GetName() {
 			return fmt.Errorf("specified mac address %s is in conflict with existing ip instance %s/%s", macAddr, ipInstance.Namespace, ipInstance.Name)
 		}
 	}

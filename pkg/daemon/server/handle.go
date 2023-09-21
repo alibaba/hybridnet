@@ -281,22 +281,24 @@ func (cdh *cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respo
 		"macAddr", macAddr)
 
 	// update IPInstance crd status
-	for _, ip := range affectedIPInstances {
-		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			var updateTimestamp string
-			updateTimestamp, err = metav1.Now().MarshalQueryParameter()
-			if err != nil {
-				return fmt.Errorf("failed to generate update timestamp: %v", err)
-			}
+	if cdh.config.UpdateIPInstanceStatus {
+		for _, ip := range affectedIPInstances {
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				var updateTimestamp string
+				updateTimestamp, err = metav1.Now().MarshalQueryParameter()
+				if err != nil {
+					return fmt.Errorf("failed to generate update timestamp: %v", err)
+				}
 
-			return cdh.mgrClient.Status().Patch(context.TODO(), ip,
-				client.RawPatch(types.MergePatchType,
-					[]byte(fmt.Sprintf(`{"status":{"sandboxID":%q,"nodeName":%q,"podNamespace":%q,"podName":%q,"phase":null,"updateTimestamp":%q}}`,
-						podRequest.ContainerID, cdh.config.NodeName, podRequest.PodNamespace, podRequest.PodName, updateTimestamp))))
-		}); err != nil {
-			errMsg := fmt.Errorf("failed to update IPInstance crd for %s, %v", ip.Name, err)
-			cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
-			return
+				return cdh.mgrClient.Status().Patch(context.TODO(), ip,
+					client.RawPatch(types.MergePatchType,
+						[]byte(fmt.Sprintf(`{"status":{"sandboxID":%q,"nodeName":%q,"podNamespace":%q,"podName":%q,"updateTimestamp":%q}}`,
+							podRequest.ContainerID, cdh.config.NodeName, podRequest.PodNamespace, podRequest.PodName, updateTimestamp))))
+			}); err != nil {
+				errMsg := fmt.Errorf("failed to update IPInstance crd for %s, %v", ip.Name, err)
+				cdh.errorWrapper(errMsg, http.StatusInternalServerError, resp)
+				return
+			}
 		}
 	}
 
