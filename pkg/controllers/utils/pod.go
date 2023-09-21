@@ -51,4 +51,14 @@ func PodIsScheduled(pod *v1.Pod) bool {
 	return len(pod.Spec.NodeName) > 0
 }
 
+func PodIsTerminated(pod *v1.Pod) bool {
+	for i := range pod.Status.ContainerStatuses {
+		if pod.Status.ContainerStatuses[i].State.Terminated == nil {
+			return false
+		}
+	}
+
+	return true
+}
+
 var ParseNetworkConfigOfPodByPriority = utils.ParseNetworkConfigOfPodByPriority
