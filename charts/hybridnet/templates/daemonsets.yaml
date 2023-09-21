@@ -82,6 +82,7 @@ spec:
             - --check-pod-connectivity-from-host={{ .Values.daemon.checkPodConnectivityFromHost }}
             - --enable-vlan-arp-enhancement={{ .Values.daemon.enableVlanARPEnhancement }}
             - --feature-gates=MultiCluster={{ .Values.multiCluster }}
+            - --update-ipinstance-status={{ .Values.daemon.updateIPInstanceStatus }}
           securityContext:
             runAsUser: 0
             privileged: true

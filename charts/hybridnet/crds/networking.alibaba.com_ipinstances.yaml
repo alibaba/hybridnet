@@ -125,9 +125,6 @@ spec:
             properties:
               nodeName:
                 type: string
-              phase:
-                description: DEPRECATED. Planned to remove in v0.6
-                type: string
               podName:
                 type: string
               podNamespace:

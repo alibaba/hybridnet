@@ -692,7 +692,7 @@ func (r *PodReconciler) checkMACAddressCollision(pod *corev1.Pod, networkName st
 		if !ipInstance.DeletionTimestamp.IsZero() {
 			continue
 		}
-		if ipInstance.Status.PodNamespace != pod.GetNamespace() || ipInstance.Status.PodName != pod.GetName() {
+		if ipInstance.Namespace != pod.GetNamespace() || ipInstance.Spec.Binding.PodName != pod.GetName() {
 			return fmt.Errorf("specified mac address %s is in conflict with existing ip instance %s/%s", macAddr, ipInstance.Namespace, ipInstance.Name)
 		}
 	}
