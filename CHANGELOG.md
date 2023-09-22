@@ -264,3 +264,10 @@ All notable changes to this project will be documented in this file.
 ## v0.8.6
 ### Fixed Issues
 - Forbid flooing for unicast dst mac address in vxlan network. (#397)
+
+## v0.8.7
+### Fixed Issues
+- Only reserve ip instance after pod terminated. (#403)
+
+### Improvements
+- Introduce `--update-ipinstance-status` flag for daemon to enable/disable daemon's patching IPInstance CR status while creating pod. (#402)
