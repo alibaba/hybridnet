@@ -145,7 +145,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 
 		if strategy.OwnByStatefulWorkload(ownedObj) {
 			// Before pod terminated, should not reserve ip instance because of pre-stop
-			if !utils.PodIsTerminated(pod) {
+			if !utils.PodIsNotRunning(pod) {
 				return ctrl.Result{}, nil
 			}
 
@@ -167,12 +167,12 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 				}
 
 				if apierrors.IsNotFound(err) || !vm.DeletionTimestamp.IsZero() {
-					// if vm is deleted, should not reserve pod ips any more
+					// if vm is deleted, should not reserve pod ips anymore
 					return ctrl.Result{}, wrapError("unable to remove finalizer", r.removeFinalizer(ctx, pod))
 				}
 
-				// Before pod terminated, should not reserve ip instance because of pre-stop
-				if !utils.PodIsTerminated(pod) {
+				// Before pod is not running, should not reserve ip instance because of pre-stop
+				if !utils.PodIsNotRunning(pod) {
 					return ctrl.Result{}, nil
 				}
 

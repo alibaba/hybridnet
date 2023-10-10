@@ -51,9 +51,10 @@ func PodIsScheduled(pod *v1.Pod) bool {
 	return len(pod.Spec.NodeName) > 0
 }
 
-func PodIsTerminated(pod *v1.Pod) bool {
+func PodIsNotRunning(pod *v1.Pod) bool {
+	// check if all the pod containers are not running, if any container is running, pod is still running
 	for i := range pod.Status.ContainerStatuses {
-		if pod.Status.ContainerStatuses[i].State.Terminated == nil {
+		if pod.Status.ContainerStatuses[i].State.Running != nil {
 			return false
 		}
 	}
