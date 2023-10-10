@@ -701,7 +701,7 @@ var _ = Describe("Pod controller integration test suite", func() {
 			Expect(k8sClient.Delete(context.Background(), pod, client.GracePeriodSeconds(0))).NotTo(HaveOccurred())
 		})
 
-		It("Check ip reserved only after pod terminated", func() {
+		It("Check ip reserved only after pod is not running", func() {
 			By("create a stateful pod requiring IPv4 address")
 			var ipInstanceName string
 			pod := simplePodRender(podName, node1Name)
@@ -740,13 +740,15 @@ var _ = Describe("Pod controller integration test suite", func() {
 				WithPolling(time.Second).
 				Should(Succeed())
 
-			By("update to make sure pod not terminated")
+			By("update to make sure pod is running")
 			patch := client.MergeFrom(pod.DeepCopy())
 			pod.Status.ContainerStatuses = []corev1.ContainerStatus{
 				{
 					Name: "test",
 					State: corev1.ContainerState{
-						Terminated: nil,
+						Running: &corev1.ContainerStateRunning{
+							StartedAt: metav1.Time{Time: time.Now()},
+						},
 					},
 				},
 			}
@@ -770,13 +772,13 @@ var _ = Describe("Pod controller integration test suite", func() {
 				WithPolling(5 * time.Second).
 				Should(Succeed())
 
-			By("update to make sure pod terminated")
+			By("update to make sure pod is not running")
 			patch = client.MergeFrom(pod.DeepCopy())
 			pod.Status.ContainerStatuses = []corev1.ContainerStatus{
 				{
 					Name: "test",
 					State: corev1.ContainerState{
-						Terminated: &corev1.ContainerStateTerminated{},
+						Running: nil,
 					},
 				},
 			}
