@@ -271,3 +271,7 @@ All notable changes to this project will be documented in this file.
 
 ### Improvements
 - Introduce `--update-ipinstance-status` flag for daemon to enable/disable daemon's patching IPInstance CR status while creating pod. (#402)
+
+## v0.8.8
+### Fixed Issues
+- Avoid waiting containers block stateful pods' deletion. (#407)
