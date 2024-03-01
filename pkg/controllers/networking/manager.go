@@ -25,11 +25,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 )
 
 type RegisterOptions struct {
 	NewIPAMManager NewIPAMManagerFunction
 	ConcurrencyMap map[string]int
+	PodSelector    utils.PodSelector
 }
 
 func RegisterToManager(ctx context.Context, mgr manager.Manager, options RegisterOptions) error {
@@ -93,6 +95,7 @@ func RegisterToManager(ctx context.Context, mgr manager.Manager, options Registe
 		IPAMStore:             ipamStore,
 		IPAMManager:           ipamManager,
 		ControllerConcurrency: concurrency.ControllerConcurrency(options.ConcurrencyMap[ControllerPod]),
+		PodSelector:           options.PodSelector,
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to inject controller %s: %v", ControllerPod, err)
 	}

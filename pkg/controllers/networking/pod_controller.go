@@ -80,6 +80,7 @@ type PodReconciler struct {
 	IPAMManager IPAMManager
 
 	concurrency.ControllerConcurrency
+	PodSelector utils.PodSelector
 }
 
 //+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
@@ -773,6 +774,19 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 			builder.WithPredicates(
 				&utils.IgnoreDeletePredicate{},
 				&predicate.ResourceVersionChangedPredicate{},
+				predicate.NewPredicateFuncs(func(obj client.Object) bool {
+					if r.PodSelector == nil {
+						return true
+					}
+
+					pod, ok := obj.(*corev1.Pod)
+					if !ok {
+						return false
+					}
+
+					// Only selected pods should be processed
+					return r.PodSelector.Matches(pod)
+				}),
 				predicate.NewPredicateFuncs(func(obj client.Object) bool {
 					pod, ok := obj.(*corev1.Pod)
 					if !ok {
