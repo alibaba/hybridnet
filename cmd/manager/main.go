@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 
 	"github.com/spf13/pflag"
@@ -34,6 +35,7 @@ import (
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
 	"github.com/alibaba/hybridnet/pkg/controllers/multicluster"
 	"github.com/alibaba/hybridnet/pkg/controllers/networking"
+	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	"github.com/alibaba/hybridnet/pkg/feature"
 	zapinit "github.com/alibaba/hybridnet/pkg/zap"
 )
@@ -56,6 +58,7 @@ func main() {
 		clientQPS             float32
 		clientBurst           int
 		metricsPort           int
+		selectorStr           string
 	)
 
 	// register flags
@@ -63,6 +66,7 @@ func main() {
 	pflag.Float32Var(&clientQPS, "kube-client-qps", 300, "The QPS limit of apiserver client.")
 	pflag.IntVar(&clientBurst, "kube-client-burst", 600, "The Burst limit of apiserver client.")
 	pflag.IntVar(&metricsPort, "metrics-port", 9899, "The port to listen on for prometheus metrics.")
+	pflag.StringVar(&selectorStr, "pod-label-selector", "", "The label selector to select specified pods for IPAM.")
 
 	// parse flags
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
@@ -81,6 +85,20 @@ func main() {
 	clientConfig := ctrl.GetConfigOrDie()
 	clientConfig.QPS = clientQPS
 	clientConfig.Burst = clientBurst
+
+	// initialize objects from flags
+	// if selector string is empty, it means select everything
+	labelSelector, err := metav1.ParseToLabelSelector(selectorStr)
+	if err != nil {
+		entryLog.Error(err, "unable to parse label selector")
+		os.Exit(1)
+	}
+
+	var podSelector utils.PodSelector
+	if podSelector, err = utils.LabelSelectorAsPodSelector(labelSelector); err != nil {
+		entryLog.Error(err, "unable to create pod selector")
+		os.Exit(1)
+	}
 
 	mgr, err := ctrl.NewManager(clientConfig, ctrl.Options{
 		Scheme:                  scheme,
@@ -120,6 +138,7 @@ func main() {
 
 	if err = networking.RegisterToManager(globalContext, mgr, networking.RegisterOptions{
 		ConcurrencyMap: controllerConcurrency,
+		PodSelector:    podSelector,
 	}); err != nil {
 		entryLog.Error(err, "unable to register networking controllers")
 		os.Exit(1)
