@@ -275,3 +275,7 @@ All notable changes to this project will be documented in this file.
 ## v0.8.8
 ### Fixed Issues
 - Avoid waiting containers block stateful pods' deletion. (#407)
+
+## v0.8.9
+### Improvements
+- Support `--pod-label-selector` flag to only handle selected pods

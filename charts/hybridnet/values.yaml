@@ -1,7 +1,7 @@
 images:
   hybridnet:
     image: hybridnetdev/hybridnet
-    tag: v0.8.8
+    tag: v0.8.9
     imagePullPolicy: IfNotPresent
   registryURL: "docker.io"
 
