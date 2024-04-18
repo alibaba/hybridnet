@@ -36,9 +36,11 @@ jobs:
           export KUBEBUILDER_ASSETS=$(pwd)/bin/envtest && go test -race -coverprofile=coverage.txt -covermode=atomic ./...
       - uses: codecov/codecov-action@v1.5.0
         with:
+          token: ${{secrets.CODECOV_TOKEN}}
           file: ./coverage.txt
           flags: unittests
           fail_ci_if_error: true
+          version: "v0.1.15"
 
   docker-build:
     runs-on: ubuntu-latest
