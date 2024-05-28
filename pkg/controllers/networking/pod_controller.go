@@ -27,6 +27,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apitypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	kubevirtv1 "kubevirt.io/api/core/v1"
@@ -566,9 +567,46 @@ func (r *PodReconciler) vmAllocate(ctx context.Context, pod *corev1.Pod, vmName,
 		types.AdditionalLabels(vmLabels), types.OwnerReference(*vmiOwnerReference)))
 }
 
+// recycleNonCandidateReservedIPs recycles IPs that should NO LONGER serve given pod, i.e., release
+// reserved IPs that does not appear in candidates.
+func (r *PodReconciler) recycleNonCandidateReservedIPs(ctx context.Context, pod *corev1.Pod, ipCandidates []ipCandidate) (err error) {
+	var (
+		allocatedIPs []*networkingv1.IPInstance
+		toReleaseIPs []*networkingv1.IPInstance
+		toStayIPs    = sets.NewString()
+	)
+	for _, candidate := range ipCandidates {
+		toStayIPs.Insert(candidate.ip)
+	}
+	if allocatedIPs, err = utils.ListAllocatedIPInstancesOfPod(ctx, r, pod); err != nil {
+		return fmt.Errorf("failed to list allocated ip instances for pod %v/%v: %v", pod.Namespace, pod.Name, err)
+	}
+	for i := range allocatedIPs {
+		if toStayIPs.Has(string(globalutils.StringToIPNet(allocatedIPs[i].Spec.Address.IP).IP)) {
+			continue
+		}
+		toReleaseIPs = append(toReleaseIPs, allocatedIPs[i])
+	}
+	if len(toReleaseIPs) > 0 {
+		err = r.release(ctx, pod, transform.TransferIPInstancesForIPAM(toReleaseIPs))
+		if err != nil {
+			return wrapError("failed to release ips that no longer serve current pod", err)
+		}
+	}
+	return nil
+}
+
 // assign means some allocated or pre-assigned IPs will be assigned to a specified pod
 func (r *PodReconciler) assign(ctx context.Context, pod *corev1.Pod, networkName string, ipCandidates []ipCandidate, force bool,
 	ipFamily types.IPFamilyMode, reCoupleOptions ...types.ReCoupleOption) (err error) {
+	if force {
+		// recycle non-candidate reserved IPs, as pre-assigned IPs for current pod
+		// could be changed.
+		if err = r.recycleNonCandidateReservedIPs(ctx, pod, ipCandidates); err != nil {
+			return
+		}
+	}
+
 	// try to assign candidate IPs to pod
 	var AssignedIPs []*types.IP
 	if AssignedIPs, err = r.IPAMManager.Assign(networkName,

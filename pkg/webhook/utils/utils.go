@@ -263,7 +263,22 @@ func parseNetworkConfigByExistIPInstances(ctx context.Context, c client.Reader, 
 			ipFamily = ipamtypes.IPv4
 		}
 	case 2:
-		ipFamily = ipamtypes.DualStack
+		var (
+			v4Count = 0
+			v6Count = 0
+		)
+		for i := range validIPList {
+			if networkingv1.IsIPv6IPInstance(&validIPList[i]) {
+				v6Count++
+			} else {
+				v4Count++
+			}
+		}
+		if v4Count == 1 && v6Count == 1 {
+			ipFamily = ipamtypes.DualStack
+		} else {
+			err = fmt.Errorf("more than two ip instances are of the same family type, ipv4 count %d, ipv6 count %d", v4Count, v6Count)
+		}
 	default:
 		err = fmt.Errorf("more than two reserve ip exist for list options %v", opts)
 		return
