@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -40,6 +41,7 @@ import (
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/metrics"
 )
 
 const ControllerSubnetStatus = "SubnetStatus"
@@ -99,6 +101,9 @@ func (r *SubnetStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
+	// update metrics
+	updateSubnetUsageMetrics(subnet.Spec.Network, subnet.Name, &subnet.Status)
+
 	// patch subnet status
 	subnetPatch := client.MergeFrom(subnet.DeepCopy())
 	subnet.Status = *subnetStatus
@@ -112,6 +117,34 @@ func (r *SubnetStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	log.V(1).Info(fmt.Sprintf("sync subnet status to %+v", subnetStatus))
 	return ctrl.Result{}, nil
+}
+
+func updateSubnetUsageMetrics(networkName, subnetName string, subnetStatus *networkingv1.SubnetStatus) {
+	if subnetStatus.Total > 0 {
+		metrics.SubnetIPUsageGauge.With(
+			prometheus.Labels{
+				"subnetName":  subnetName,
+				"networkName": networkName,
+				"usageType":   metrics.IPTotalUsageType,
+			},
+		).Set(float64(subnetStatus.Total))
+
+		metrics.SubnetIPUsageGauge.With(
+			prometheus.Labels{
+				"subnetName":  subnetName,
+				"networkName": networkName,
+				"usageType":   metrics.IPUsedUsageType,
+			},
+		).Set(float64(subnetStatus.Used))
+
+		metrics.SubnetIPUsageGauge.With(
+			prometheus.Labels{
+				"subnetName":  subnetName,
+				"networkName": networkName,
+				"usageType":   metrics.IPAvailableUsageType,
+			},
+		).Set(float64(subnetStatus.Available))
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
