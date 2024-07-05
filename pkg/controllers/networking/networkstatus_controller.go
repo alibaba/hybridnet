@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -83,6 +84,17 @@ func (r *NetworkStatusReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	if err = r.Get(ctx, req.NamespacedName, network); err != nil {
 		return ctrl.Result{}, wrapError("unable to fetch Network", client.IgnoreNotFound(err))
+	}
+
+	if network.DeletionTimestamp != nil {
+		cleanMetrics(network.Name)
+		return ctrl.Result{}, wrapError("unable to remove finalizer", r.removeFinalizer(ctx, network))
+
+	}
+
+	// make sure metrics will be un-registered before deletion
+	if err = r.addFinalizer(ctx, network); err != nil {
+		return ctrl.Result{}, wrapError("unable to add finalizer to network", err)
 	}
 
 	nodeSelector := network.Spec.NodeSelector
@@ -187,15 +199,54 @@ func updateUsageMetrics(networkName string, networkStatus *networkingv1.NetworkS
 	}
 }
 
+func cleanMetrics(networkName string) {
+	_ = metrics.IPUsageGauge.DeleteLabelValues(networkName, metrics.IPv4, metrics.IPTotalUsageType)
+	_ = metrics.IPUsageGauge.DeleteLabelValues(networkName, metrics.IPv4, metrics.IPUsedUsageType)
+	_ = metrics.IPUsageGauge.DeleteLabelValues(networkName, metrics.IPv4, metrics.IPAvailableUsageType)
+
+	_ = metrics.IPUsageGauge.DeleteLabelValues(networkName, metrics.IPv6, metrics.IPTotalUsageType)
+	_ = metrics.IPUsageGauge.DeleteLabelValues(networkName, metrics.IPv6, metrics.IPUsedUsageType)
+	_ = metrics.IPUsageGauge.DeleteLabelValues(networkName, metrics.IPv6, metrics.IPAvailableUsageType)
+
+	_ = metrics.IPUsageGauge.DeleteLabelValues(networkName, metrics.DualStack, metrics.IPAvailableUsageType)
+}
+
+func (r *NetworkStatusReconciler) addFinalizer(ctx context.Context, network *networkingv1.Network) error {
+	if controllerutil.ContainsFinalizer(network, constants.FinalizerMetricsRegistered) {
+		return nil
+	}
+
+	patch := client.MergeFrom(network.DeepCopy())
+	controllerutil.AddFinalizer(network, constants.FinalizerMetricsRegistered)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		return r.Patch(ctx, network, patch)
+	})
+}
+
+func (r *NetworkStatusReconciler) removeFinalizer(ctx context.Context, network *networkingv1.Network) error {
+	if !controllerutil.ContainsFinalizer(network, constants.FinalizerMetricsRegistered) {
+		return nil
+	}
+
+	patch := client.MergeFrom(network.DeepCopy())
+	controllerutil.RemoveFinalizer(network, constants.FinalizerMetricsRegistered)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		return r.Patch(ctx, network, patch)
+	})
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkStatusReconciler) SetupWithManager(mgr ctrl.Manager) (err error) {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerNetworkStatus).
 		For(&networkingv1.Network{},
 			builder.WithPredicates(
-				&predicate.GenerationChangedPredicate{},
 				&utils.IgnoreDeletePredicate{},
-				&utils.NetworkSpecChangePredicate{},
+				&predicate.ResourceVersionChangedPredicate{},
+				predicate.Or(
+					&utils.NetworkSpecChangePredicate{},
+					&utils.TerminatingPredicate{},
+				),
 			)).
 		Watches(&source.Kind{Type: &networkingv1.Subnet{}},
 			handler.EnqueueRequestsFromMapFunc(func(object client.Object) []reconcile.Request {
