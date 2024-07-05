@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -29,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -37,9 +39,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	networkingv1 "github.com/alibaba/hybridnet/pkg/apis/networking/v1"
+	"github.com/alibaba/hybridnet/pkg/constants"
 	"github.com/alibaba/hybridnet/pkg/controllers/concurrency"
 	"github.com/alibaba/hybridnet/pkg/controllers/utils"
 	ipamtypes "github.com/alibaba/hybridnet/pkg/ipam/types"
+	"github.com/alibaba/hybridnet/pkg/metrics"
 )
 
 const ControllerSubnetStatus = "SubnetStatus"
@@ -78,6 +82,17 @@ func (r *SubnetStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, wrapError("unable to fetch Subnet", client.IgnoreNotFound(err))
 	}
 
+	if subnet.DeletionTimestamp != nil {
+		cleanSubnetMetrics(subnet.Spec.Network, subnet.Name)
+		return ctrl.Result{}, wrapError("unable to remove finalizer", r.removeFinalizer(ctx, subnet))
+
+	}
+
+	// make sure metrics will be un-registered before deletion
+	if err = r.addFinalizer(ctx, subnet); err != nil {
+		return ctrl.Result{}, wrapError("unable to add finalizer to subnet", err)
+	}
+
 	// fetch subnet usage from manager
 	var usage *ipamtypes.Usage
 	if usage, err = r.IPAMManager.GetSubnetUsage(subnet.Spec.Network, subnet.Name); err != nil {
@@ -99,6 +114,9 @@ func (r *SubnetStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
+	// update metrics
+	updateSubnetUsageMetrics(subnet.Spec.Network, subnet.Name, &subnet.Status)
+
 	// patch subnet status
 	subnetPatch := client.MergeFrom(subnet.DeepCopy())
 	subnet.Status = *subnetStatus
@@ -114,15 +132,93 @@ func (r *SubnetStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	return ctrl.Result{}, nil
 }
 
+func updateSubnetUsageMetrics(networkName, subnetName string, subnetStatus *networkingv1.SubnetStatus) {
+	if subnetStatus.Total > 0 {
+		metrics.SubnetIPUsageGauge.With(
+			prometheus.Labels{
+				"subnetName":  subnetName,
+				"networkName": networkName,
+				"usageType":   metrics.IPTotalUsageType,
+			},
+		).Set(float64(subnetStatus.Total))
+
+		metrics.SubnetIPUsageGauge.With(
+			prometheus.Labels{
+				"subnetName":  subnetName,
+				"networkName": networkName,
+				"usageType":   metrics.IPUsedUsageType,
+			},
+		).Set(float64(subnetStatus.Used))
+
+		metrics.SubnetIPUsageGauge.With(
+			prometheus.Labels{
+				"subnetName":  subnetName,
+				"networkName": networkName,
+				"usageType":   metrics.IPAvailableUsageType,
+			},
+		).Set(float64(subnetStatus.Available))
+	}
+}
+
+func cleanSubnetMetrics(networkName, subnetName string) {
+	_ = metrics.SubnetIPUsageGauge.Delete(
+		prometheus.Labels{
+			"subnetName":  subnetName,
+			"networkName": networkName,
+			"usageType":   metrics.IPTotalUsageType,
+		})
+
+	_ = metrics.SubnetIPUsageGauge.Delete(
+		prometheus.Labels{
+			"subnetName":  subnetName,
+			"networkName": networkName,
+			"usageType":   metrics.IPUsedUsageType,
+		})
+
+	_ = metrics.SubnetIPUsageGauge.Delete(
+		prometheus.Labels{
+			"subnetName":  subnetName,
+			"networkName": networkName,
+			"usageType":   metrics.IPAvailableUsageType,
+		})
+}
+
+func (r *SubnetStatusReconciler) addFinalizer(ctx context.Context, subnet *networkingv1.Subnet) error {
+	if controllerutil.ContainsFinalizer(subnet, constants.FinalizerMetricsRegistered) {
+		return nil
+	}
+
+	patch := client.MergeFrom(subnet.DeepCopy())
+	controllerutil.AddFinalizer(subnet, constants.FinalizerMetricsRegistered)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		return r.Patch(ctx, subnet, patch)
+	})
+}
+
+func (r *SubnetStatusReconciler) removeFinalizer(ctx context.Context, subnet *networkingv1.Subnet) error {
+	if !controllerutil.ContainsFinalizer(subnet, constants.FinalizerMetricsRegistered) {
+		return nil
+	}
+
+	patch := client.MergeFrom(subnet.DeepCopy())
+	controllerutil.RemoveFinalizer(subnet, constants.FinalizerMetricsRegistered)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		return r.Patch(ctx, subnet, patch)
+	})
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *SubnetStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerSubnetStatus).
 		For(&networkingv1.Subnet{},
 			builder.WithPredicates(
-				&predicate.GenerationChangedPredicate{},
 				&utils.IgnoreDeletePredicate{},
-				&utils.SubnetSpecChangePredicate{},
+				&predicate.ResourceVersionChangedPredicate{},
+				predicate.Or(
+					&utils.SubnetSpecChangePredicate{},
+					&utils.TerminatingPredicate{},
+				),
 			)).
 		Watches(&source.Kind{Type: &networkingv1.IPInstance{}},
 			handler.EnqueueRequestsFromMapFunc(func(object client.Object) []reconcile.Request {

@@ -22,7 +22,9 @@ import (
 )
 
 func init() {
-	metrics.Registry.MustRegister(IPUsageGauge,
+	metrics.Registry.MustRegister(
+		IPUsageGauge,
+		SubnetIPUsageGauge,
 		IPAllocationPeriodSummary,
 		RemoteClusterStatusCheckDuration,
 	)
@@ -51,6 +53,17 @@ var IPUsageGauge = prometheus.NewGaugeVec(
 		"usageType",
 	},
 )
+
+var SubnetIPUsageGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "subnet_ip_usage",
+		Help: "the usage of IPs in different subnets",
+	},
+	[]string{
+		"subnetName",
+		"networkName",
+		"usageType",
+	})
 
 const (
 	IPStatefulAllocateType = "stateful"
